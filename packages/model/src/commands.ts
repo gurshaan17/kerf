@@ -49,6 +49,8 @@ export const clipPatchSchema = z.object({
   text: z.string().optional(),
   style: textStyleSchema.optional(),
   words: z.array(captionWordSchema).optional(),
+  transcriptId: idSchema('transcript').optional(),
+  segmentId: idSchema('segment').optional(),
   shape: shapeKindSchema.optional(),
   width: z.number().positive().max(4).optional(),
   height: z.number().positive().max(4).optional(),

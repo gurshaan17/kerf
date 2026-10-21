@@ -1,3 +1,4 @@
+export * from './apply';
 export * from './compatibility';
 export * from './errors';
 export * from './queries';
