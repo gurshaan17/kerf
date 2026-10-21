@@ -20,9 +20,16 @@ function projectsRoot(): string {
   return join(app.getPath('videos'), 'Kerf Projects');
 }
 
+function databasePath(): string {
+  return (
+    process.env.KERF_DATABASE_PATH?.trim() ||
+    join(app.getPath('userData'), 'kerf.db')
+  );
+}
+
 export function createKerfServices(): KerfServices {
   const database = openDatabase({
-    filename: join(app.getPath('userData'), 'kerf.db'),
+    filename: databasePath(),
   });
   try {
     const repository = new ProjectRepository({

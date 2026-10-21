@@ -40,6 +40,8 @@ import { ToastViewport, useToastQueue } from '../components/Toast';
 export interface StudioShellProps {
   projectName?: string;
   sequenceLabel?: string;
+  assetCount?: number;
+  onOpenProject?: () => void;
 }
 
 type TrackKind = 'video' | 'audio';
@@ -264,57 +266,6 @@ function Timeline() {
   );
 }
 
-interface ProjectBrowserDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreate: () => void;
-  onImport: () => void;
-}
-
-function ProjectBrowserDialog({
-  open,
-  onOpenChange,
-  onCreate,
-  onImport,
-}: ProjectBrowserDialogProps) {
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Project browser"
-      description="Recent sequences and folders live here."
-      footer={
-        <Button variant="ghost" onClick={() => onOpenChange(false)}>
-          Close
-        </Button>
-      }
-    >
-      <div className="k-empty">
-        <span className="k-empty__mark">
-          <KerfMark size={40} />
-        </span>
-        <h3 className="k-empty__title">No sequences yet</h3>
-        <p className="k-empty__body">
-          Start with a blank sequence, or bring in a folder of footage.
-          Everything stays on this machine.
-        </p>
-        <div className="k-empty__actions">
-          <Button
-            variant="primary"
-            leadingIcon={<Film size={14} />}
-            onClick={onCreate}
-          >
-            New sequence
-          </Button>
-          <Button leadingIcon={<FolderOpen size={14} />} onClick={onImport}>
-            Import folder
-          </Button>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
 function Inspector() {
   const [tab, setTab] = useState('video');
   const [blend, setBlend] = useState('normal');
@@ -425,10 +376,11 @@ function Inspector() {
 export function StudioShell({
   projectName = 'Untitled sequence',
   sequenceLabel = '1920 × 1080 · 24 fps',
+  assetCount = 0,
+  onOpenProject,
 }: StudioShellProps) {
   const [rail, setRail] = useState('media');
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [projectBrowserOpen, setProjectBrowserOpen] = useState(false);
   const { items, push, dismiss } = useToastQueue();
   const isMac =
     typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
@@ -472,7 +424,7 @@ export function StudioShell({
             variant="ghost"
             size="sm"
             leadingIcon={<FolderOpen size={14} />}
-            onClick={() => setProjectBrowserOpen(true)}
+            onClick={() => onOpenProject?.()}
           >
             Open
           </Button>
@@ -537,7 +489,7 @@ export function StudioShell({
         <span className="k-shell__status-sep" aria-hidden="true">
           ·
         </span>
-        <span>0 assets</span>
+        <span>{assetCount} assets</span>
         <span className="k-shell__status-spacer" />
         <span>Kerf 0.1.0</span>
         <span className="k-shell__status-sep" aria-hidden="true">
@@ -545,25 +497,6 @@ export function StudioShell({
         </span>
         <span>Media never leaves this machine</span>
       </footer>
-
-      <ProjectBrowserDialog
-        open={projectBrowserOpen}
-        onOpenChange={setProjectBrowserOpen}
-        onCreate={() => {
-          setProjectBrowserOpen(false);
-          push({
-            title: 'New sequence',
-            description: 'Sequence creation arrives with the project store.',
-          });
-        }}
-        onImport={() => {
-          setProjectBrowserOpen(false);
-          push({
-            title: 'Import folder',
-            description: 'Media ingest arrives with the footage bin.',
-          });
-        }}
-      />
 
       <Dialog
         open={shortcutsOpen}
