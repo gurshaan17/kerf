@@ -1,10 +1,12 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { OpenDialogOptions } from 'electron';
+import { dirname } from 'node:path';
 import { z } from 'zod';
 import {
   AUDIO_EXTENSIONS,
   IMAGE_EXTENSIONS,
   VIDEO_EXTENSIONS,
+  type AssetKind,
 } from '@kerf/model';
 import type { JobQueue } from '../jobs';
 import type { MediaImportService } from '../media';
@@ -37,6 +39,19 @@ function requireActiveProject(projects: ProjectService) {
   return active;
 }
 
+function extensionsForKind(kind: AssetKind): string[] {
+  if (kind === 'video') {
+    return [...VIDEO_EXTENSIONS];
+  }
+  if (kind === 'audio') {
+    return [...AUDIO_EXTENSIONS];
+  }
+  if (kind === 'image') {
+    return [...IMAGE_EXTENSIONS];
+  }
+  return [...MEDIA_EXTENSIONS];
+}
+
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   const { projects, repository, jobs, imports, broadcast } = options;
 
@@ -45,9 +60,12 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   ipcMain.handle(KERF_IPC.projects.create, (_event, name: unknown) =>
     projects.create({ name: projectNameSchema.parse(name) }),
   );
-  ipcMain.handle(KERF_IPC.projects.open, (_event, id: unknown) =>
-    projects.open(projectIdSchema.parse(id)),
-  );
+  ipcMain.handle(KERF_IPC.projects.open, async (_event, id: unknown) => {
+    const projectId = projectIdSchema.parse(id);
+    const snapshot = projects.open(projectId);
+    await imports.refreshAvailability(projectId);
+    return projects.current() ?? snapshot;
+  });
   ipcMain.handle(KERF_IPC.projects.close, () => {
     projects.close();
   });
@@ -102,6 +120,49 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     }
     return imports.importFiles(active.project.id, result.filePaths);
   });
+  ipcMain.handle(KERF_IPC.assets.refresh, () => {
+    const active = requireActiveProject(projects);
+    return imports.refreshAvailability(active.project.id);
+  });
+  ipcMain.handle(
+    KERF_IPC.assets.relink,
+    async (_event, id: unknown, path: unknown) => {
+      const active = requireActiveProject(projects);
+      const asset = repository.findAsset(projectIdSchema.parse(id));
+      if (!asset || asset.projectId !== active.project.id) {
+        throw new Error('The asset is not part of the open project.');
+      }
+
+      let sourcePath: string;
+      if (path === undefined || path === null) {
+        const options: OpenDialogOptions = {
+          title: `Relink ${asset.name}`,
+          buttonLabel: 'Relink',
+          defaultPath: dirname(asset.sourcePath),
+          properties: ['openFile'],
+          filters: [
+            {
+              name: `${asset.kind} files`,
+              extensions: extensionsForKind(asset.kind),
+            },
+            { name: 'All files', extensions: ['*'] },
+          ],
+        };
+        const window = BrowserWindow.getFocusedWindow();
+        const result = window
+          ? await dialog.showOpenDialog(window, options)
+          : await dialog.showOpenDialog(options);
+        if (result.canceled || result.filePaths.length === 0) {
+          return null;
+        }
+        sourcePath = result.filePaths[0]!;
+      } else {
+        sourcePath = z.string().min(1).parse(path);
+      }
+
+      return imports.relink(asset.id, sourcePath);
+    },
+  );
 
   ipcMain.handle(KERF_IPC.edits.apply, (_event, command: unknown) =>
     projects.apply(command),

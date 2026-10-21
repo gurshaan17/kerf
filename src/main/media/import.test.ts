@@ -1,6 +1,7 @@
 import {
   mkdirSync,
   mkdtempSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -245,6 +246,70 @@ describe('MediaImportService', () => {
       );
       expect(context.repository.listAssets(context.projectId)).toHaveLength(3);
       expect(context.queue.list(context.projectId)).toHaveLength(3);
+    },
+    20_000,
+  );
+
+  integration(
+    'marks a missing source and relinks it through a fresh ingest',
+    async () => {
+      const context = makeContext();
+      const original = join(context.root, 'original.mp4');
+      const relinked = join(context.root, 'relinked.mp4');
+      await runProcess(tools!.ffmpeg, [
+        '-hide_banner',
+        '-nostdin',
+        '-f',
+        'lavfi',
+        '-i',
+        'testsrc=size=320x240:rate=24',
+        '-t',
+        '0.5',
+        '-c:v',
+        'mpeg4',
+        '-pix_fmt',
+        'yuv420p',
+        original,
+      ]);
+
+      const [imported] = await context.importer.importFiles(context.projectId, [
+        original,
+      ]);
+      expect(imported).toBeDefined();
+      context.queue.start();
+      await waitFor(
+        () => context.repository.findAsset(imported!.id)?.status === 'ready',
+      );
+      const ready = context.repository.findAsset(imported!.id)!;
+      expect(ready.cache.thumbnailPath).not.toBeNull();
+
+      renameSync(original, relinked);
+      const missing = await context.importer.refreshAvailability(
+        context.projectId,
+      );
+      expect(missing[0]?.status).toBe('missing');
+      expect(missing[0]?.cache.thumbnailPath).toBe(ready.cache.thumbnailPath);
+      expect(context.queue.list(context.projectId)).toHaveLength(1);
+
+      const text = join(context.root, 'wrong.txt');
+      writeFileSync(text, 'not media');
+      await expect(context.importer.relink(ready.id, text)).rejects.toThrow(
+        /Unsupported media file/,
+      );
+
+      const queued = await context.importer.relink(ready.id, relinked);
+      expect(queued.status).toBe('queued');
+      expect(queued.sourcePath).toBe(relinked);
+      expect(queued.cache.proxyPath).toBeNull();
+      await waitFor(
+        () => context.repository.findAsset(ready.id)?.status === 'ready',
+      );
+
+      const restored = context.repository.findAsset(ready.id)!;
+      expect(restored.sourcePath).toBe(relinked);
+      expect(restored.cache.proxyPath).not.toBeNull();
+      expect(statSync(restored.cache.proxyPath!).size).toBeGreaterThan(0);
+      expect(context.queue.list(context.projectId)).toHaveLength(2);
     },
     20_000,
   );

@@ -99,6 +99,93 @@ export class MediaImportService {
     );
   }
 
+  /**
+   * Reflects the filesystem in the asset rows. A vanished source is marked
+   * missing without losing its metadata or thumbnails; a source that comes
+   * back is re-ingested so every cache path is valid again.
+   */
+  async refreshAvailability(projectId: string): Promise<Asset[]> {
+    const assets = this.repository.listAssets(projectId);
+    const refreshed: Asset[] = [];
+
+    for (const asset of assets) {
+      let available = false;
+      try {
+        const info = await stat(asset.sourcePath);
+        available = info.isFile();
+      } catch {
+        available = false;
+      }
+
+      if (!available) {
+        refreshed.push(
+          asset.status === 'missing'
+            ? asset
+            : this.save(asset, {
+                status: 'missing',
+                error: 'The source file is missing or unavailable.',
+              }),
+        );
+        continue;
+      }
+
+      if (asset.status === 'missing') {
+        const queued = this.save(asset, {
+          status: 'queued',
+          error: null,
+          cache: { ...EMPTY_ASSET_CACHE },
+        });
+        this.jobs.enqueue({
+          projectId,
+          kind: 'ingest',
+          payload: { assetId: asset.id } satisfies IngestPayload,
+        });
+        refreshed.push(queued);
+        continue;
+      }
+
+      refreshed.push(asset);
+    }
+
+    return refreshed;
+  }
+
+  async relink(assetId: string, sourcePath: string): Promise<Asset> {
+    const asset = this.repository.findAsset(assetId);
+    if (!asset) {
+      throw new Error('The asset was not found.');
+    }
+    const resolved = resolve(sourcePath);
+    const info = await stat(resolved);
+    if (!info.isFile()) {
+      throw new Error(`Not a file: ${resolved}`);
+    }
+    const kind = assetKindFromPath(resolved);
+    if (kind === 'other') {
+      throw new Error(`Unsupported media file: ${fileNameFromPath(resolved)}`);
+    }
+    if (kind !== asset.kind) {
+      throw new Error(`Choose a ${asset.kind} file to relink ${asset.name}.`);
+    }
+
+    const contentHash = await hashFile(resolved);
+    const next = this.save(asset, {
+      sourcePath: resolved,
+      fileSize: info.size,
+      mtimeMs: info.mtimeMs,
+      contentHash,
+      status: 'queued',
+      error: null,
+      cache: { ...EMPTY_ASSET_CACHE },
+    });
+    this.jobs.enqueue({
+      projectId: asset.projectId,
+      kind: 'ingest',
+      payload: { assetId: asset.id } satisfies IngestPayload,
+    });
+    return next;
+  }
+
   async importFiles(
     projectId: string,
     paths: readonly string[],

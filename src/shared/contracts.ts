@@ -192,6 +192,8 @@ export interface KerfBridge {
     readonly list: () => Promise<Asset[]>;
     readonly import: (paths: readonly string[]) => Promise<Asset[]>;
     readonly pick: () => Promise<Asset[]>;
+    readonly refresh: () => Promise<Asset[]>;
+    readonly relink: (id: string, path?: string) => Promise<Asset | null>;
   };
   readonly jobs: {
     readonly list: (projectId?: string) => Promise<JobSummary[]>;

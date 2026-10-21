@@ -33,6 +33,8 @@ const bridge: KerfBridge = {
     list: async () => [],
     import: async () => [],
     pick: async () => [],
+    refresh: async () => [],
+    relink: async () => null,
   },
   jobs: {
     list: async () => [],

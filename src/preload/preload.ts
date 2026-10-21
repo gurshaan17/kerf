@@ -47,6 +47,9 @@ const bridge: KerfBridge = {
     list: () => invoke<Asset[]>(KERF_IPC.assets.list),
     import: (paths) => invoke<Asset[]>(KERF_IPC.assets.import, paths),
     pick: () => invoke<Asset[]>(KERF_IPC.assets.pick),
+    refresh: () => invoke<Asset[]>(KERF_IPC.assets.refresh),
+    relink: (id, path) =>
+      invoke<Asset | null>(KERF_IPC.assets.relink, id, path),
   },
   jobs: {
     list: (projectId) => invoke<JobSummary[]>(KERF_IPC.jobs.list, projectId),
