@@ -7,11 +7,11 @@ import type {
   TimeMapPoint,
   Track,
 } from '@kerf/model';
-import { clipSchema, isMediaClip } from '@kerf/model';
+import { clipSchema, isMediaClip, newId } from '@kerf/model';
 import { assertClipCompatible } from './compatibility';
 import { EngineError } from './errors';
 import { findClip, findOverlap, requireClip, requireTrack } from './queries';
-import { clipSourceRange, sampleTimeMap } from './source';
+import { clipSourceRange, sampleTimeMap, sourceFrameAt } from './source';
 
 export interface ApplyResult {
   sequence: Sequence;
@@ -479,6 +479,201 @@ function applyTrim(
   };
 }
 
+function applySplit(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.split' }>,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertClipCompatible(location.track, location.clip);
+  const clip = location.clip;
+  const splitFrame = command.frame;
+  const clipEnd = clip.startFrame + clip.durationFrames;
+
+  if (splitFrame <= clip.startFrame || splitFrame >= clipEnd) {
+    throw new EngineError(
+      'invalid-range',
+      'A split must land strictly inside the clip.',
+      `Choose a frame between ${clip.startFrame + 1} and ${clipEnd - 1}.`,
+    );
+  }
+
+  const leftDuration = splitFrame - clip.startFrame;
+  const rightDuration = clipEnd - splitFrame;
+  const leftChanges: Record<string, unknown> = {
+    durationFrames: leftDuration,
+  };
+  const rightChanges: Record<string, unknown> = {
+    id: newId('clip'),
+    startFrame: splitFrame,
+    durationFrames: rightDuration,
+  };
+
+  if (isMediaClip(clip)) {
+    leftChanges.fade = {
+      inFrames: Math.min(clip.fade.inFrames, leftDuration),
+      outFrames: 0,
+    };
+    rightChanges.fade = {
+      inFrames: 0,
+      outFrames: Math.min(clip.fade.outFrames, rightDuration),
+    };
+    rightChanges.sourceInFrame = sourceFrameAt(clip, splitFrame);
+
+    if (clip.timeMap.length > 0) {
+      leftChanges.timeMap = trimTimeMapOut(clip.timeMap, leftDuration);
+      rightChanges.timeMap = trimTimeMapIn(
+        clip.timeMap,
+        leftDuration,
+        rightDuration,
+      );
+    }
+  }
+
+  const left = parseClip({ ...clip, ...leftChanges });
+  const right = parseClip({ ...clip, ...rightChanges });
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.flatMap((candidateClip) =>
+            candidateClip.id === clip.id ? [left, right] : [candidateClip],
+          ),
+        }
+      : candidate,
+  );
+
+  const inversePatch: ClipPatch = { durationFrames: clip.durationFrames };
+  if (isMediaClip(clip)) {
+    inversePatch.sourceInFrame = clip.sourceInFrame;
+    inversePatch.timeMap = clip.timeMap;
+    inversePatch.fade = clip.fade;
+  }
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'batch',
+      label: 'Undo split',
+      commands: [
+        { type: 'clip.remove', clipId: right.id },
+        {
+          type: 'clip.update',
+          clipId: left.id,
+          patch: inversePatch,
+        },
+      ],
+    },
+  };
+}
+
+function applyDuplicate(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.duplicate' }>,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  const target = command.trackId
+    ? requireTrack(sequence, command.trackId)
+    : location.track;
+  assertTrackUnlocked(target);
+  assertClipCompatible(target, location.clip);
+
+  const startFrame = location.clip.startFrame + command.offsetFrames;
+  if (startFrame < 0) {
+    throw new EngineError(
+      'invalid-range',
+      'The duplicate offset would start before frame zero.',
+      'Use a smaller negative offset or move the source clip first.',
+    );
+  }
+
+  const duplicate = parseClip({
+    ...location.clip,
+    id: newId('clip'),
+    trackId: target.id,
+    startFrame,
+  });
+  assertNoOverlap(target, duplicate);
+
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === target.id
+      ? { ...candidate, clips: [...candidate.clips, duplicate] }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: { type: 'clip.remove', clipId: duplicate.id },
+  };
+}
+
+function applySlip(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.slip' }>,
+  context: ApplyContext,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertClipCompatible(location.track, location.clip);
+  const clip = location.clip;
+
+  if (!isMediaClip(clip)) {
+    throw new EngineError(
+      'invalid-command',
+      `A ${clip.type} clip has no source footage to slip.`,
+      'Slip is only available for video and audio clips.',
+    );
+  }
+
+  const changes: Record<string, unknown> = {};
+  if (clip.timeMap.length > 0) {
+    const timeMap = clip.timeMap.map((point) => ({
+      ...point,
+      sourceFrame: point.sourceFrame + command.deltaFrames,
+    }));
+    if (timeMap.some((point) => point.sourceFrame < 0)) {
+      throw new EngineError(
+        'invalid-range',
+        'The slip would move the time map before frame zero.',
+        'Slip by a smaller amount.',
+      );
+    }
+    changes.timeMap = timeMap;
+  } else {
+    const sourceInFrame = clip.sourceInFrame + command.deltaFrames;
+    if (sourceInFrame < 0) {
+      throw new EngineError(
+        'invalid-range',
+        'The slip would start before the first source frame.',
+        'Slip by a smaller amount.',
+      );
+    }
+    changes.sourceInFrame = sourceInFrame;
+  }
+
+  const updated = parseClip({ ...clip, ...changes });
+  assertSourceBounds(updated, context);
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'clip.slip',
+      clipId: clip.id,
+      deltaFrames: -command.deltaFrames,
+    },
+  };
+}
+
 function applyBatch(
   sequence: Sequence,
   command: Extract<EditCommand, { type: 'batch' }>,
@@ -528,6 +723,12 @@ export function applyCommand(
       return applyMove(sequence, command);
     case 'clip.trim':
       return applyTrim(sequence, command, context);
+    case 'clip.split':
+      return applySplit(sequence, command);
+    case 'clip.duplicate':
+      return applyDuplicate(sequence, command);
+    case 'clip.slip':
+      return applySlip(sequence, command, context);
     case 'batch':
       return applyBatch(sequence, command, context);
     default:

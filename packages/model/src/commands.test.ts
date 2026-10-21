@@ -42,6 +42,7 @@ describe('edit commands', () => {
       offsetFrames: 12,
     },
     { type: 'clip.setSpeed', clipId: clip.id, speed: 2 },
+    { type: 'clip.slip', clipId: clip.id, deltaFrames: 6 },
     { type: 'clip.setTimeMap', clipId: clip.id, points: [] },
     {
       type: 'clip.setKeyframes',
@@ -126,7 +127,7 @@ describe('edit commands', () => {
     }
 
     expect(seen.size).toBe(COMMAND_TYPES.length);
-    expect(COMMAND_TYPES).toHaveLength(28);
+    expect(COMMAND_TYPES).toHaveLength(29);
   });
 
   it('parses nested batches recursively', () => {

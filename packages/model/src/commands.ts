@@ -135,6 +135,12 @@ export const clipSetSpeedCommandSchema = z.object({
   speed: z.number().positive().max(16),
 });
 
+export const clipSlipCommandSchema = z.object({
+  type: z.literal('clip.slip'),
+  clipId: idSchema('clip'),
+  deltaFrames: z.number().int(),
+});
+
 export const clipSetTimeMapCommandSchema = z.object({
   type: z.literal('clip.setTimeMap'),
   clipId: idSchema('clip'),
@@ -255,6 +261,7 @@ export const COMMAND_SCHEMAS = {
   'clip.split': clipSplitCommandSchema,
   'clip.duplicate': clipDuplicateCommandSchema,
   'clip.setSpeed': clipSetSpeedCommandSchema,
+  'clip.slip': clipSlipCommandSchema,
   'clip.setTimeMap': clipSetTimeMapCommandSchema,
   'clip.setKeyframes': clipSetKeyframesCommandSchema,
   'clip.addEffect': clipAddEffectCommandSchema,
@@ -292,6 +299,7 @@ export type ClipTrimCommand = z.infer<typeof clipTrimCommandSchema>;
 export type ClipSplitCommand = z.infer<typeof clipSplitCommandSchema>;
 export type ClipDuplicateCommand = z.infer<typeof clipDuplicateCommandSchema>;
 export type ClipSetSpeedCommand = z.infer<typeof clipSetSpeedCommandSchema>;
+export type ClipSlipCommand = z.infer<typeof clipSlipCommandSchema>;
 export type ClipSetTimeMapCommand = z.infer<typeof clipSetTimeMapCommandSchema>;
 export type ClipSetKeyframesCommand = z.infer<
   typeof clipSetKeyframesCommandSchema
@@ -339,6 +347,7 @@ export type EditCommand =
   | ClipSplitCommand
   | ClipDuplicateCommand
   | ClipSetSpeedCommand
+  | ClipSlipCommand
   | ClipSetTimeMapCommand
   | ClipSetKeyframesCommand
   | ClipAddEffectCommand
@@ -370,6 +379,7 @@ export const editCommandSchema = z.lazy(() =>
     clipSplitCommandSchema,
     clipDuplicateCommandSchema,
     clipSetSpeedCommandSchema,
+    clipSlipCommandSchema,
     clipSetTimeMapCommandSchema,
     clipSetKeyframesCommandSchema,
     clipAddEffectCommandSchema,
@@ -448,6 +458,8 @@ export function commandLabel(command: EditCommand): string {
       return 'Duplicate clip';
     case 'clip.setSpeed':
       return 'Set clip speed';
+    case 'clip.slip':
+      return 'Slip clip';
     case 'clip.setTimeMap':
       return 'Set time map';
     case 'clip.setKeyframes':
