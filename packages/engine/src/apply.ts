@@ -4,16 +4,26 @@ import type {
   ClipType,
   EditCommand,
   Sequence,
+  TimeMapPoint,
   Track,
 } from '@kerf/model';
-import { clipSchema } from '@kerf/model';
+import { clipSchema, isMediaClip } from '@kerf/model';
 import { assertClipCompatible } from './compatibility';
 import { EngineError } from './errors';
 import { findClip, findOverlap, requireClip, requireTrack } from './queries';
+import { clipSourceRange, sampleTimeMap } from './source';
 
 export interface ApplyResult {
   sequence: Sequence;
   inverse: EditCommand | null;
+}
+
+/**
+ * Optional facts the engine cannot read from a sequence. Ingest supplies the
+ * source duration so trims can refuse to run past the end of the media.
+ */
+export interface ApplyContext {
+  sourceDurationFrames?: (assetId: string) => number | undefined;
 }
 
 const COMMON_PATCH_KEYS = [
@@ -288,15 +298,197 @@ function applyUpdate(
   };
 }
 
+function applyMove(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.move' }>,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  const targetTrackId = command.trackId ?? location.track.id;
+  const trackChanged = targetTrackId !== location.track.id;
+
+  const result = applyUpdate(sequence, {
+    type: 'clip.update',
+    clipId: command.clipId,
+    patch: {
+      trackId: targetTrackId,
+      startFrame: command.startFrame,
+    },
+  });
+
+  if (!trackChanged && result.inverse?.type === 'clip.update') {
+    return {
+      sequence: result.sequence,
+      inverse: {
+        type: 'clip.move',
+        clipId: command.clipId,
+        trackId: location.track.id,
+        startFrame: location.clip.startFrame,
+      },
+    };
+  }
+
+  return result;
+}
+
+function trimTimeMapIn(
+  points: readonly TimeMapPoint[],
+  offset: number,
+  newDuration: number,
+): TimeMapPoint[] {
+  const startSource = sampleTimeMap(points, offset) ?? 0;
+  const endSource = sampleTimeMap(points, offset + newDuration) ?? startSource;
+  const shifted = points
+    .map((point) => ({
+      frame: point.frame - offset,
+      sourceFrame: point.sourceFrame,
+    }))
+    .filter((point) => point.frame > 0 && point.frame < newDuration);
+
+  return [
+    { frame: 0, sourceFrame: startSource },
+    ...shifted,
+    { frame: newDuration, sourceFrame: endSource },
+  ];
+}
+
+function trimTimeMapOut(
+  points: readonly TimeMapPoint[],
+  newDuration: number,
+): TimeMapPoint[] {
+  const startSource = sampleTimeMap(points, 0) ?? 0;
+  const endSource = sampleTimeMap(points, newDuration) ?? startSource;
+  const kept = points.filter(
+    (point) => point.frame > 0 && point.frame < newDuration,
+  );
+
+  return [
+    { frame: 0, sourceFrame: startSource },
+    ...kept,
+    { frame: newDuration, sourceFrame: endSource },
+  ];
+}
+
+function assertSourceBounds(clip: Clip, context: ApplyContext): void {
+  if (!isMediaClip(clip)) {
+    return;
+  }
+
+  const range = clipSourceRange(clip);
+  const limit = context.sourceDurationFrames?.(clip.assetId);
+  if (range.startFrame < 0 || (limit !== undefined && range.endFrame > limit)) {
+    throw new EngineError(
+      'invalid-range',
+      `The trim would run past the available source for "${clip.label || clip.id}".`,
+      limit === undefined
+        ? 'Keep the source range at or after frame zero.'
+        : `This source is ${limit} frames long. Trim inside that range.`,
+    );
+  }
+}
+
+function applyTrim(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.trim' }>,
+  context: ApplyContext,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  const clip = location.clip;
+  assertClipCompatible(location.track, clip);
+  const movingIn = command.edge === 'in';
+  const newStartFrame = movingIn
+    ? clip.startFrame + command.frames
+    : clip.startFrame;
+  const newDuration = movingIn
+    ? clip.durationFrames - command.frames
+    : clip.durationFrames + command.frames;
+
+  if (newStartFrame < 0) {
+    throw new EngineError(
+      'invalid-range',
+      'A trim cannot move the clip before frame zero.',
+      'Trim by a smaller amount or move the clip later first.',
+    );
+  }
+  if (newDuration <= 0) {
+    throw new EngineError(
+      'invalid-range',
+      'A trim must leave at least one frame.',
+      'Use a smaller trim or remove the clip instead.',
+    );
+  }
+
+  const changes: Record<string, unknown> = {
+    startFrame: newStartFrame,
+    durationFrames: newDuration,
+  };
+
+  if (isMediaClip(clip)) {
+    if (clip.timeMap.length > 0) {
+      changes.timeMap = movingIn
+        ? trimTimeMapIn(clip.timeMap, command.frames, newDuration)
+        : trimTimeMapOut(clip.timeMap, newDuration);
+    } else if (movingIn) {
+      const sourceInFrame =
+        clip.sourceInFrame + Math.round(command.frames * clip.speed);
+      if (sourceInFrame < 0) {
+        throw new EngineError(
+          'invalid-range',
+          'The trim would start before the first source frame.',
+          'Trim less, or extend the clip to the right instead.',
+        );
+      }
+      changes.sourceInFrame = sourceInFrame;
+    }
+  }
+
+  const updated = parseClip({ ...clip, ...changes });
+  assertSourceBounds(updated, context);
+  assertNoOverlap(location.track, updated, clip.id);
+
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  const inversePatch: ClipPatch = isMediaClip(clip)
+    ? {
+        startFrame: clip.startFrame,
+        durationFrames: clip.durationFrames,
+        sourceInFrame: clip.sourceInFrame,
+        timeMap: clip.timeMap,
+      }
+    : {
+        startFrame: clip.startFrame,
+        durationFrames: clip.durationFrames,
+      };
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'clip.update',
+      clipId: clip.id,
+      patch: inversePatch,
+    },
+  };
+}
+
 function applyBatch(
   sequence: Sequence,
   command: Extract<EditCommand, { type: 'batch' }>,
+  context: ApplyContext,
 ): ApplyResult {
   let next = sequence;
   const inverses: EditCommand[] = [];
 
   for (const child of command.commands) {
-    const result = applyCommand(next, child);
+    const result = applyCommand(next, child, context);
     next = result.sequence;
     if (result.inverse) {
       inverses.push(result.inverse);
@@ -323,6 +515,7 @@ function applyBatch(
 export function applyCommand(
   sequence: Sequence,
   command: EditCommand,
+  context: ApplyContext = {},
 ): ApplyResult {
   switch (command.type) {
     case 'clip.insert':
@@ -331,8 +524,12 @@ export function applyCommand(
       return applyRemove(sequence, command);
     case 'clip.update':
       return applyUpdate(sequence, command);
+    case 'clip.move':
+      return applyMove(sequence, command);
+    case 'clip.trim':
+      return applyTrim(sequence, command, context);
     case 'batch':
-      return applyBatch(sequence, command);
+      return applyBatch(sequence, command, context);
     default:
       throw new EngineError(
         'invalid-command',
