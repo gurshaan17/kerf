@@ -2,7 +2,12 @@ import { z } from 'zod';
 import { clipSchema } from './clips';
 import { idSchema, newId } from './ids';
 import { frameRateSchema, FRAME_RATES } from './time';
-import { hexColorSchema } from './style';
+import {
+  DEFAULT_STYLE,
+  hexColorSchema,
+  referenceProfileSchema,
+  styleConfigSchema,
+} from './style';
 
 export const trackKindSchema = z.enum(['video', 'audio', 'caption', 'overlay']);
 export type TrackKind = z.infer<typeof trackKindSchema>;
@@ -47,6 +52,8 @@ export const sequenceSchema = z.object({
   durationFrames: z.number().int().nonnegative().default(0),
   tracks: z.array(trackSchema).default([]),
   markers: z.array(markerSchema).default([]),
+  style: styleConfigSchema.default(DEFAULT_STYLE),
+  reference: referenceProfileSchema.nullable().default(null),
 });
 
 export type Sequence = z.infer<typeof sequenceSchema>;

@@ -311,16 +311,12 @@ describe('edit validation', () => {
     );
   });
 
-  it('rejects commands the engine has not implemented yet', () => {
+  it('rejects commands the engine does not recognise', () => {
     const { sequence } = emptyVideoSequence();
-    expectEngineError(
-      () =>
-        applyCommand(sequence, {
-          type: 'sequence.rename',
-          name: 'Nope',
-        }),
-      'invalid-command',
-    );
+    const unknown = {
+      type: 'unknown.command',
+    } as unknown as EditCommand;
+    expectEngineError(() => applyCommand(sequence, unknown), 'invalid-command');
   });
 });
 

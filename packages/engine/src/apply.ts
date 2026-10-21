@@ -7,23 +7,40 @@ import type {
   EffectPatch,
   Mask,
   MaskPatch,
+  Marker,
+  MarkerPatch,
   NumberKeyframes,
+  ReferenceProfile,
   Sequence,
+  StyleConfig,
   TimeMapPoint,
   Track,
+  TrackPatch,
 } from '@kerf/model';
 import {
   clipSchema,
   effectSchema,
   isMediaClip,
+  markerSchema,
   maskSchema,
   newId,
   numberKeyframesSchema,
+  referenceProfileSchema,
+  sequenceSchema,
+  styleConfigSchema,
   timeMapSchema,
+  trackSchema,
 } from '@kerf/model';
 import { assertClipCompatible } from './compatibility';
 import { EngineError } from './errors';
-import { findClip, findOverlap, requireClip, requireTrack } from './queries';
+import {
+  findClip,
+  findOverlap,
+  findTrack,
+  requireClip,
+  requireTrack,
+  tracksInOrder,
+} from './queries';
 import { clipSourceRange, sampleTimeMap, sourceFrameAt } from './source';
 
 export interface ApplyResult {
@@ -123,6 +140,66 @@ function parseTimeMap(value: unknown): TimeMapPoint[] {
   }
 }
 
+function parseTrack(value: unknown): Track {
+  try {
+    return trackSchema.parse(value);
+  } catch (error) {
+    throw new EngineError(
+      'invalid-command',
+      'The track payload is not valid.',
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+}
+
+function parseMarker(value: unknown): Marker {
+  try {
+    return markerSchema.parse(value);
+  } catch (error) {
+    throw new EngineError(
+      'invalid-command',
+      'The marker payload is not valid.',
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+}
+
+function parseStyle(value: unknown): StyleConfig {
+  try {
+    return styleConfigSchema.parse(value);
+  } catch (error) {
+    throw new EngineError(
+      'invalid-command',
+      'The style payload is not valid.',
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+}
+
+function parseReference(value: unknown): ReferenceProfile {
+  try {
+    return referenceProfileSchema.parse(value);
+  } catch (error) {
+    throw new EngineError(
+      'invalid-command',
+      'The reference payload is not valid.',
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+}
+
+function parseSequence(value: unknown): Sequence {
+  try {
+    return sequenceSchema.parse(value);
+  } catch (error) {
+    throw new EngineError(
+      'invalid-command',
+      'The sequence payload is not valid.',
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+}
+
 function assertVisualClip(clip: Clip, feature: string): void {
   if (clip.type === 'audio') {
     throw new EngineError(
@@ -215,6 +292,91 @@ function capturePreviousMaskPatch(mask: Mask, patch: MaskPatch): MaskPatch {
   return result as MaskPatch;
 }
 
+function assertTrackClips(track: Track): void {
+  for (const clip of track.clips) {
+    if (clip.trackId !== track.id) {
+      throw new EngineError(
+        'invalid-command',
+        `Clip ${clip.id} points at track ${clip.trackId}, not ${track.id}.`,
+        'Set the clip trackId to the track it belongs to.',
+      );
+    }
+    assertClipCompatible(track, clip);
+  }
+}
+
+function compactTrackPatch(patch: TrackPatch): TrackPatch {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result as TrackPatch;
+}
+
+function capturePreviousTrackPatch(
+  track: Track,
+  patch: TrackPatch,
+): TrackPatch {
+  const result: Record<string, unknown> = {};
+  const source = track as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      result[key] = source[key];
+    }
+  }
+  return result as TrackPatch;
+}
+
+function compactMarkerPatch(patch: MarkerPatch): MarkerPatch {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result as MarkerPatch;
+}
+
+function capturePreviousMarkerPatch(
+  marker: Marker,
+  patch: MarkerPatch,
+): MarkerPatch {
+  const result: Record<string, unknown> = {};
+  const source = marker as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      result[key] = source[key];
+    }
+  }
+  return result as MarkerPatch;
+}
+
+function compactStylePatch(patch: Partial<StyleConfig>): Partial<StyleConfig> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result as Partial<StyleConfig>;
+}
+
+function capturePreviousStylePatch(
+  style: StyleConfig,
+  patch: Partial<StyleConfig>,
+): Partial<StyleConfig> {
+  const result: Record<string, unknown> = {};
+  const source = style as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      result[key] = source[key];
+    }
+  }
+  return result as Partial<StyleConfig>;
+}
+
 function assertTrackUnlocked(track: Track): void {
   if (track.locked) {
     throw new EngineError(
@@ -254,6 +416,16 @@ function assertIndex(index: number, length: number): void {
     throw new EngineError(
       'invalid-range',
       `Cannot insert at index ${index} on a track with ${length} clips.`,
+      `Use an index between 0 and ${length}.`,
+    );
+  }
+}
+
+function assertListIndex(index: number, length: number, label: string): void {
+  if (index < 0 || index > length) {
+    throw new EngineError(
+      'invalid-range',
+      `Cannot insert ${label} at index ${index} in a list of ${length}.`,
       `Use an index between 0 and ${length}.`,
     );
   }
@@ -1265,6 +1437,359 @@ function applyRemoveMask(
   };
 }
 
+function applySequenceRename(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'sequence.rename' }>,
+): ApplyResult {
+  if (command.name.trim().length === 0) {
+    throw new EngineError(
+      'invalid-command',
+      'A sequence needs a name.',
+      'Enter at least one non-space character.',
+    );
+  }
+  return {
+    sequence: { ...sequence, name: command.name },
+    inverse: { type: 'sequence.rename', name: sequence.name },
+  };
+}
+
+function applySequenceSetCanvas(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'sequence.setCanvas' }>,
+): ApplyResult {
+  const next = parseSequence({
+    ...sequence,
+    width: command.width,
+    height: command.height,
+    frameRate: command.frameRate ?? sequence.frameRate,
+  });
+  return {
+    sequence: next,
+    inverse: {
+      type: 'sequence.setCanvas',
+      width: sequence.width,
+      height: sequence.height,
+      frameRate: sequence.frameRate,
+    },
+  };
+}
+
+function applySequenceSetStyle(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'sequence.setStyle' }>,
+): ApplyResult {
+  const patch = compactStylePatch(command.style);
+  const allowed = new Set(Object.keys(sequence.style));
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined && !allowed.has(key)) {
+      throw new EngineError(
+        'invalid-command',
+        `The sequence style has no "${key}" property.`,
+        'Remove that field from the patch.',
+      );
+    }
+  }
+
+  const style = parseStyle({ ...sequence.style, ...patch });
+  return {
+    sequence: { ...sequence, style },
+    inverse: {
+      type: 'sequence.setStyle',
+      style: capturePreviousStylePatch(sequence.style, patch),
+    },
+  };
+}
+
+function applySequenceSetReference(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'sequence.setReference' }>,
+): ApplyResult {
+  const reference =
+    command.reference === null ? null : parseReference(command.reference);
+  return {
+    sequence: { ...sequence, reference },
+    inverse: {
+      type: 'sequence.setReference',
+      reference: sequence.reference,
+    },
+  };
+}
+
+function applyTrackAdd(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'track.add' }>,
+): ApplyResult {
+  const track = parseTrack(command.track);
+  if (findTrack(sequence, track.id)) {
+    throw new EngineError(
+      'invalid-command',
+      `Track ${track.id} already exists.`,
+      'Give the new track a fresh identifier.',
+    );
+  }
+  assertTrackClips(track);
+
+  const clipIds = new Set<string>();
+  for (const clip of track.clips) {
+    if (findClip(sequence, clip.id) || clipIds.has(clip.id)) {
+      throw new EngineError(
+        'invalid-command',
+        `Clip ${clip.id} already exists in this sequence.`,
+        'Give every clip a unique identifier.',
+      );
+    }
+    clipIds.add(clip.id);
+  }
+
+  const index = command.index ?? sequence.tracks.length;
+  assertListIndex(index, sequence.tracks.length, 'track');
+  return {
+    sequence: withTracks(sequence, [
+      ...sequence.tracks.slice(0, index),
+      track,
+      ...sequence.tracks.slice(index),
+    ]),
+    inverse: { type: 'track.remove', trackId: track.id },
+  };
+}
+
+function applyTrackRemove(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'track.remove' }>,
+): ApplyResult {
+  const track = requireTrack(sequence, command.trackId);
+  assertTrackUnlocked(track);
+  const index = sequence.tracks.findIndex(
+    (candidate) => candidate.id === track.id,
+  );
+  return {
+    sequence: withTracks(
+      sequence,
+      sequence.tracks.filter((candidate) => candidate.id !== track.id),
+    ),
+    inverse: { type: 'track.add', track, index },
+  };
+}
+
+function applyTrackUpdate(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'track.update' }>,
+): ApplyResult {
+  const track = requireTrack(sequence, command.trackId);
+  const patch = compactTrackPatch(command.patch);
+  const allowed = new Set([
+    'name',
+    'kind',
+    'order',
+    'locked',
+    'muted',
+    'hidden',
+    'height',
+  ]);
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined && !allowed.has(key)) {
+      throw new EngineError(
+        'invalid-command',
+        `A track has no editable "${key}" property.`,
+        'Remove that field from the patch.',
+      );
+    }
+  }
+
+  const onlyOrder = Object.keys(patch).every((key) => key === 'order');
+  if (track.locked && patch.locked !== false && !onlyOrder) {
+    throw new EngineError(
+      'locked',
+      `Track "${track.name}" is locked.`,
+      'Unlock the track before editing it.',
+    );
+  }
+
+  if (patch.kind && patch.kind !== track.kind) {
+    const candidate = { ...track, kind: patch.kind };
+    for (const clip of track.clips) {
+      assertClipCompatible(candidate, clip);
+    }
+  }
+
+  const updated = parseTrack({ ...track, ...patch });
+  return {
+    sequence: withTracks(
+      sequence,
+      sequence.tracks.map((candidate) =>
+        candidate.id === track.id ? updated : candidate,
+      ),
+    ),
+    inverse: {
+      type: 'track.update',
+      trackId: track.id,
+      patch: capturePreviousTrackPatch(track, patch),
+    },
+  };
+}
+
+function applyTrackReorder(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'track.reorder' }>,
+): ApplyResult {
+  const ordered = tracksInOrder(sequence);
+  if (command.toIndex < 0 || command.toIndex >= ordered.length) {
+    throw new EngineError(
+      'invalid-range',
+      `Cannot move a track to index ${command.toIndex}.`,
+      `Use an index between 0 and ${ordered.length - 1}.`,
+    );
+  }
+
+  const currentIndex = ordered.findIndex(
+    (track) => track.id === command.trackId,
+  );
+  if (currentIndex < 0) {
+    throw new EngineError(
+      'not-found',
+      `Track ${command.trackId} is not part of this sequence.`,
+      'Refresh the sequence and try again.',
+    );
+  }
+
+  const moved = [...ordered];
+  const [track] = moved.splice(currentIndex, 1);
+  if (!track) {
+    throw new EngineError(
+      'internal',
+      'The track could not be reordered.',
+      'Reload the project and try again.',
+    );
+  }
+  moved.splice(command.toIndex, 0, track);
+
+  const orderById = new Map(moved.map((item, index) => [item.id, index]));
+  const inverses: EditCommand[] = [];
+  for (const candidate of ordered) {
+    const order = orderById.get(candidate.id);
+    if (order !== undefined && order !== candidate.order) {
+      inverses.push({
+        type: 'track.update',
+        trackId: candidate.id,
+        patch: { order: candidate.order },
+      });
+    }
+  }
+
+  const tracks = sequence.tracks.map((candidate) => {
+    const order = orderById.get(candidate.id);
+    return order === undefined ? candidate : { ...candidate, order };
+  });
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse:
+      inverses.length === 0
+        ? null
+        : { type: 'batch', label: 'Undo reorder', commands: inverses },
+  };
+}
+
+function applyMarkerAdd(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'marker.add' }>,
+): ApplyResult {
+  const marker = parseMarker(command.marker);
+  if (sequence.markers.some((candidate) => candidate.id === marker.id)) {
+    throw new EngineError(
+      'invalid-command',
+      `Marker ${marker.id} already exists.`,
+      'Give the new marker a fresh identifier.',
+    );
+  }
+
+  const index = command.index ?? sequence.markers.length;
+  assertListIndex(index, sequence.markers.length, 'marker');
+  return {
+    sequence: {
+      ...sequence,
+      markers: [
+        ...sequence.markers.slice(0, index),
+        marker,
+        ...sequence.markers.slice(index),
+      ],
+    },
+    inverse: { type: 'marker.remove', markerId: marker.id },
+  };
+}
+
+function applyMarkerUpdate(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'marker.update' }>,
+): ApplyResult {
+  const index = sequence.markers.findIndex(
+    (marker) => marker.id === command.markerId,
+  );
+  const marker = index >= 0 ? sequence.markers[index] : undefined;
+  if (!marker) {
+    throw new EngineError(
+      'not-found',
+      `Marker ${command.markerId} is not part of this sequence.`,
+      'Refresh the sequence and try again.',
+    );
+  }
+
+  const patch = compactMarkerPatch(command.patch);
+  const allowed = new Set(['frame', 'label', 'kind', 'color']);
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined && !allowed.has(key)) {
+      throw new EngineError(
+        'invalid-command',
+        `A marker has no editable "${key}" property.`,
+        'Remove that field from the patch.',
+      );
+    }
+  }
+
+  const updated = parseMarker({ ...marker, ...patch });
+  return {
+    sequence: {
+      ...sequence,
+      markers: sequence.markers.map((candidate) =>
+        candidate.id === marker.id ? updated : candidate,
+      ),
+    },
+    inverse: {
+      type: 'marker.update',
+      markerId: marker.id,
+      patch: capturePreviousMarkerPatch(marker, patch),
+    },
+  };
+}
+
+function applyMarkerRemove(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'marker.remove' }>,
+): ApplyResult {
+  const index = sequence.markers.findIndex(
+    (marker) => marker.id === command.markerId,
+  );
+  const marker = index >= 0 ? sequence.markers[index] : undefined;
+  if (!marker) {
+    throw new EngineError(
+      'not-found',
+      `Marker ${command.markerId} is not part of this sequence.`,
+      'Refresh the sequence and try again.',
+    );
+  }
+
+  return {
+    sequence: {
+      ...sequence,
+      markers: sequence.markers.filter(
+        (candidate) => candidate.id !== marker.id,
+      ),
+    },
+    inverse: { type: 'marker.add', marker, index },
+  };
+}
+
 function applyBatch(
   sequence: Sequence,
   command: Extract<EditCommand, { type: 'batch' }>,
@@ -1338,12 +1863,34 @@ export function applyCommand(
       return applyUpdateMask(sequence, command);
     case 'clip.removeMask':
       return applyRemoveMask(sequence, command);
+    case 'sequence.rename':
+      return applySequenceRename(sequence, command);
+    case 'sequence.setCanvas':
+      return applySequenceSetCanvas(sequence, command);
+    case 'sequence.setStyle':
+      return applySequenceSetStyle(sequence, command);
+    case 'sequence.setReference':
+      return applySequenceSetReference(sequence, command);
+    case 'track.add':
+      return applyTrackAdd(sequence, command);
+    case 'track.remove':
+      return applyTrackRemove(sequence, command);
+    case 'track.update':
+      return applyTrackUpdate(sequence, command);
+    case 'track.reorder':
+      return applyTrackReorder(sequence, command);
+    case 'marker.add':
+      return applyMarkerAdd(sequence, command);
+    case 'marker.update':
+      return applyMarkerUpdate(sequence, command);
+    case 'marker.remove':
+      return applyMarkerRemove(sequence, command);
     case 'batch':
       return applyBatch(sequence, command, context);
     default:
       throw new EngineError(
         'invalid-command',
-        `The engine does not implement ${command.type} yet.`,
+        'The engine received an unknown edit command.',
         'Update the app or remove this command from the batch.',
       );
   }

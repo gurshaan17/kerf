@@ -219,6 +219,7 @@ export const sequenceSetReferenceCommandSchema = z.object({
 export const trackAddCommandSchema = z.object({
   type: z.literal('track.add'),
   track: trackSchema,
+  index: z.number().int().nonnegative().optional(),
 });
 
 export const trackRemoveCommandSchema = z.object({
@@ -241,6 +242,7 @@ export const trackReorderCommandSchema = z.object({
 export const markerAddCommandSchema = z.object({
   type: z.literal('marker.add'),
   marker: markerSchema,
+  index: z.number().int().nonnegative().optional(),
 });
 
 export const markerUpdateCommandSchema = z.object({
