@@ -116,12 +116,31 @@ CREATE TABLE reference_profiles (
 CREATE INDEX reference_profiles_project_id_idx ON reference_profiles(project_id);
 `;
 
+/**
+ * The child tables keep indexed columns for querying and a full model payload
+ * for lossless round-trips. Payloads make schema evolution additive instead of
+ * forcing a column for every nested field.
+ */
+const BUNDLE_PAYLOAD_COLUMNS = `
+ALTER TABLE assets ADD COLUMN payload_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE transcripts ADD COLUMN payload_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE scenes ADD COLUMN payload_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE beat_maps ADD COLUMN payload_json TEXT NOT NULL DEFAULT '{}';
+`;
+
 export const DATABASE_MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
     name: 'initial schema',
     up(connection) {
       connection.exec(INITIAL_SCHEMA);
+    },
+  },
+  {
+    version: 2,
+    name: 'bundle payloads',
+    up(connection) {
+      connection.exec(BUNDLE_PAYLOAD_COLUMNS);
     },
   },
 ];

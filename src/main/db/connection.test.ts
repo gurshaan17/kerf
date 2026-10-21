@@ -6,6 +6,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { DatabaseLogger } from './connection';
 import { migrateDatabase, openDatabase, probeFts5 } from './connection';
 import type { Migration } from './migrations';
+import { DATABASE_MIGRATIONS } from './migrations';
+
+const LATEST_DATABASE_VERSION = DATABASE_MIGRATIONS.at(-1)?.version ?? 0;
 
 interface LogRecord {
   message: string;
@@ -75,7 +78,7 @@ describe('openDatabase', () => {
 
     try {
       expect(handle.connection.pragma('user_version', { simple: true })).toBe(
-        1,
+        LATEST_DATABASE_VERSION,
       );
       expect(handle.connection.pragma('journal_mode', { simple: true })).toBe(
         'wal',
@@ -122,7 +125,7 @@ describe('openDatabase', () => {
     const second = openDatabase({ filename, logger: secondLogs.logger });
     try {
       expect(second.connection.pragma('user_version', { simple: true })).toBe(
-        1,
+        LATEST_DATABASE_VERSION,
       );
       const row = second.connection
         .prepare('SELECT count(*) AS count FROM projects')
