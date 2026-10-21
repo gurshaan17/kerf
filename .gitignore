@@ -151,3 +151,6 @@ out/
 # Editors
 .idea/
 *.swp
+
+# Private build plan (never publish)
+COMMIT_PLAN.md
