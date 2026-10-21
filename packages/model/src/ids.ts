@@ -13,7 +13,9 @@ export const ID_PREFIXES = {
   transcript: 'tx',
   scene: 'scn',
   beat: 'beat',
+  beatmap: 'bmap',
   section: 'sec',
+  segment: 'seg',
   composition: 'cmp',
   effect: 'fx',
   mask: 'msk',
@@ -40,7 +42,9 @@ export type ReferenceId = Id<'reference'>;
 export type TranscriptId = Id<'transcript'>;
 export type SceneId = Id<'scene'>;
 export type BeatId = Id<'beat'>;
+export type BeatMapId = Id<'beatmap'>;
 export type SectionId = Id<'section'>;
+export type SegmentId = Id<'segment'>;
 export type CompositionId = Id<'composition'>;
 export type EffectId = Id<'effect'>;
 export type MaskId = Id<'mask'>;
