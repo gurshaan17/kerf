@@ -54,4 +54,16 @@
   --shadow-3: 0 24px 64px rgb(0 0 0 / 50%);
 
   --ease-k: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --animate-toast-in: k-toast-in var(--k-duration-base) var(--k-ease);
+}
+
+@keyframes k-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

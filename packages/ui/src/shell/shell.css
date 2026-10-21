@@ -126,10 +126,6 @@
   overflow: hidden;
 }
 
-.k-shell__panel .k-panel__body {
-  padding: 0 0 14px;
-}
-
 /* Stage */
 .k-stage {
   display: grid;

@@ -2,7 +2,6 @@ import './tailwind.css';
 import './fonts.css';
 import './tokens.css';
 import './base.css';
-import './primitives.css';
 import './shell/shell.css';
 
 export { KerfMark } from './brand/KerfMark';
@@ -17,7 +16,7 @@ export type {
 } from './components/Button';
 export { Dialog } from './components/Dialog';
 export type { DialogProps } from './components/Dialog';
-export { Field, Input, Textarea } from './components/Field';
+export { Field, FieldRow, Input, Textarea } from './components/Field';
 export type { FieldProps } from './components/Field';
 export { IconButton } from './components/IconButton';
 export type { IconButtonProps } from './components/IconButton';

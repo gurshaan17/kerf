@@ -68,19 +68,25 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className="k-dialog"
+      className="w-[calc(100vw-48px)] max-w-[480px] border-0 bg-transparent p-0 text-ink backdrop:bg-black/60 backdrop:backdrop-blur-sm"
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       onClick={handleBackdropClick}
     >
-      <div className="k-dialog__panel">
-        <header className="k-dialog__header">
+      <div className="overflow-hidden rounded-lg border border-line-strong bg-surface-2 shadow-3">
+        <header className="flex items-start justify-between gap-4 px-[18px] pt-[18px]">
           <div>
-            <h2 id={titleId} className="k-dialog__title">
+            <h2
+              id={titleId}
+              className="font-display text-[24px] leading-[1.16] font-medium"
+            >
               {title}
             </h2>
             {description ? (
-              <p id={descriptionId} className="k-dialog__description">
+              <p
+                id={descriptionId}
+                className="mt-[5px] max-w-[38ch] text-[12px] text-ink-muted"
+              >
                 {description}
               </p>
             ) : null}
@@ -92,8 +98,12 @@ export function Dialog({
             onClick={() => onOpenChange(false)}
           />
         </header>
-        <div className="k-dialog__body">{children}</div>
-        {footer ? <footer className="k-dialog__footer">{footer}</footer> : null}
+        <div className="px-[18px] pt-4 pb-5">{children}</div>
+        {footer ? (
+          <footer className="flex justify-end gap-2 border-t border-line bg-surface-1 px-[18px] py-3">
+            {footer}
+          </footer>
+        ) : null}
       </div>
     </dialog>
   );

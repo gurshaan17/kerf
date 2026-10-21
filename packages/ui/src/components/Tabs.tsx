@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { cx } from '../cx';
+import { cn } from '../cn';
 
 export interface TabItem {
   id: string;
@@ -54,7 +54,7 @@ export function Tabs({
 
   return (
     <div
-      className={cx('k-tabs', className)}
+      className={cn('flex gap-0.5 border-b border-line', className)}
       role="tablist"
       aria-label={label}
       aria-orientation="horizontal"
@@ -72,17 +72,22 @@ export function Tabs({
             role="tab"
             aria-selected={selected}
             tabIndex={selected ? 0 : -1}
-            className={cx('k-tab', selected && 'is-selected')}
+            className={cn(
+              'inline-flex items-center gap-1.5 border-b-2 border-transparent bg-transparent px-[9px] pt-2 pb-[7px] text-[11px] font-semibold tracking-[0.03em] text-ink-faint transition-colors duration-150 ease-k hover:text-ink-muted focus-visible:outline-none',
+              selected && 'border-accent text-ink',
+            )}
             onClick={() => onValueChange(item.id)}
           >
             {item.icon ? (
-              <span className="k-tab__icon" aria-hidden="true">
+              <span className="inline-flex" aria-hidden="true">
                 {item.icon}
               </span>
             ) : null}
             <span>{item.label}</span>
             {item.badge ? (
-              <span className="k-tab__badge">{item.badge}</span>
+              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-pill bg-surface-3 px-1 font-mono text-[9px] text-ink-muted">
+                {item.badge}
+              </span>
             ) : null}
           </button>
         );

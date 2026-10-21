@@ -28,7 +28,7 @@ import { KerfMark } from '../brand/KerfMark';
 import { cx } from '../cx';
 import { Button } from '../components/Button';
 import { Dialog } from '../components/Dialog';
-import { Field, Input } from '../components/Field';
+import { Field, FieldRow, Input } from '../components/Field';
 import { IconButton } from '../components/IconButton';
 import { Kbd, KbdGroup } from '../components/Kbd';
 import { Panel } from '../components/Panel';
@@ -74,10 +74,14 @@ function Stage() {
     <section className="k-stage" aria-label="Preview">
       <header className="k-stage__head">
         <div>
-          <p className="k-eyebrow">Preview</p>
+          <p className="font-mono text-[10px] tracking-[0.12em] text-ink-faint uppercase">
+            Preview
+          </p>
           <h2 className="k-stage__title">Opening sequence</h2>
         </div>
-        <span className="k-badge">Fit</span>
+        <span className="inline-flex h-5 items-center rounded-pill border border-line bg-surface-2 px-[7px] font-mono text-[9px] tracking-[0.04em] text-ink-muted uppercase">
+          Fit
+        </span>
       </header>
 
       <div className="k-stage__viewport">
@@ -317,9 +321,9 @@ function Inspector() {
 
   return (
     <Panel
-      className="k-shell__panel"
       title="Inspector"
       subtitle="Opening shot"
+      bodyClassName="p-0 pb-3.5"
       actions={
         <IconButton
           label="Inspector options"
@@ -348,22 +352,22 @@ function Inspector() {
 
       {tab === 'video' ? (
         <div className="k-inspector__stack" role="tabpanel">
-          <div className="k-field-row">
+          <FieldRow>
             <Field label="Position X">
               <Input defaultValue="0" inputMode="numeric" />
             </Field>
             <Field label="Position Y">
               <Input defaultValue="0" inputMode="numeric" />
             </Field>
-          </div>
-          <div className="k-field-row">
+          </FieldRow>
+          <FieldRow>
             <Field label="Scale">
               <Input defaultValue="100%" />
             </Field>
             <Field label="Rotation">
               <Input defaultValue="0°" />
             </Field>
-          </div>
+          </FieldRow>
           <Field label="Opacity">
             <Input defaultValue="100%" />
           </Field>
@@ -389,14 +393,14 @@ function Inspector() {
           <Field label="Volume">
             <Input defaultValue="0 dB" />
           </Field>
-          <div className="k-field-row">
+          <FieldRow>
             <Field label="Fade in">
               <Input defaultValue="0.0 s" />
             </Field>
             <Field label="Fade out">
               <Input defaultValue="0.0 s" />
             </Field>
-          </div>
+          </FieldRow>
           <Field label="Channel" hint="Stereo mix from the source clip.">
             <Select
               defaultValue="stereo"

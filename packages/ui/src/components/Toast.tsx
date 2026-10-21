@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
-import { cx } from '../cx';
+import { cn } from '../cn';
 import { IconButton } from './IconButton';
 
 export type ToastTone = 'info' | 'success' | 'error';
@@ -19,21 +19,36 @@ export interface ToastViewportProps {
   onDismiss: (id: string) => void;
 }
 
+const toneClasses: Record<ToastTone, string> = {
+  info: 'border-l-accent',
+  success: 'border-l-ok',
+  error: 'border-l-danger',
+};
+
 export function ToastViewport({ items, onDismiss }: ToastViewportProps) {
   return (
-    <div className="k-toast-viewport" aria-live="polite" aria-atomic="false">
+    <div
+      className="pointer-events-none fixed right-4 bottom-4 z-[var(--k-z-toast)] flex w-[min(360px,calc(100vw-32px))] flex-col gap-2"
+      aria-live="polite"
+      aria-atomic="false"
+    >
       {items.map((item) => {
         const tone = item.tone ?? 'info';
         return (
           <div
             key={item.id}
-            className={cx('k-toast', `k-toast--${tone}`)}
+            className={cn(
+              'pointer-events-auto flex animate-toast-in items-start gap-2 rounded-sm border border-line-strong border-l-[3px] bg-surface-3 p-2.5 pl-3 shadow-2',
+              toneClasses[tone],
+            )}
             role={tone === 'error' ? 'alert' : 'status'}
           >
-            <div className="k-toast__copy">
-              <p className="k-toast__title">{item.title}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-semibold">{item.title}</p>
               {item.description ? (
-                <p className="k-toast__description">{item.description}</p>
+                <p className="mt-0.5 text-[11px] text-ink-muted">
+                  {item.description}
+                </p>
               ) : null}
             </div>
             {item.action}

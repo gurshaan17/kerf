@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { cx } from '../cx';
+import { cn } from '../cn';
 
 export interface MenuItemEntry {
   type?: 'item';
@@ -91,7 +91,10 @@ export function Menu({
 
   return (
     <div
-      className={cx('k-menu', className)}
+      className={cn(
+        'min-w-[200px] rounded-sm border border-line-strong bg-surface-3 p-1 shadow-2',
+        className,
+      )}
       role="menu"
       aria-label={label}
       onKeyDown={onKeyDown}
@@ -99,11 +102,7 @@ export function Menu({
       {entries.map((entry, index) => {
         if (!isItem(entry)) {
           return (
-            <div
-              key={entry.id}
-              className="k-menu__separator"
-              role="separator"
-            />
+            <div key={entry.id} className="m-1 h-px bg-line" role="separator" />
           );
         }
 
@@ -117,9 +116,9 @@ export function Menu({
             role="menuitem"
             tabIndex={-1}
             disabled={entry.disabled}
-            className={cx(
-              'k-menu__item',
-              entry.danger && 'k-menu__item--danger',
+            className={cn(
+              'flex h-7 w-full items-center gap-2 rounded-[4px] border-0 bg-transparent px-2 text-left text-[12px] text-ink-muted enabled:hover:bg-surface-raised enabled:hover:text-ink focus-visible:bg-surface-raised focus-visible:text-ink focus-visible:outline-none disabled:opacity-40',
+              entry.danger && 'text-danger',
             )}
             onClick={() => {
               if (entry.disabled) {
@@ -130,13 +129,18 @@ export function Menu({
             }}
           >
             {entry.icon ? (
-              <span className="k-menu__icon" aria-hidden="true">
+              <span
+                className="inline-flex w-4 justify-center [&_svg]:size-3.5"
+                aria-hidden="true"
+              >
                 {entry.icon}
               </span>
             ) : null}
-            <span className="k-menu__label">{entry.label}</span>
+            <span className="flex-1">{entry.label}</span>
             {entry.shortcut ? (
-              <span className="k-menu__shortcut">{entry.shortcut}</span>
+              <span className="font-mono text-[10px] text-ink-faint">
+                {entry.shortcut}
+              </span>
             ) : null}
           </button>
         );

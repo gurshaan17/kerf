@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent, ReactNode } from 'react';
-import { cx } from '../cx';
+import { cn } from '../cn';
 
 export interface SplitPaneProps {
   primary: ReactNode;
@@ -87,13 +87,23 @@ export function SplitPane({
   return (
     <div
       ref={containerRef}
-      className={cx('k-split', `k-split--${direction}`, className)}
+      className={cn(
+        'flex h-full w-full min-h-0 min-w-0',
+        isHorizontal ? 'flex-row' : 'flex-col',
+        className,
+      )}
     >
-      <div className="k-split__pane" style={{ flexBasis: `${size}%` }}>
+      <div
+        className="min-h-0 min-w-0 overflow-hidden"
+        style={{ flexBasis: `${size}%` }}
+      >
         {primary}
       </div>
       <div
-        className="k-split__handle"
+        className={cn(
+          'group relative flex-[0_0_7px] touch-none border-0 bg-transparent p-0 focus-visible:outline-none',
+          isHorizontal ? 'cursor-col-resize' : 'cursor-row-resize',
+        )}
         role="separator"
         aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
         aria-valuemin={min}
@@ -106,8 +116,18 @@ export function SplitPane({
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
         onKeyDown={onKeyDown}
-      />
-      <div className="k-split__pane k-split__pane--secondary">{secondary}</div>
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute bg-line transition-colors duration-150 ease-k group-hover:bg-accent group-focus-visible:bg-accent',
+            isHorizontal
+              ? 'top-0 bottom-0 left-[3px] w-px'
+              : 'top-[3px] right-0 left-0 h-px',
+          )}
+        />
+      </div>
+      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{secondary}</div>
     </div>
   );
 }
