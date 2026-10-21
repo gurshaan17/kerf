@@ -1,0 +1,100 @@
+:root {
+  color-scheme: dark;
+
+  /* Type */
+  --k-font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --k-font-ui:
+    'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+  --k-font-mono:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --k-text-xs: 0.6875rem;
+  --k-text-sm: 0.75rem;
+  --k-text-base: 0.8125rem;
+  --k-text-md: 0.9375rem;
+  --k-text-lg: 1.125rem;
+  --k-text-xl: 1.5rem;
+  --k-text-2xl: 2.125rem;
+  --k-text-3xl: 3rem;
+
+  --k-leading-none: 1;
+  --k-leading-tight: 1.16;
+  --k-leading-snug: 1.35;
+  --k-leading-base: 1.55;
+
+  --k-tracking-tight: -0.02em;
+  --k-tracking-wide: 0.08em;
+
+  /* Warm graphite surfaces */
+  --k-surface-0: #0b0c0d;
+  --k-surface-1: #101214;
+  --k-surface-2: #15181a;
+  --k-surface-3: #1b1e21;
+  --k-surface-raised: #202427;
+  --k-line: #2a2e31;
+  --k-line-strong: #3a3f43;
+
+  /* Bone text and brass accent */
+  --k-text: #ece6dc;
+  --k-text-muted: #a9a299;
+  --k-text-faint: #706b64;
+  --k-brass: #c9a46a;
+  --k-brass-bright: #e3c08a;
+  --k-brass-dim: #8d7148;
+
+  /* Status */
+  --k-danger: #cf6a5c;
+  --k-ok: #86a97f;
+  --k-warn: #d4a45f;
+  --k-info: #7f9fb3;
+
+  /* Track identities */
+  --k-track-video: #6f8fa3;
+  --k-track-audio: #8a9c6b;
+  --k-track-text: #b08b6a;
+  --k-track-overlay: #8d7fa6;
+
+  /* Space */
+  --k-space-1: 4px;
+  --k-space-2: 8px;
+  --k-space-3: 12px;
+  --k-space-4: 16px;
+  --k-space-5: 20px;
+  --k-space-6: 24px;
+  --k-space-8: 32px;
+  --k-space-10: 40px;
+  --k-space-12: 48px;
+  --k-space-16: 64px;
+
+  /* Shape and depth */
+  --k-radius-xs: 3px;
+  --k-radius-sm: 6px;
+  --k-radius-md: 10px;
+  --k-radius-lg: 14px;
+  --k-radius-pill: 999px;
+
+  --k-shadow-1: 0 1px 2px rgb(0 0 0 / 35%);
+  --k-shadow-2: 0 8px 24px rgb(0 0 0 / 35%);
+  --k-shadow-3: 0 24px 64px rgb(0 0 0 / 50%);
+  --k-focus: 0 0 0 2px var(--k-surface-0), 0 0 0 4px var(--k-brass);
+
+  /* Motion */
+  --k-duration-fast: 120ms;
+  --k-duration-base: 180ms;
+  --k-duration-slow: 280ms;
+  --k-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* Shell metrics */
+  --k-titlebar-height: 44px;
+  --k-rail-width: 56px;
+  --k-inspector-width: 300px;
+  --k-dock-height: 264px;
+
+  /* Layers */
+  --k-z-base: 0;
+  --k-z-timeline: 10;
+  --k-z-overlay: 100;
+  --k-z-dialog: 200;
+  --k-z-toast: 300;
+}
