@@ -1,0 +1,57 @@
+@import 'tailwindcss';
+
+/* The design system is shared by the renderer and the workspace packages. */
+@source '../../../src';
+@source './';
+
+/*
+ * Tailwind's theme is the source of truth for new components. The legacy
+ * `--k-*` tokens in tokens.css map onto these values so the existing shell can
+ * keep working while primitives move over incrementally.
+ */
+@theme static {
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --font-sans:
+    'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+  --font-mono:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-surface-0: #0b0c0d;
+  --color-surface-1: #101214;
+  --color-surface-2: #15181a;
+  --color-surface-3: #1b1e21;
+  --color-surface-raised: #202427;
+  --color-line: #2a2e31;
+  --color-line-strong: #3a3f43;
+
+  --color-ink: #ece6dc;
+  --color-ink-muted: #a9a299;
+  --color-ink-faint: #706b64;
+
+  --color-accent: #c9a46a;
+  --color-accent-bright: #e3c08a;
+  --color-accent-dim: #8d7148;
+
+  --color-danger: #cf6a5c;
+  --color-ok: #86a97f;
+  --color-warn: #d4a45f;
+  --color-info: #7f9fb3;
+
+  --color-track-video: #6f8fa3;
+  --color-track-audio: #8a9c6b;
+  --color-track-text: #b08b6a;
+  --color-track-overlay: #8d7fa6;
+
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 35%);
+  --shadow-2: 0 8px 24px rgb(0 0 0 / 35%);
+  --shadow-3: 0 24px 64px rgb(0 0 0 / 50%);
+
+  --ease-k: cubic-bezier(0.2, 0.7, 0.2, 1);
+}

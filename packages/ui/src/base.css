@@ -65,13 +65,13 @@ p {
 }
 
 a {
-  color: var(--k-brass);
+  color: var(--k-accent);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
 
 a:hover {
-  color: var(--k-brass-bright);
+  color: var(--k-accent-bright);
 }
 
 code,
@@ -83,7 +83,7 @@ samp {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--k-brass) 30%, transparent);
+  background: color-mix(in srgb, var(--k-accent) 30%, transparent);
   color: var(--k-text);
 }
 

@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
-import { cx } from '../cx';
+import { cn } from '../cn';
 import { Tooltip } from './Tooltip';
 
 export interface IconButtonProps extends Omit<
@@ -13,6 +13,14 @@ export interface IconButtonProps extends Omit<
   active?: boolean;
   tooltip?: string;
 }
+
+const baseClasses =
+  'inline-grid size-[30px] shrink-0 place-items-center rounded-sm border border-transparent bg-transparent text-ink-muted transition-colors duration-150 ease-k hover:bg-surface-2 hover:text-ink focus-visible:outline-none data-[active]:border-accent/30 data-[active]:bg-accent/12 data-[active]:text-accent-bright disabled:pointer-events-none disabled:opacity-35 [&_svg]:size-4';
+
+const sizeClasses = {
+  sm: 'size-6 [&_svg]:size-3.5',
+  md: '',
+} as const;
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   function IconButton(
@@ -34,7 +42,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         type={type}
         aria-label={label}
         data-active={active || undefined}
-        className={cx('k-icon-button', `k-icon-button--${size}`, className)}
+        className={cn(baseClasses, sizeClasses[size], className)}
         {...rest}
       >
         {icon}

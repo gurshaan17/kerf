@@ -43,9 +43,9 @@
 .k-shell__brand-mark {
   display: inline-flex;
   flex: 0 0 auto;
-  color: var(--k-brass);
+  color: var(--k-accent);
   filter: drop-shadow(
-    0 0 10px color-mix(in srgb, var(--k-brass) 18%, transparent)
+    0 0 10px color-mix(in srgb, var(--k-accent) 18%, transparent)
   );
 }
 
@@ -194,7 +194,7 @@
 .k-stage__safe {
   position: absolute;
   inset: 7%;
-  border: 1px dashed color-mix(in srgb, var(--k-brass) 28%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--k-accent) 28%, transparent);
   opacity: 0.7;
   pointer-events: none;
 }
@@ -208,7 +208,7 @@
 }
 
 .k-stage__empty svg {
-  color: var(--k-brass-dim);
+  color: var(--k-accent-dim);
 }
 
 .k-stage__empty p {
@@ -356,14 +356,14 @@
   top: 0;
   bottom: 0;
   width: 1px;
-  background: var(--k-brass);
+  background: var(--k-accent);
 }
 
 .k-ruler-playhead::after {
   position: absolute;
   top: 0;
   left: -4px;
-  border-top: 5px solid var(--k-brass);
+  border-top: 5px solid var(--k-accent);
   border-right: 4px solid transparent;
   border-left: 4px solid transparent;
   content: '';
@@ -455,7 +455,7 @@
 }
 
 .k-clip:focus-visible {
-  outline: 1px solid var(--k-brass);
+  outline: 1px solid var(--k-accent);
   outline-offset: 1px;
 }
 
@@ -472,7 +472,7 @@
   top: 0;
   bottom: 0;
   width: 1px;
-  background: var(--k-brass);
+  background: var(--k-accent);
   pointer-events: none;
 }
 
@@ -493,7 +493,7 @@
 }
 
 .k-timeline__empty svg {
-  color: var(--k-brass-dim);
+  color: var(--k-accent-dim);
 }
 
 .k-timeline__empty p {
@@ -528,7 +528,7 @@
 .k-inspector__note svg {
   flex: 0 0 auto;
   margin-top: 1px;
-  color: var(--k-brass-dim);
+  color: var(--k-accent-dim);
 }
 
 /* Status bar */
@@ -580,7 +580,7 @@
   border: 1px solid var(--k-line);
   border-radius: var(--k-radius-md);
   background: var(--k-surface-1);
-  color: var(--k-brass);
+  color: var(--k-accent);
 }
 
 .k-empty__title {

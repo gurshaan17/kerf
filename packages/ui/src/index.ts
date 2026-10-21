@@ -1,3 +1,4 @@
+import './tailwind.css';
 import './fonts.css';
 import './tokens.css';
 import './base.css';
@@ -6,6 +7,7 @@ import './shell/shell.css';
 
 export { KerfMark } from './brand/KerfMark';
 export type { KerfMarkProps } from './brand/KerfMark';
+export { cn } from './cn';
 export { cx } from './cx';
 export { Button } from './components/Button';
 export type {

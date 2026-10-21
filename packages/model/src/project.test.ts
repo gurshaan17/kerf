@@ -63,7 +63,7 @@ describe('project model', () => {
   });
 
   it('rejects invalid style colours', () => {
-    expect(() => styleConfigSchema.parse({ accent: 'brass' })).toThrow();
+    expect(() => styleConfigSchema.parse({ accent: 'not-a-colour' })).toThrow();
   });
 
   it('creates tracks with stable defaults', () => {
@@ -73,7 +73,7 @@ describe('project model', () => {
     expect(track.name).toBe('Video 1');
   });
 
-  it('creates point markers with the brass default', () => {
+  it('creates point markers with the accent default', () => {
     const marker = createMarker({ frame: 48, label: 'Chapter one' });
     expect(markerSchema.parse(marker)).toEqual(marker);
     expect(marker.frame).toBe(48);

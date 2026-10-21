@@ -2,12 +2,9 @@
   color-scheme: dark;
 
   /* Type */
-  --k-font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
-  --k-font-ui:
-    'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
-    sans-serif;
-  --k-font-mono:
-    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --k-font-display: var(--font-display);
+  --k-font-ui: var(--font-sans);
+  --k-font-mono: var(--font-mono);
 
   --k-text-xs: 0.6875rem;
   --k-text-sm: 0.75rem;
@@ -27,33 +24,33 @@
   --k-tracking-wide: 0.08em;
 
   /* Warm graphite surfaces */
-  --k-surface-0: #0b0c0d;
-  --k-surface-1: #101214;
-  --k-surface-2: #15181a;
-  --k-surface-3: #1b1e21;
-  --k-surface-raised: #202427;
-  --k-line: #2a2e31;
-  --k-line-strong: #3a3f43;
+  --k-surface-0: var(--color-surface-0);
+  --k-surface-1: var(--color-surface-1);
+  --k-surface-2: var(--color-surface-2);
+  --k-surface-3: var(--color-surface-3);
+  --k-surface-raised: var(--color-surface-raised);
+  --k-line: var(--color-line);
+  --k-line-strong: var(--color-line-strong);
 
-  /* Bone text and brass accent */
-  --k-text: #ece6dc;
-  --k-text-muted: #a9a299;
-  --k-text-faint: #706b64;
-  --k-brass: #c9a46a;
-  --k-brass-bright: #e3c08a;
-  --k-brass-dim: #8d7148;
+  /* Bone text and accent */
+  --k-text: var(--color-ink);
+  --k-text-muted: var(--color-ink-muted);
+  --k-text-faint: var(--color-ink-faint);
+  --k-accent: var(--color-accent);
+  --k-accent-bright: var(--color-accent-bright);
+  --k-accent-dim: var(--color-accent-dim);
 
   /* Status */
-  --k-danger: #cf6a5c;
-  --k-ok: #86a97f;
-  --k-warn: #d4a45f;
-  --k-info: #7f9fb3;
+  --k-danger: var(--color-danger);
+  --k-ok: var(--color-ok);
+  --k-warn: var(--color-warn);
+  --k-info: var(--color-info);
 
   /* Track identities */
-  --k-track-video: #6f8fa3;
-  --k-track-audio: #8a9c6b;
-  --k-track-text: #b08b6a;
-  --k-track-overlay: #8d7fa6;
+  --k-track-video: var(--color-track-video);
+  --k-track-audio: var(--color-track-audio);
+  --k-track-text: var(--color-track-text);
+  --k-track-overlay: var(--color-track-overlay);
 
   /* Space */
   --k-space-1: 4px;
@@ -68,22 +65,22 @@
   --k-space-16: 64px;
 
   /* Shape and depth */
-  --k-radius-xs: 3px;
-  --k-radius-sm: 6px;
-  --k-radius-md: 10px;
-  --k-radius-lg: 14px;
-  --k-radius-pill: 999px;
+  --k-radius-xs: var(--radius-xs);
+  --k-radius-sm: var(--radius-sm);
+  --k-radius-md: var(--radius-md);
+  --k-radius-lg: var(--radius-lg);
+  --k-radius-pill: var(--radius-pill);
 
-  --k-shadow-1: 0 1px 2px rgb(0 0 0 / 35%);
-  --k-shadow-2: 0 8px 24px rgb(0 0 0 / 35%);
-  --k-shadow-3: 0 24px 64px rgb(0 0 0 / 50%);
-  --k-focus: 0 0 0 2px var(--k-surface-0), 0 0 0 4px var(--k-brass);
+  --k-shadow-1: var(--shadow-1);
+  --k-shadow-2: var(--shadow-2);
+  --k-shadow-3: var(--shadow-3);
+  --k-focus: 0 0 0 2px var(--k-surface-0), 0 0 0 4px var(--k-accent);
 
   /* Motion */
   --k-duration-fast: 120ms;
   --k-duration-base: 180ms;
   --k-duration-slow: 280ms;
-  --k-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --k-ease: var(--ease-k);
 
   /* Shell metrics */
   --k-titlebar-height: 44px;

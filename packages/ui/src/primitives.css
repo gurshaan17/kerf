@@ -1,144 +1,4 @@
-/* Buttons */
-.k-button {
-  display: inline-flex;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  gap: var(--k-space-2);
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: var(--k-radius-sm);
-  background: transparent;
-  color: var(--k-text);
-  font-size: var(--k-text-sm);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  white-space: nowrap;
-  transition:
-    background-color var(--k-duration-fast) var(--k-ease),
-    border-color var(--k-duration-fast) var(--k-ease),
-    color var(--k-duration-fast) var(--k-ease),
-    transform var(--k-duration-fast) var(--k-ease);
-}
-
-.k-button:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.k-button:disabled {
-  opacity: 0.42;
-}
-
-.k-button--sm {
-  height: 26px;
-  padding: 0 9px;
-  font-size: var(--k-text-xs);
-}
-
-.k-button--primary {
-  border-color: var(--k-brass);
-  background: var(--k-brass);
-  color: #17130d;
-}
-
-.k-button--primary:hover:not(:disabled) {
-  border-color: var(--k-brass-bright);
-  background: var(--k-brass-bright);
-}
-
-.k-button--secondary {
-  border-color: var(--k-line);
-  background: var(--k-surface-3);
-}
-
-.k-button--secondary:hover:not(:disabled) {
-  border-color: var(--k-line-strong);
-  background: var(--k-surface-raised);
-}
-
-.k-button--ghost {
-  color: var(--k-text-muted);
-}
-
-.k-button--ghost:hover:not(:disabled) {
-  background: var(--k-surface-2);
-  color: var(--k-text);
-}
-
-.k-button--danger {
-  border-color: color-mix(in srgb, var(--k-danger) 42%, transparent);
-  background: color-mix(in srgb, var(--k-danger) 12%, transparent);
-  color: var(--k-danger);
-}
-
-.k-button--danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--k-danger) 20%, transparent);
-}
-
-.k-button__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.k-button__icon svg {
-  width: 14px;
-  height: 14px;
-}
-
-.k-button__label {
-  display: inline-flex;
-  align-items: center;
-}
-
-/* Icon buttons */
-.k-icon-button {
-  display: inline-grid;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  place-items: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--k-radius-sm);
-  background: transparent;
-  color: var(--k-text-muted);
-  transition:
-    background-color var(--k-duration-fast) var(--k-ease),
-    border-color var(--k-duration-fast) var(--k-ease),
-    color var(--k-duration-fast) var(--k-ease);
-}
-
-.k-icon-button--sm {
-  width: 24px;
-  height: 24px;
-}
-
-.k-icon-button:hover:not(:disabled) {
-  background: var(--k-surface-2);
-  color: var(--k-text);
-}
-
-.k-icon-button[data-active] {
-  border-color: color-mix(in srgb, var(--k-brass) 28%, transparent);
-  background: color-mix(in srgb, var(--k-brass) 12%, transparent);
-  color: var(--k-brass-bright);
-}
-
-.k-icon-button:disabled {
-  opacity: 0.35;
-}
-
-.k-icon-button svg {
-  width: 16px;
-  height: 16px;
-}
-
-.k-icon-button--sm svg {
-  width: 14px;
-  height: 14px;
-}
+/* Buttons and icon buttons are implemented with Tailwind in components/. */
 
 /* Fields */
 .k-field {
@@ -203,9 +63,9 @@
 .k-input:focus,
 .k-textarea:focus,
 .k-select__control:focus {
-  border-color: var(--k-brass-dim);
+  border-color: var(--k-accent-dim);
   outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-brass) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-accent) 14%, transparent);
 }
 
 .k-select {
@@ -332,7 +192,7 @@
 }
 
 .k-tab.is-selected {
-  border-bottom-color: var(--k-brass);
+  border-bottom-color: var(--k-accent);
   color: var(--k-text);
 }
 
@@ -430,7 +290,7 @@
   gap: var(--k-space-2);
   padding: 10px 10px 10px 12px;
   border: 1px solid var(--k-line-strong);
-  border-left: 3px solid var(--k-brass);
+  border-left: 3px solid var(--k-accent);
   border-radius: var(--k-radius-sm);
   background: var(--k-surface-3);
   box-shadow: var(--k-shadow-2);
@@ -701,7 +561,7 @@
 
 .k-split__handle:hover::after,
 .k-split__handle:focus-visible::after {
-  background: var(--k-brass);
+  background: var(--k-accent);
 }
 
 .k-split__handle:focus-visible {
