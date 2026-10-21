@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { clipSchema } from './clips';
 import { idSchema, newId } from './ids';
 import { frameRateSchema, FRAME_RATES } from './time';
 import { hexColorSchema } from './style';
@@ -19,6 +20,7 @@ export const trackSchema = z.object({
   muted: z.boolean().default(false),
   hidden: z.boolean().default(false),
   height: z.number().int().min(32).max(160).default(54),
+  clips: z.array(clipSchema).default([]),
 });
 
 export type Track = z.infer<typeof trackSchema>;

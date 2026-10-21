@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const ID_PREFIXES = {
   project: 'prj',
   sequence: 'seq',
+  command: 'cmd',
   track: 'trk',
   clip: 'clp',
   asset: 'ast',
@@ -32,6 +33,7 @@ export type Id<Kind extends IdKind> = string & {
 
 export type ProjectId = Id<'project'>;
 export type SequenceId = Id<'sequence'>;
+export type CommandId = Id<'command'>;
 export type TrackId = Id<'track'>;
 export type ClipId = Id<'clip'>;
 export type AssetId = Id<'asset'>;
