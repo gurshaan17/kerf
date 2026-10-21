@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   AudioLines,
   Film,
@@ -41,6 +42,7 @@ export interface StudioShellProps {
   projectName?: string;
   sequenceLabel?: string;
   assetCount?: number;
+  leftPanel?: ReactNode;
   onOpenProject?: () => void;
 }
 
@@ -377,6 +379,7 @@ export function StudioShell({
   projectName = 'Untitled sequence',
   sequenceLabel = '1920 × 1080 · 24 fps',
   assetCount = 0,
+  leftPanel,
   onOpenProject,
 }: StudioShellProps) {
   const [rail, setRail] = useState('media');
@@ -384,6 +387,7 @@ export function StudioShell({
   const { items, push, dismiss } = useToastQueue();
   const isMac =
     typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+  const showLibrary = Boolean(leftPanel) && rail === 'media';
 
   const railItems = [
     { id: 'media', label: 'Media', icon: <Library size={18} /> },
@@ -445,7 +449,9 @@ export function StudioShell({
         </div>
       </header>
 
-      <div className="k-shell__body">
+      <div
+        className={cx('k-shell__body', showLibrary && 'k-shell__body--library')}
+      >
         <nav className="k-shell__rail" aria-label="Workspace">
           <div className="k-shell__rail-group">
             {railItems.map((item) => (
@@ -466,6 +472,12 @@ export function StudioShell({
             icon={<Settings size={18} />}
           />
         </nav>
+
+        {showLibrary ? (
+          <aside className="k-shell__library" aria-label="Footage bin">
+            {leftPanel}
+          </aside>
+        ) : null}
 
         <main className="k-shell__center">
           <SplitPane

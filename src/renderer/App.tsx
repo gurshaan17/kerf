@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StudioShell } from '@kerf/ui';
+import { FootageBin } from './FootageBin';
 import { ProjectBrowserScreen } from './ProjectBrowserScreen';
 import type { ProjectSnapshot, ProjectSummary } from '../shared/contracts';
 
@@ -167,6 +168,58 @@ export default function App() {
     });
   };
 
+  const importFootage = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const imported = await window.kerf.assets.pick();
+      if (imported.length > 0) {
+        setActive(await window.kerf.projects.active());
+      }
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const relinkAsset = async (assetId: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const relinked = await window.kerf.assets.relink(assetId);
+      if (relinked) {
+        setActive(await window.kerf.projects.active());
+      }
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancelJob = async (jobId: string) => {
+    setError(null);
+    try {
+      await window.kerf.jobs.cancel(jobId);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    }
+  };
+
+  const refreshAssets = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await window.kerf.assets.refresh();
+      setActive(await window.kerf.projects.active());
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!active) {
     return (
       <ProjectBrowserScreen
@@ -187,6 +240,18 @@ export default function App() {
       projectName={active.project.name}
       sequenceLabel={sequenceLabel(active)}
       assetCount={active.assets.length}
+      leftPanel={
+        <FootageBin
+          assets={active.assets}
+          jobs={active.jobs}
+          busy={busy}
+          error={error}
+          onImport={importFootage}
+          onRelink={relinkAsset}
+          onCancelJob={cancelJob}
+          onRefresh={refreshAssets}
+        />
+      }
       onOpenProject={() => void closeProject()}
     />
   );

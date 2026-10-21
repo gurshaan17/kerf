@@ -51,6 +51,7 @@ export interface JobSummary {
   readonly id: string;
   readonly projectId: string | null;
   readonly kind: string;
+  readonly targetId: string | null;
   readonly status: JobStatus;
   readonly stage: string;
   readonly progress: number;

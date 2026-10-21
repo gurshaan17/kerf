@@ -67,11 +67,25 @@ function parseStatus(value: string): JobStatus {
   return parsed.success ? parsed.data : 'failed';
 }
 
+function targetIdFromPayload(payloadJson: string): string | null {
+  const payload = parseJson(payloadJson);
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'assetId' in payload &&
+    typeof payload.assetId === 'string'
+  ) {
+    return payload.assetId;
+  }
+  return null;
+}
+
 function summaryFromRow(row: JobRow): JobSummary {
   return {
     id: row.id,
     projectId: row.project_id,
     kind: row.kind,
+    targetId: targetIdFromPayload(row.payload_json),
     status: parseStatus(row.status),
     stage: row.stage,
     progress: Math.max(0, Math.min(1, row.progress)),

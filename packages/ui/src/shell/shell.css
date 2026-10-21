@@ -90,6 +90,12 @@
   min-height: 0;
 }
 
+.k-shell__body--library {
+  grid-template-columns:
+    var(--k-rail-width) var(--k-library-width) minmax(0, 1fr)
+    var(--k-inspector-width);
+}
+
 .k-shell__rail {
   display: flex;
   min-height: 0;
@@ -109,6 +115,14 @@
 
 .k-shell__rail-spacer {
   flex: 1;
+}
+
+.k-shell__library {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--k-line);
+  background: var(--k-surface-1);
 }
 
 .k-shell__center {

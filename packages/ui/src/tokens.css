@@ -85,6 +85,7 @@
   /* Shell metrics */
   --k-titlebar-height: 44px;
   --k-rail-width: 56px;
+  --k-library-width: 300px;
   --k-inspector-width: 300px;
   --k-dock-height: 264px;
 

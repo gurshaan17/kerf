@@ -135,6 +135,22 @@ describe('MediaImportService', () => {
     expect(context.repository.listAssets(context.projectId)).toEqual([]);
   });
 
+  it('marks an asset as cancelled when its queued ingest is cancelled', async () => {
+    const context = makeContext();
+    const file = join(context.root, 'clip.mp4');
+    writeFileSync(file, 'not a real movie');
+    const [asset] = await context.importer.importFiles(context.projectId, [
+      file,
+    ]);
+    const [job] = context.queue.list(context.projectId);
+
+    expect(job).toBeDefined();
+    expect(context.queue.cancel(job!.id)).toBe(true);
+    const cancelled = context.repository.findAsset(asset!.id);
+    expect(cancelled?.status).toBe('error');
+    expect(cancelled?.error).toMatch(/cancelled/i);
+  });
+
   integration(
     'imports video, audio and image files, then deduplicates them',
     async () => {

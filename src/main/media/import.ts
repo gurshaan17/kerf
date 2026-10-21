@@ -12,6 +12,7 @@ import {
 } from '@kerf/model';
 import type { ProjectRepository } from '../projects';
 import type { JobContext, JobQueue } from '../jobs';
+import type { JobSummary } from '../../shared/contracts';
 import { MediaProcessError, probeMedia } from './ffmpeg';
 import {
   assetCachePaths,
@@ -97,6 +98,7 @@ export class MediaImportService {
     this.jobs.registerHandler('ingest', (payload, context) =>
       this.ingest(payload, context),
     );
+    this.jobs.subscribe((job) => this.handleJobChange(job));
   }
 
   /**
@@ -408,6 +410,25 @@ export class MediaImportService {
     this.repository.saveAsset(next);
     this.notify(next.projectId);
     return next;
+  }
+
+  private handleJobChange(job: JobSummary): void {
+    if (job.kind !== 'ingest' || job.status !== 'cancelled' || !job.targetId) {
+      return;
+    }
+    const asset = this.repository.findAsset(job.targetId);
+    if (
+      !asset ||
+      (asset.status !== 'queued' &&
+        asset.status !== 'probing' &&
+        asset.status !== 'processing')
+    ) {
+      return;
+    }
+    this.save(asset, {
+      status: 'error',
+      error: 'The import was cancelled.',
+    });
   }
 
   private notify(projectId: string): void {

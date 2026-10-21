@@ -74,7 +74,7 @@ describe('JobQueue', () => {
     const first = queue.enqueue({
       projectId: null,
       kind: 'ingest',
-      payload: { name: 'first' },
+      payload: { name: 'first', assetId: 'ast_one' },
     });
     const second = queue.enqueue({
       projectId: null,
@@ -98,6 +98,7 @@ describe('JobQueue', () => {
     });
     expect(queue.get(first.id)?.startedAt).not.toBeNull();
     expect(queue.get(first.id)?.finishedAt).not.toBeNull();
+    expect(queue.get(first.id)?.targetId).toBe('ast_one');
     expect(progress.some((value) => value === 0.25)).toBe(true);
     expect(progress.at(-1)).toBe(1);
     expect(updates.some((job) => job.stage === 'encoding')).toBe(true);
