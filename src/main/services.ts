@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { DatabaseHandle } from './db';
 import { openDatabase } from './db';
 import { JobQueue } from './jobs';
+import { MediaImportService } from './media';
 import { ProjectRepository, ProjectService } from './projects';
 
 export interface KerfServices {
@@ -10,6 +11,7 @@ export interface KerfServices {
   readonly repository: ProjectRepository;
   readonly projects: ProjectService;
   readonly jobs: JobQueue;
+  readonly imports: MediaImportService;
   dispose(): void;
 }
 
@@ -42,11 +44,21 @@ export function createKerfServices(): KerfServices {
       repository,
       jobs: (projectId) => jobs.list(projectId),
     });
+    const imports = new MediaImportService({
+      repository,
+      jobs,
+      onAssetsChanged: (projectId) => {
+        if (projects.current()?.project.id === projectId) {
+          projects.reloadAssets();
+        }
+      },
+    });
     return {
       database,
       repository,
       projects,
       jobs,
+      imports,
       dispose() {
         projects.close();
         jobs.stop();

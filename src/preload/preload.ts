@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
-import type { EditCommand } from '@kerf/model';
+import type { Asset, EditCommand } from '@kerf/model';
 import {
   KERF_IPC,
   type EditResult,
@@ -42,6 +42,11 @@ const bridge: KerfBridge = {
     undo: () => invoke<EditResult | null>(KERF_IPC.edits.undo),
     redo: () => invoke<EditResult | null>(KERF_IPC.edits.redo),
     history: () => invoke<ProjectHistoryState>(KERF_IPC.edits.history),
+  },
+  assets: {
+    list: () => invoke<Asset[]>(KERF_IPC.assets.list),
+    import: (paths) => invoke<Asset[]>(KERF_IPC.assets.import, paths),
+    pick: () => invoke<Asset[]>(KERF_IPC.assets.pick),
   },
   jobs: {
     list: (projectId) => invoke<JobSummary[]>(KERF_IPC.jobs.list, projectId),

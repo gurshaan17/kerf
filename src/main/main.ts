@@ -48,6 +48,7 @@ if (!hasSingleInstanceLock) {
       projects: services.projects,
       repository: services.repository,
       jobs: services.jobs,
+      imports: services.imports,
       broadcast: broadcastEvent,
     });
     unsubscribeJobs = services.jobs.subscribe((job) => {

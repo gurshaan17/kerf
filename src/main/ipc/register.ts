@@ -1,22 +1,44 @@
-import { ipcMain, shell } from 'electron';
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import type { OpenDialogOptions } from 'electron';
 import { z } from 'zod';
+import {
+  AUDIO_EXTENSIONS,
+  IMAGE_EXTENSIONS,
+  VIDEO_EXTENSIONS,
+} from '@kerf/model';
 import type { JobQueue } from '../jobs';
+import type { MediaImportService } from '../media';
 import type { ProjectRepository } from '../projects';
 import type { ProjectService } from '../projects';
 import { KERF_IPC, type KerfEvent } from '../../shared/contracts';
 
 const projectIdSchema = z.string().min(1);
 const projectNameSchema = z.string().trim().min(1).max(120);
+const importPathsSchema = z.array(z.string().min(1)).max(100);
+const MEDIA_EXTENSIONS = [
+  ...VIDEO_EXTENSIONS,
+  ...AUDIO_EXTENSIONS,
+  ...IMAGE_EXTENSIONS,
+];
 
 export interface ProjectIpcOptions {
   readonly projects: ProjectService;
   readonly repository: ProjectRepository;
   readonly jobs: JobQueue;
+  readonly imports: MediaImportService;
   readonly broadcast: (event: KerfEvent) => void;
 }
 
+function requireActiveProject(projects: ProjectService) {
+  const active = projects.current();
+  if (!active) {
+    throw new Error('Open a project before working with footage.');
+  }
+  return active;
+}
+
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
-  const { projects, repository, jobs, broadcast } = options;
+  const { projects, repository, jobs, imports, broadcast } = options;
 
   ipcMain.handle(KERF_IPC.projects.list, () => projects.list());
   ipcMain.handle(KERF_IPC.projects.active, () => projects.current());
@@ -50,6 +72,37 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     shell.showItemInFolder(folder);
   });
 
+  ipcMain.handle(KERF_IPC.assets.list, () => {
+    return projects.current()?.assets ?? [];
+  });
+  ipcMain.handle(KERF_IPC.assets.import, (_event, paths: unknown) => {
+    const active = requireActiveProject(projects);
+    return imports.importFiles(
+      active.project.id,
+      importPathsSchema.parse(paths),
+    );
+  });
+  ipcMain.handle(KERF_IPC.assets.pick, async () => {
+    const active = requireActiveProject(projects);
+    const options: OpenDialogOptions = {
+      title: 'Import footage',
+      buttonLabel: 'Import',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Footage', extensions: [...MEDIA_EXTENSIONS] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    };
+    const window = BrowserWindow.getFocusedWindow();
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+    if (result.canceled || result.filePaths.length === 0) {
+      return [];
+    }
+    return imports.importFiles(active.project.id, result.filePaths);
+  });
+
   ipcMain.handle(KERF_IPC.edits.apply, (_event, command: unknown) =>
     projects.apply(command),
   );
@@ -75,6 +128,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     for (const channel of [
       ...Object.values(KERF_IPC.projects),
       ...Object.values(KERF_IPC.edits),
+      ...Object.values(KERF_IPC.assets),
       ...Object.values(KERF_IPC.jobs),
     ]) {
       ipcMain.removeHandler(channel);

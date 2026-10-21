@@ -188,6 +188,11 @@ export interface KerfBridge {
     readonly redo: () => Promise<EditResult | null>;
     readonly history: () => Promise<ProjectHistoryState>;
   };
+  readonly assets: {
+    readonly list: () => Promise<Asset[]>;
+    readonly import: (paths: readonly string[]) => Promise<Asset[]>;
+    readonly pick: () => Promise<Asset[]>;
+  };
   readonly jobs: {
     readonly list: (projectId?: string) => Promise<JobSummary[]>;
     readonly cancel: (id: string) => Promise<boolean>;

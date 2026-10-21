@@ -29,6 +29,11 @@ const bridge: KerfBridge = {
       throw new Error('not used');
     },
   },
+  assets: {
+    list: async () => [],
+    import: async () => [],
+    pick: async () => [],
+  },
   jobs: {
     list: async () => [],
     cancel: async () => false,
