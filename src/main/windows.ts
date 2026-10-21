@@ -5,10 +5,10 @@ const WINDOW_BACKGROUND = '#0b0c0d';
 
 export function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
-    width: 1080,
-    height: 720,
-    minWidth: 720,
-    minHeight: 480,
+    width: 1280,
+    height: 800,
+    minWidth: 1100,
+    minHeight: 700,
     show: false,
     backgroundColor: WINDOW_BACKGROUND,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
