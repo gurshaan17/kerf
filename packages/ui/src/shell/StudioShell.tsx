@@ -24,6 +24,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+import { KerfMark } from '../brand/KerfMark';
 import { cx } from '../cx';
 import { Button } from '../components/Button';
 import { Dialog } from '../components/Dialog';
@@ -59,45 +60,9 @@ interface TrackRow {
 }
 
 const TRACKS: TrackRow[] = [
-  {
-    id: 'v1',
-    name: 'Video 1',
-    kind: 'video',
-    clips: [
-      { id: 'c1', label: 'Opening shot', start: 2, width: 28, kind: 'video' },
-      {
-        id: 'c2',
-        label: 'Insert — hands',
-        start: 34,
-        width: 15,
-        kind: 'video',
-      },
-      { id: 'c3', label: 'Wide, dusk', start: 53, width: 27, kind: 'video' },
-    ],
-  },
-  {
-    id: 'a1',
-    name: 'Audio 1',
-    kind: 'audio',
-    clips: [
-      { id: 'c4', label: 'Room tone', start: 0, width: 52, kind: 'audio' },
-      { id: 'c5', label: 'Music bed', start: 58, width: 38, kind: 'audio' },
-    ],
-  },
-  {
-    id: 'a2',
-    name: 'Audio 2',
-    kind: 'audio',
-    clips: [
-      {
-        id: 'c6',
-        label: 'Voiceover take 3',
-        start: 18,
-        width: 44,
-        kind: 'audio',
-      },
-    ],
-  },
+  { id: 'v1', name: 'Video 1', kind: 'video', clips: [] },
+  { id: 'a1', name: 'Audio 1', kind: 'audio', clips: [] },
+  { id: 'a2', name: 'Audio 2', kind: 'audio', clips: [] },
 ];
 
 const RULER_TICKS = ['00:00', '00:10', '00:20', '00:30', '00:40'];
@@ -279,9 +244,70 @@ function Timeline() {
               </div>
             </div>
           ))}
+
+          {TRACKS.every((track) => track.clips.length === 0) ? (
+            <div className="k-timeline__empty">
+              <Film size={20} aria-hidden="true" />
+              <p>No clips on the timeline</p>
+              <span>
+                Drop footage here, or press <Kbd>I</Kbd> to import.
+              </span>
+            </div>
+          ) : null}
         </div>
       </div>
     </section>
+  );
+}
+
+interface ProjectBrowserDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreate: () => void;
+  onImport: () => void;
+}
+
+function ProjectBrowserDialog({
+  open,
+  onOpenChange,
+  onCreate,
+  onImport,
+}: ProjectBrowserDialogProps) {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Project browser"
+      description="Recent sequences and folders live here."
+      footer={
+        <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          Close
+        </Button>
+      }
+    >
+      <div className="k-empty">
+        <span className="k-empty__mark">
+          <KerfMark size={40} />
+        </span>
+        <h3 className="k-empty__title">No sequences yet</h3>
+        <p className="k-empty__body">
+          Start with a blank sequence, or bring in a folder of footage.
+          Everything stays on this machine.
+        </p>
+        <div className="k-empty__actions">
+          <Button
+            variant="primary"
+            leadingIcon={<Film size={14} />}
+            onClick={onCreate}
+          >
+            New sequence
+          </Button>
+          <Button leadingIcon={<FolderOpen size={14} />} onClick={onImport}>
+            Import folder
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 
@@ -398,6 +424,7 @@ export function StudioShell({
 }: StudioShellProps) {
   const [rail, setRail] = useState('media');
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [projectBrowserOpen, setProjectBrowserOpen] = useState(false);
   const { items, push, dismiss } = useToastQueue();
   const isMac =
     typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
@@ -420,9 +447,7 @@ export function StudioShell({
     <div className={cx('k-shell', isMac && 'k-shell--darwin')}>
       <header className="k-shell__titlebar">
         <div className="k-shell__brand">
-          <span className="k-shell__brand-mark" aria-hidden="true">
-            K
-          </span>
+          <KerfMark size={22} className="k-shell__brand-mark" />
           <span>Kerf</span>
         </div>
 
@@ -443,6 +468,7 @@ export function StudioShell({
             variant="ghost"
             size="sm"
             leadingIcon={<FolderOpen size={14} />}
+            onClick={() => setProjectBrowserOpen(true)}
           >
             Open
           </Button>
@@ -500,6 +526,40 @@ export function StudioShell({
           <Inspector />
         </aside>
       </div>
+
+      <footer className="k-shell__statusbar">
+        <span className="k-shell__status-dot" aria-hidden="true" />
+        <span>Local workspace</span>
+        <span className="k-shell__status-sep" aria-hidden="true">
+          ·
+        </span>
+        <span>0 assets</span>
+        <span className="k-shell__status-spacer" />
+        <span>Kerf 0.1.0</span>
+        <span className="k-shell__status-sep" aria-hidden="true">
+          ·
+        </span>
+        <span>Media never leaves this machine</span>
+      </footer>
+
+      <ProjectBrowserDialog
+        open={projectBrowserOpen}
+        onOpenChange={setProjectBrowserOpen}
+        onCreate={() => {
+          setProjectBrowserOpen(false);
+          push({
+            title: 'New sequence',
+            description: 'Sequence creation arrives with the project store.',
+          });
+        }}
+        onImport={() => {
+          setProjectBrowserOpen(false);
+          push({
+            title: 'Import folder',
+            description: 'Media ingest arrives with the footage bin.',
+          });
+        }}
+      />
 
       <Dialog
         open={shortcutsOpen}

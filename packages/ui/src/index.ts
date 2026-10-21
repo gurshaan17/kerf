@@ -4,6 +4,8 @@ import './base.css';
 import './primitives.css';
 import './shell/shell.css';
 
+export { KerfMark } from './brand/KerfMark';
+export type { KerfMarkProps } from './brand/KerfMark';
 export { cx } from './cx';
 export { Button } from './components/Button';
 export type {
