@@ -116,6 +116,31 @@ export class ProjectService {
     }
   }
 
+  rename(projectId: string, name: string): ProjectSummary {
+    const summary = this.repository.rename(projectId, name);
+    if (this.active?.project.id === projectId) {
+      const bundle = this.repository.require(projectId);
+      this.active = {
+        ...this.active,
+        project: bundle.project,
+        assets: bundle.assets,
+      };
+      this.emit({
+        type: 'project.changed',
+        snapshot: this.snapshot(),
+        reason: 'metadata',
+      });
+    }
+    return summary;
+  }
+
+  delete(projectId: string, removeFolder = true): boolean {
+    if (this.active?.project.id === projectId) {
+      this.close();
+    }
+    return this.repository.delete(projectId, { removeFolder });
+  }
+
   isOpen(): boolean {
     return this.active !== null;
   }

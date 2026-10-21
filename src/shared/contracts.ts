@@ -90,7 +90,7 @@ export type ProjectEvent =
   | {
       readonly type: 'project.changed';
       readonly snapshot: ProjectSnapshot;
-      readonly reason: 'edit' | 'undo' | 'redo' | 'assets';
+      readonly reason: 'edit' | 'undo' | 'redo' | 'assets' | 'metadata';
     }
   | {
       readonly type: 'project.closed';
@@ -99,7 +99,82 @@ export type ProjectEvent =
 
 export type KerfEvent = ProjectEvent;
 
+export const KERF_IPC = {
+  app: {
+    versions: 'kerf:app:versions',
+  },
+  projects: {
+    list: 'kerf:projects:list',
+    active: 'kerf:projects:active',
+    create: 'kerf:projects:create',
+    open: 'kerf:projects:open',
+    close: 'kerf:projects:close',
+    rename: 'kerf:projects:rename',
+    delete: 'kerf:projects:delete',
+    reveal: 'kerf:projects:reveal',
+  },
+  edits: {
+    apply: 'kerf:edits:apply',
+    undo: 'kerf:edits:undo',
+    redo: 'kerf:edits:redo',
+    history: 'kerf:edits:history',
+  },
+  assets: {
+    list: 'kerf:assets:list',
+    import: 'kerf:assets:import',
+    pick: 'kerf:assets:pick',
+    relink: 'kerf:assets:relink',
+    refresh: 'kerf:assets:refresh',
+  },
+  jobs: {
+    list: 'kerf:jobs:list',
+    cancel: 'kerf:jobs:cancel',
+  },
+  export: {
+    presets: 'kerf:export:presets',
+    start: 'kerf:export:start',
+    list: 'kerf:export:list',
+  },
+  analysis: {
+    run: 'kerf:analysis:run',
+    status: 'kerf:analysis:status',
+  },
+  mcp: {
+    status: 'kerf:mcp:status',
+  },
+  chat: {
+    send: 'kerf:chat:send',
+    abort: 'kerf:chat:abort',
+  },
+  event: 'kerf:event',
+} as const;
+
+export interface KerfEventEnvelope {
+  readonly id: string;
+  readonly at: number;
+  readonly event: KerfEvent;
+}
+
 /** The complete surface exposed on `window.kerf`. Keep this allowlist small. */
 export interface KerfBridge {
   readonly getVersions: () => AppVersions;
+  readonly projects: {
+    readonly list: () => Promise<ProjectSummary[]>;
+    readonly active: () => Promise<ProjectSnapshot | null>;
+    readonly create: (name: string) => Promise<ProjectSnapshot>;
+    readonly open: (id: string) => Promise<ProjectSnapshot>;
+    readonly close: () => Promise<void>;
+    readonly rename: (id: string, name: string) => Promise<ProjectSummary>;
+    readonly delete: (id: string, removeFolder?: boolean) => Promise<boolean>;
+    readonly reveal: (id: string) => Promise<void>;
+  };
+  readonly edits: {
+    readonly apply: (command: EditCommand) => Promise<EditResult>;
+    readonly undo: () => Promise<EditResult | null>;
+    readonly redo: () => Promise<EditResult | null>;
+    readonly history: () => Promise<ProjectHistoryState>;
+  };
+  readonly events: {
+    readonly subscribe: (listener: (event: KerfEvent) => void) => () => void;
+  };
 }
