@@ -34,6 +34,9 @@
     "lint": "oxlint . && oxfmt --check .",
     "lint:fix": "oxlint --fix . && oxfmt --write .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "audit:names": "node scripts/audit-names.mjs",
     "clean": "rm -rf out .vite"
   },
   "pnpm": {
@@ -60,7 +63,8 @@
     "oxfmt": "^0.41.0",
     "oxlint": "^1.89.0",
     "typescript": "^6.0.3",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
