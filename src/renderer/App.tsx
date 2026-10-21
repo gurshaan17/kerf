@@ -59,6 +59,21 @@ export default function App() {
         return;
       }
 
+      if (event.type === 'jobs.changed') {
+        setActive((current) => {
+          if (!current || current.project.id !== event.job.projectId) {
+            return current;
+          }
+          const jobs = current.jobs.some((job) => job.id === event.job.id)
+            ? current.jobs.map((job) =>
+                job.id === event.job.id ? event.job : job,
+              )
+            : [...current.jobs, event.job];
+          return { ...current, jobs };
+        });
+        return;
+      }
+
       setActive(event.snapshot);
       setError(null);
       void refreshProjects().catch((cause) => setError(errorMessage(cause)));

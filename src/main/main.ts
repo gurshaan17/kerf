@@ -1,13 +1,13 @@
 import { app, BrowserWindow } from 'electron';
 import started from 'electron-squirrel-startup';
-import { registerProjectIpc } from './ipc';
+import { broadcastEvent, registerProjectIpc } from './ipc';
 import {
   installContentSecurityPolicy,
   installMediaProtocol,
   installNavigationGuards,
   registerMediaScheme,
 } from './security';
-import { broadcastEvent, createKerfServices } from './services';
+import { createKerfServices } from './services';
 import type { KerfServices } from './services';
 import { createMainWindow } from './windows';
 
@@ -25,6 +25,7 @@ if (!hasSingleInstanceLock) {
 
   let services: KerfServices | null = null;
   let unregisterIpc: (() => void) | null = null;
+  let unsubscribeJobs: (() => void) | null = null;
 
   app.on('second-instance', () => {
     const [window] = BrowserWindow.getAllWindows();
@@ -46,8 +47,13 @@ if (!hasSingleInstanceLock) {
     unregisterIpc = registerProjectIpc({
       projects: services.projects,
       repository: services.repository,
+      jobs: services.jobs,
       broadcast: broadcastEvent,
     });
+    unsubscribeJobs = services.jobs.subscribe((job) => {
+      broadcastEvent({ type: 'jobs.changed', job });
+    });
+    services.jobs.start();
 
     createMainWindow();
 
@@ -61,6 +67,8 @@ if (!hasSingleInstanceLock) {
   app.on('before-quit', () => {
     unregisterIpc?.();
     unregisterIpc = null;
+    unsubscribeJobs?.();
+    unsubscribeJobs = null;
     services?.dispose();
     services = null;
   });

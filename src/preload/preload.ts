@@ -4,6 +4,7 @@ import type { EditCommand } from '@kerf/model';
 import {
   KERF_IPC,
   type EditResult,
+  type JobSummary,
   type KerfBridge,
   type KerfEvent,
   type KerfEventEnvelope,
@@ -41,6 +42,10 @@ const bridge: KerfBridge = {
     undo: () => invoke<EditResult | null>(KERF_IPC.edits.undo),
     redo: () => invoke<EditResult | null>(KERF_IPC.edits.redo),
     history: () => invoke<ProjectHistoryState>(KERF_IPC.edits.history),
+  },
+  jobs: {
+    list: (projectId) => invoke<JobSummary[]>(KERF_IPC.jobs.list, projectId),
+    cancel: (id) => invoke<boolean>(KERF_IPC.jobs.cancel, id),
   },
   events: {
     subscribe(listener: (event: KerfEvent) => void) {

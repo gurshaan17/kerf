@@ -128,6 +128,15 @@ ALTER TABLE scenes ADD COLUMN payload_json TEXT NOT NULL DEFAULT '{}';
 ALTER TABLE beat_maps ADD COLUMN payload_json TEXT NOT NULL DEFAULT '{}';
 `;
 
+const JOB_QUEUE_COLUMNS = `
+ALTER TABLE jobs ADD COLUMN stage TEXT NOT NULL DEFAULT '';
+ALTER TABLE jobs ADD COLUMN result_json TEXT;
+ALTER TABLE jobs ADD COLUMN started_at INTEGER;
+ALTER TABLE jobs ADD COLUMN finished_at INTEGER;
+ALTER TABLE jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX jobs_status_created_idx ON jobs(status, created_at);
+`;
+
 export const DATABASE_MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -141,6 +150,13 @@ export const DATABASE_MIGRATIONS: readonly Migration[] = [
     name: 'bundle payloads',
     up(connection) {
       connection.exec(BUNDLE_PAYLOAD_COLUMNS);
+    },
+  },
+  {
+    version: 3,
+    name: 'persistent job queue',
+    up(connection) {
+      connection.exec(JOB_QUEUE_COLUMNS);
     },
   },
 ];

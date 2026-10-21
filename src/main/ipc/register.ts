@@ -1,12 +1,9 @@
 import { ipcMain, shell } from 'electron';
 import { z } from 'zod';
+import type { JobQueue } from '../jobs';
 import type { ProjectRepository } from '../projects';
 import type { ProjectService } from '../projects';
-import {
-  KERF_IPC,
-  type KerfEventEnvelope,
-  type ProjectEvent,
-} from '../../shared/contracts';
+import { KERF_IPC, type KerfEvent } from '../../shared/contracts';
 
 const projectIdSchema = z.string().min(1);
 const projectNameSchema = z.string().trim().min(1).max(120);
@@ -14,19 +11,12 @@ const projectNameSchema = z.string().trim().min(1).max(120);
 export interface ProjectIpcOptions {
   readonly projects: ProjectService;
   readonly repository: ProjectRepository;
-  readonly broadcast: (envelope: KerfEventEnvelope) => void;
-}
-
-function eventEnvelope(event: ProjectEvent): KerfEventEnvelope {
-  return {
-    id: crypto.randomUUID(),
-    at: Date.now(),
-    event,
-  };
+  readonly jobs: JobQueue;
+  readonly broadcast: (event: KerfEvent) => void;
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
-  const { projects, repository, broadcast } = options;
+  const { projects, repository, jobs, broadcast } = options;
 
   ipcMain.handle(KERF_IPC.projects.list, () => projects.list());
   ipcMain.handle(KERF_IPC.projects.active, () => projects.current());
@@ -67,8 +57,17 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   ipcMain.handle(KERF_IPC.edits.redo, () => projects.redo());
   ipcMain.handle(KERF_IPC.edits.history, () => projects.history());
 
+  ipcMain.handle(KERF_IPC.jobs.list, (_event, projectId: unknown) =>
+    jobs.list(
+      projectId === undefined ? undefined : projectIdSchema.parse(projectId),
+    ),
+  );
+  ipcMain.handle(KERF_IPC.jobs.cancel, (_event, id: unknown) =>
+    jobs.cancel(projectIdSchema.parse(id)),
+  );
+
   const unsubscribe = projects.subscribe((event) => {
-    broadcast(eventEnvelope(event));
+    broadcast(event);
   });
 
   return () => {
@@ -76,6 +75,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     for (const channel of [
       ...Object.values(KERF_IPC.projects),
       ...Object.values(KERF_IPC.edits),
+      ...Object.values(KERF_IPC.jobs),
     ]) {
       ipcMain.removeHandler(channel);
     }

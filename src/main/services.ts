@@ -1,14 +1,15 @@
-import { app, BrowserWindow } from 'electron';
+import { app } from 'electron';
 import { join } from 'node:path';
 import type { DatabaseHandle } from './db';
 import { openDatabase } from './db';
+import { JobQueue } from './jobs';
 import { ProjectRepository, ProjectService } from './projects';
-import { KERF_IPC, type KerfEventEnvelope } from '../shared/contracts';
 
 export interface KerfServices {
   readonly database: DatabaseHandle;
   readonly repository: ProjectRepository;
   readonly projects: ProjectService;
+  readonly jobs: JobQueue;
   dispose(): void;
 }
 
@@ -36,26 +37,24 @@ export function createKerfServices(): KerfServices {
       database: database.connection,
       projectsRoot: projectsRoot(),
     });
-    const projects = new ProjectService({ repository });
+    const jobs = new JobQueue({ database: database.connection });
+    const projects = new ProjectService({
+      repository,
+      jobs: (projectId) => jobs.list(projectId),
+    });
     return {
       database,
       repository,
       projects,
+      jobs,
       dispose() {
         projects.close();
+        jobs.stop();
         database.close();
       },
     };
   } catch (error) {
     database.close();
     throw error;
-  }
-}
-
-export function broadcastEvent(envelope: KerfEventEnvelope): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
-      window.webContents.send(KERF_IPC.event, envelope);
-    }
   }
 }

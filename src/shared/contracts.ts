@@ -40,16 +40,25 @@ export interface ProjectBundle {
   readonly referenceProfiles: ReferenceProfile[];
 }
 
+export type JobStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
 export interface JobSummary {
   readonly id: string;
   readonly projectId: string | null;
   readonly kind: string;
-  readonly status: string;
+  readonly status: JobStatus;
   readonly stage: string;
   readonly progress: number;
   readonly error: string | null;
   readonly createdAt: number;
   readonly updatedAt: number;
+  readonly startedAt: number | null;
+  readonly finishedAt: number | null;
 }
 
 export interface HistorySummary {
@@ -97,7 +106,12 @@ export type ProjectEvent =
       readonly projectId: string;
     };
 
-export type KerfEvent = ProjectEvent;
+export interface JobEvent {
+  readonly type: 'jobs.changed';
+  readonly job: JobSummary;
+}
+
+export type KerfEvent = ProjectEvent | JobEvent;
 
 export const KERF_IPC = {
   app: {
@@ -173,6 +187,10 @@ export interface KerfBridge {
     readonly undo: () => Promise<EditResult | null>;
     readonly redo: () => Promise<EditResult | null>;
     readonly history: () => Promise<ProjectHistoryState>;
+  };
+  readonly jobs: {
+    readonly list: (projectId?: string) => Promise<JobSummary[]>;
+    readonly cancel: (id: string) => Promise<boolean>;
   };
   readonly events: {
     readonly subscribe: (listener: (event: KerfEvent) => void) => () => void;
