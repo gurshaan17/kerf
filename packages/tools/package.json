@@ -1,0 +1,20 @@
+{
+  "name": "@kerf/tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kerf tool catalog shared by the built-in agent and the MCP server.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "sideEffects": false,
+  "dependencies": {
+    "@kerf/model": "workspace:*",
+    "@kerf/engine": "workspace:*",
+    "@kerf/canvas": "workspace:*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

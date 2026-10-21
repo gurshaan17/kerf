@@ -1,0 +1,15 @@
+{
+  "name": "@kerf/motion",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kerf composition sandbox: policy checks and the per-frame scene runtime.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

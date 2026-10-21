@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "sourceMap": true,
+    "paths": {
+      "@kerf/model": ["./packages/model/src/index.ts"],
+      "@kerf/engine": ["./packages/engine/src/index.ts"],
+      "@kerf/canvas": ["./packages/canvas/src/index.ts"],
+      "@kerf/motion": ["./packages/motion/src/index.ts"],
+      "@kerf/tools": ["./packages/tools/src/index.ts"],
+      "@kerf/agent": ["./packages/agent/src/index.ts"],
+      "@kerf/ui": ["./packages/ui/src/index.ts"]
+    }
+  }
+}

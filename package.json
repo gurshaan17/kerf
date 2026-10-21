@@ -3,12 +3,13 @@
   "productName": "Kerf",
   "version": "0.1.0",
   "private": true,
-  "description": "Kerf — an Electron desktop app built with Vite, React, and TypeScript.",
+  "description": "Kerf — a local-first, chat-driven video editor for the desktop.",
   "keywords": [
     "electron",
     "vite",
     "react",
-    "typescript"
+    "typescript",
+    "video-editor"
   ],
   "license": "MIT",
   "author": {
@@ -19,18 +20,27 @@
     "type": "git",
     "url": "git+https://github.com/gurshaan17/kerf.git"
   },
+  "packageManager": "pnpm@10.14.0",
   "engines": {
     "node": ">=20"
   },
   "main": ".vite/build/main.cjs",
   "scripts": {
     "start": "electron-forge start",
+    "dev": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "release": "electron-forge release",
-    "lint": "oxlint && oxfmt --check",
-    "lint:fix": "oxlint --fix && oxfmt --write",
-    "typecheck": "tsc --noEmit"
+    "lint": "oxlint . && oxfmt --check .",
+    "lint:fix": "oxlint --fix . && oxfmt --write .",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf out .vite"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@electron-forge/cli": "^8.0.1",

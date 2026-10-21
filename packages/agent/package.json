@@ -1,0 +1,15 @@
+{
+  "name": "@kerf/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kerf agent instructions shared by the chat runtime and the MCP server.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}
