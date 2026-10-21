@@ -9,6 +9,9 @@
   },
   "types": "./src/index.ts",
   "sideEffects": false,
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit"
   }
