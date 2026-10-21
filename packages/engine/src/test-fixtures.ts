@@ -1,6 +1,8 @@
 import type {
   AudioClip,
   Clip,
+  Effect,
+  Mask,
   Sequence,
   TimeMapPoint,
   Track,
@@ -23,6 +25,8 @@ interface MakeClipInput {
   sourceInFrame?: number;
   speed?: number;
   timeMap?: TimeMapPoint[];
+  effects?: Effect[];
+  masks?: Mask[];
 }
 
 export function makeVideoClip(input: MakeClipInput = {}): VideoClip {
@@ -36,6 +40,8 @@ export function makeVideoClip(input: MakeClipInput = {}): VideoClip {
     sourceInFrame: input.sourceInFrame,
     speed: input.speed,
     timeMap: input.timeMap,
+    effects: input.effects,
+    masks: input.masks,
   });
 
   if (clip.type !== 'video') {

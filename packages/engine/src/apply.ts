@@ -3,11 +3,24 @@ import type {
   ClipPatch,
   ClipType,
   EditCommand,
+  Effect,
+  EffectPatch,
+  Mask,
+  MaskPatch,
+  NumberKeyframes,
   Sequence,
   TimeMapPoint,
   Track,
 } from '@kerf/model';
-import { clipSchema, isMediaClip, newId } from '@kerf/model';
+import {
+  clipSchema,
+  effectSchema,
+  isMediaClip,
+  maskSchema,
+  newId,
+  numberKeyframesSchema,
+  timeMapSchema,
+} from '@kerf/model';
 import { assertClipCompatible } from './compatibility';
 import { EngineError } from './errors';
 import { findClip, findOverlap, requireClip, requireTrack } from './queries';
@@ -62,6 +75,146 @@ function parseClip(value: unknown): Clip {
   }
 }
 
+function parseEffect(value: unknown): Effect {
+  try {
+    return effectSchema.parse(value);
+  } catch (error) {
+    throw new EngineError(
+      'invalid-command',
+      'The effect payload is not valid.',
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+}
+
+function parseMask(value: unknown): Mask {
+  try {
+    return maskSchema.parse(value);
+  } catch (error) {
+    throw new EngineError(
+      'invalid-command',
+      'The mask payload is not valid.',
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+}
+
+function parseKeyframes(value: unknown): NumberKeyframes {
+  try {
+    return numberKeyframesSchema.parse(value);
+  } catch (error) {
+    throw new EngineError(
+      'invalid-command',
+      'Keyframes must be ordered by frame.',
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+}
+
+function parseTimeMap(value: unknown): TimeMapPoint[] {
+  try {
+    return timeMapSchema.parse(value);
+  } catch (error) {
+    throw new EngineError(
+      'invalid-command',
+      'Time map points must be ordered by timeline frame.',
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+}
+
+function assertVisualClip(clip: Clip, feature: string): void {
+  if (clip.type === 'audio') {
+    throw new EngineError(
+      'invalid-command',
+      `An audio clip does not support ${feature}.`,
+      'Add the edit to a video, image, text or shape clip instead.',
+    );
+  }
+}
+
+function assertEffectPatchKeys(patch: EffectPatch): void {
+  const allowed = new Set(['type', 'enabled', 'amount']);
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined && !allowed.has(key)) {
+      throw new EngineError(
+        'invalid-command',
+        `An effect has no editable "${key}" property.`,
+        'Remove that field from the patch.',
+      );
+    }
+  }
+}
+
+function assertMaskPatchKeys(patch: MaskPatch): void {
+  const allowed = new Set([
+    'type',
+    'x',
+    'y',
+    'width',
+    'height',
+    'rotation',
+    'feather',
+    'opacity',
+    'inverted',
+    'path',
+  ]);
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined && !allowed.has(key)) {
+      throw new EngineError(
+        'invalid-command',
+        `A mask has no editable "${key}" property.`,
+        'Remove that field from the patch.',
+      );
+    }
+  }
+}
+
+function compactEffectPatch(patch: EffectPatch): EffectPatch {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result as EffectPatch;
+}
+
+function capturePreviousEffectPatch(
+  effect: Effect,
+  patch: EffectPatch,
+): EffectPatch {
+  const result: Record<string, unknown> = {};
+  const source = effect as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      result[key] = source[key];
+    }
+  }
+  return result as EffectPatch;
+}
+
+function compactMaskPatch(patch: MaskPatch): MaskPatch {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result as MaskPatch;
+}
+
+function capturePreviousMaskPatch(mask: Mask, patch: MaskPatch): MaskPatch {
+  const result: Record<string, unknown> = {};
+  const source = mask as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      result[key] = source[key];
+    }
+  }
+  return result as MaskPatch;
+}
+
 function assertTrackUnlocked(track: Track): void {
   if (track.locked) {
     throw new EngineError(
@@ -101,6 +254,20 @@ function assertIndex(index: number, length: number): void {
     throw new EngineError(
       'invalid-range',
       `Cannot insert at index ${index} on a track with ${length} clips.`,
+      `Use an index between 0 and ${length}.`,
+    );
+  }
+}
+
+function assertChildIndex(
+  index: number,
+  length: number,
+  kind: 'effect' | 'mask',
+): void {
+  if (index < 0 || index > length) {
+    throw new EngineError(
+      'invalid-range',
+      `Cannot insert ${kind} ${index} on a clip with ${length} ${kind}s.`,
       `Use an index between 0 and ${length}.`,
     );
   }
@@ -674,6 +841,430 @@ function applySlip(
   };
 }
 
+function applySetSpeed(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.setSpeed' }>,
+  context: ApplyContext,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertClipCompatible(location.track, location.clip);
+  if (!isMediaClip(location.clip)) {
+    throw new EngineError(
+      'invalid-command',
+      `A ${location.clip.type} clip has no playback speed.`,
+      'Speed applies to video and audio clips only.',
+    );
+  }
+  if (
+    !Number.isFinite(command.speed) ||
+    command.speed <= 0 ||
+    command.speed > 16
+  ) {
+    throw new EngineError(
+      'invalid-range',
+      'Speed must be greater than zero and at most 16.',
+      'Choose a speed inside that range.',
+    );
+  }
+
+  const updated = parseClip({ ...location.clip, speed: command.speed });
+  assertSourceBounds(updated, context);
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === location.clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'clip.setSpeed',
+      clipId: location.clip.id,
+      speed: location.clip.speed,
+    },
+  };
+}
+
+function applySetTimeMap(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.setTimeMap' }>,
+  context: ApplyContext,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertClipCompatible(location.track, location.clip);
+  if (!isMediaClip(location.clip)) {
+    throw new EngineError(
+      'invalid-command',
+      `A ${location.clip.type} clip has no source time map.`,
+      'Time maps apply to video and audio clips only.',
+    );
+  }
+
+  const points = parseTimeMap(command.points);
+  const updated = parseClip({ ...location.clip, timeMap: points });
+  assertSourceBounds(updated, context);
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === location.clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'clip.setTimeMap',
+      clipId: location.clip.id,
+      points: location.clip.timeMap,
+    },
+  };
+}
+
+function applySetKeyframes(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.setKeyframes' }>,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertClipCompatible(location.track, location.clip);
+  const clip = location.clip;
+
+  if (command.property === 'volume') {
+    if (clip.type !== 'video' && clip.type !== 'audio') {
+      throw new EngineError(
+        'invalid-command',
+        `A ${clip.type} clip has no volume to animate.`,
+        'Volume keyframes apply to video and audio clips.',
+      );
+    }
+  } else if (clip.type === 'audio') {
+    throw new EngineError(
+      'invalid-command',
+      `An audio clip has no ${command.property} property to animate.`,
+      'Audio clips support volume keyframes only.',
+    );
+  }
+
+  const keyframes = parseKeyframes(command.keyframes);
+  const updated = parseClip({
+    ...clip,
+    keyframes: { ...clip.keyframes, [command.property]: keyframes },
+  });
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'clip.setKeyframes',
+      clipId: clip.id,
+      property: command.property,
+      keyframes: clip.keyframes[command.property],
+    },
+  };
+}
+
+function applyAddEffect(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.addEffect' }>,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertVisualClip(location.clip, 'visual effects');
+  const clip = location.clip;
+  const effect = parseEffect(command.effect);
+  if (clip.effects.some((candidate) => candidate.id === effect.id)) {
+    throw new EngineError(
+      'invalid-command',
+      `Effect ${effect.id} is already on this clip.`,
+      'Give the effect a fresh identifier.',
+    );
+  }
+
+  const index = command.index ?? clip.effects.length;
+  assertChildIndex(index, clip.effects.length, 'effect');
+  const updated = parseClip({
+    ...clip,
+    effects: [
+      ...clip.effects.slice(0, index),
+      effect,
+      ...clip.effects.slice(index),
+    ],
+  });
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'clip.removeEffect',
+      clipId: clip.id,
+      effectId: effect.id,
+    },
+  };
+}
+
+function applyUpdateEffect(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.updateEffect' }>,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertVisualClip(location.clip, 'visual effects');
+  const clip = location.clip;
+  const index = clip.effects.findIndex(
+    (candidate) => candidate.id === command.effectId,
+  );
+  const effect = index >= 0 ? clip.effects[index] : undefined;
+  if (!effect) {
+    throw new EngineError(
+      'not-found',
+      `Effect ${command.effectId} is not on this clip.`,
+      'Refresh the clip and try again.',
+    );
+  }
+
+  const patch = compactEffectPatch(command.patch);
+  assertEffectPatchKeys(patch);
+  const updatedEffect = parseEffect({ ...effect, ...patch });
+  const updated = parseClip({
+    ...clip,
+    effects: clip.effects.map((candidate) =>
+      candidate.id === effect.id ? updatedEffect : candidate,
+    ),
+  });
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'clip.updateEffect',
+      clipId: clip.id,
+      effectId: effect.id,
+      patch: capturePreviousEffectPatch(effect, patch),
+    },
+  };
+}
+
+function applyRemoveEffect(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.removeEffect' }>,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertVisualClip(location.clip, 'visual effects');
+  const clip = location.clip;
+  const index = clip.effects.findIndex(
+    (candidate) => candidate.id === command.effectId,
+  );
+  const effect = index >= 0 ? clip.effects[index] : undefined;
+  if (!effect) {
+    throw new EngineError(
+      'not-found',
+      `Effect ${command.effectId} is not on this clip.`,
+      'Refresh the clip and try again.',
+    );
+  }
+
+  const updated = parseClip({
+    ...clip,
+    effects: clip.effects.filter((candidate) => candidate.id !== effect.id),
+  });
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'clip.addEffect',
+      clipId: clip.id,
+      effect,
+      index,
+    },
+  };
+}
+
+function applyAddMask(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.addMask' }>,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertVisualClip(location.clip, 'masks');
+  const clip = location.clip;
+  const mask = parseMask(command.mask);
+  if (clip.masks.some((candidate) => candidate.id === mask.id)) {
+    throw new EngineError(
+      'invalid-command',
+      `Mask ${mask.id} is already on this clip.`,
+      'Give the mask a fresh identifier.',
+    );
+  }
+
+  const index = command.index ?? clip.masks.length;
+  assertChildIndex(index, clip.masks.length, 'mask');
+  const updated = parseClip({
+    ...clip,
+    masks: [...clip.masks.slice(0, index), mask, ...clip.masks.slice(index)],
+  });
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: { type: 'clip.removeMask', clipId: clip.id, maskId: mask.id },
+  };
+}
+
+function applyUpdateMask(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.updateMask' }>,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertVisualClip(location.clip, 'masks');
+  const clip = location.clip;
+  const index = clip.masks.findIndex(
+    (candidate) => candidate.id === command.maskId,
+  );
+  const mask = index >= 0 ? clip.masks[index] : undefined;
+  if (!mask) {
+    throw new EngineError(
+      'not-found',
+      `Mask ${command.maskId} is not on this clip.`,
+      'Refresh the clip and try again.',
+    );
+  }
+
+  const patch = compactMaskPatch(command.patch);
+  assertMaskPatchKeys(patch);
+  const updatedMask = parseMask({ ...mask, ...patch });
+  const updated = parseClip({
+    ...clip,
+    masks: clip.masks.map((candidate) =>
+      candidate.id === mask.id ? updatedMask : candidate,
+    ),
+  });
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'clip.updateMask',
+      clipId: clip.id,
+      maskId: mask.id,
+      patch: capturePreviousMaskPatch(mask, patch),
+    },
+  };
+}
+
+function applyRemoveMask(
+  sequence: Sequence,
+  command: Extract<EditCommand, { type: 'clip.removeMask' }>,
+): ApplyResult {
+  const location = requireClip(sequence, command.clipId);
+  assertTrackUnlocked(location.track);
+  assertVisualClip(location.clip, 'masks');
+  const clip = location.clip;
+  const index = clip.masks.findIndex(
+    (candidate) => candidate.id === command.maskId,
+  );
+  const mask = index >= 0 ? clip.masks[index] : undefined;
+  if (!mask) {
+    throw new EngineError(
+      'not-found',
+      `Mask ${command.maskId} is not on this clip.`,
+      'Refresh the clip and try again.',
+    );
+  }
+
+  const updated = parseClip({
+    ...clip,
+    masks: clip.masks.filter((candidate) => candidate.id !== mask.id),
+  });
+  const tracks = sequence.tracks.map((candidate) =>
+    candidate.id === location.track.id
+      ? {
+          ...candidate,
+          clips: candidate.clips.map((candidateClip) =>
+            candidateClip.id === clip.id ? updated : candidateClip,
+          ),
+        }
+      : candidate,
+  );
+
+  return {
+    sequence: withTracks(sequence, tracks),
+    inverse: {
+      type: 'clip.addMask',
+      clipId: clip.id,
+      mask,
+      index,
+    },
+  };
+}
+
 function applyBatch(
   sequence: Sequence,
   command: Extract<EditCommand, { type: 'batch' }>,
@@ -729,6 +1320,24 @@ export function applyCommand(
       return applyDuplicate(sequence, command);
     case 'clip.slip':
       return applySlip(sequence, command, context);
+    case 'clip.setSpeed':
+      return applySetSpeed(sequence, command, context);
+    case 'clip.setTimeMap':
+      return applySetTimeMap(sequence, command, context);
+    case 'clip.setKeyframes':
+      return applySetKeyframes(sequence, command);
+    case 'clip.addEffect':
+      return applyAddEffect(sequence, command);
+    case 'clip.updateEffect':
+      return applyUpdateEffect(sequence, command);
+    case 'clip.removeEffect':
+      return applyRemoveEffect(sequence, command);
+    case 'clip.addMask':
+      return applyAddMask(sequence, command);
+    case 'clip.updateMask':
+      return applyUpdateMask(sequence, command);
+    case 'clip.removeMask':
+      return applyRemoveMask(sequence, command);
     case 'batch':
       return applyBatch(sequence, command, context);
     default:

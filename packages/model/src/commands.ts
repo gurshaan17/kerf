@@ -158,6 +158,7 @@ export const clipAddEffectCommandSchema = z.object({
   type: z.literal('clip.addEffect'),
   clipId: idSchema('clip'),
   effect: effectSchema,
+  index: z.number().int().nonnegative().optional(),
 });
 
 export const clipUpdateEffectCommandSchema = z.object({
@@ -177,6 +178,7 @@ export const clipAddMaskCommandSchema = z.object({
   type: z.literal('clip.addMask'),
   clipId: idSchema('clip'),
   mask: maskSchema,
+  index: z.number().int().nonnegative().optional(),
 });
 
 export const clipUpdateMaskCommandSchema = z.object({
