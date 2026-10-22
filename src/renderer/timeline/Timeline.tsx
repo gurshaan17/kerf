@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react';
 import {
   AudioLines,
   Copy,
@@ -81,6 +84,7 @@ function ClipBar({
   width,
   onSelect,
   onBeginDrag,
+  onContextMenu,
 }: {
   readonly clip: Clip;
   readonly track: Track;
@@ -92,6 +96,10 @@ function ClipBar({
   readonly onBeginDrag: (
     event: ReactPointerEvent<HTMLElement>,
     kind: DragKind,
+  ) => void;
+  readonly onContextMenu: (
+    event: ReactMouseEvent<HTMLElement>,
+    clip: Clip,
   ) => void;
 }) {
   const assets = useStudio((state) => state.snapshot?.assets ?? []);
@@ -130,6 +138,7 @@ function ClipBar({
       }}
       title={`${label} · ${clip.durationFrames} frames`}
       onPointerDown={(event) => onBeginDrag(event, 'move')}
+      onContextMenu={(event) => onContextMenu(event, clip)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
@@ -244,6 +253,11 @@ export function Timeline() {
   const [scrubbing, setScrubbing] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [menu, setMenu] = useState<{
+    readonly x: number;
+    readonly y: number;
+    readonly clipId: string;
+  } | null>(null);
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -547,6 +561,24 @@ export function Timeline() {
     };
   }, [apply, pixelsPerFrame, playhead, rate, sequence, snapEnabled, snapshot]);
 
+  useEffect(() => {
+    if (!menu) {
+      return;
+    }
+    const close = () => setMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        close();
+      }
+    };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menu]);
+
   const beginDrag = (
     clip: Clip,
     track: Track,
@@ -606,13 +638,13 @@ export function Timeline() {
     }
   };
 
-  const remove = () => {
+  const remove = (ripple = rippleEnabled) => {
     if (!sequence || selectedIds.length === 0) {
       return;
     }
-    const command = deleteClipsCommand(sequence, selectedIds, rippleEnabled);
+    const command = deleteClipsCommand(sequence, selectedIds, ripple);
     if (command) {
-      void apply(command, rippleEnabled ? 'Ripple delete' : 'Delete clips');
+      void apply(command, ripple ? 'Ripple delete' : 'Delete clips');
     }
   };
 
@@ -629,6 +661,12 @@ export function Timeline() {
   if (!sequence) {
     return null;
   }
+
+  const menuClip = menu ? findClip(sequence, menu.clipId)?.clip : null;
+  const canSplit =
+    menuClip != null &&
+    menuClip.startFrame < playhead &&
+    playhead < menuClip.startFrame + menuClip.durationFrames;
 
   return (
     <section className="k-timeline" aria-label="Timeline">
@@ -675,7 +713,7 @@ export function Timeline() {
             tooltip="Delete (⌫)"
             icon={<Trash2 size={13} />}
             disabled={selectedIds.length === 0}
-            onClick={remove}
+            onClick={() => remove()}
           />
           <span className="k-timeline__divider" aria-hidden="true" />
           <IconButton
@@ -819,6 +857,18 @@ export function Timeline() {
                     onBeginDrag={(event, kind) =>
                       beginDrag(clip, track, event, kind)
                     }
+                    onContextMenu={(event, next) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (!selectedSet.has(next.id)) {
+                        selectClip(next.id);
+                      }
+                      setMenu({
+                        x: event.clientX,
+                        y: event.clientY,
+                        clipId: next.id,
+                      });
+                    }}
                   />
                 ))}
                 {drag && drag.currentTrackId === track.id ? (
@@ -870,6 +920,71 @@ export function Timeline() {
           >
             Clear
           </Button>
+        </div>
+      ) : null}
+
+      {menu ? (
+        <div
+          className="k-context-menu"
+          style={{
+            left: `${Math.min(menu.x, window.innerWidth - 220)}px`,
+            top: `${Math.min(menu.y, window.innerHeight - 230)}px`,
+          }}
+          role="menu"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="k-context-menu__label">
+            {menuClip?.label || 'Clip'}
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!canSplit}
+            onClick={() => {
+              split();
+              setMenu(null);
+            }}
+          >
+            <Scissors size={13} />
+            Split at playhead
+            <span className="k-context-menu__hint">⌘K</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              duplicate();
+              setMenu(null);
+            }}
+          >
+            <Copy size={13} />
+            Duplicate
+            <span className="k-context-menu__hint">⌘D</span>
+          </button>
+          <span className="k-context-menu__rule" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              remove(false);
+              setMenu(null);
+            }}
+          >
+            <Trash2 size={13} />
+            Delete
+            <span className="k-context-menu__hint">⌫</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              remove(true);
+              setMenu(null);
+            }}
+          >
+            <Waves size={13} />
+            Ripple delete
+          </button>
         </div>
       ) : null}
     </section>
