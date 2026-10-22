@@ -40,6 +40,20 @@ const bridge: KerfBridge = {
     list: async () => [],
     cancel: async () => false,
   },
+  export: {
+    pickPath: async () => null,
+    start: async () => {
+      throw new Error('not used');
+    },
+    writeFrame: async () => {},
+    finish: async () => {
+      throw new Error('not used');
+    },
+    cancel: async () => false,
+    list: async () => [],
+    reveal: async () => {},
+    otio: async () => null,
+  },
   events: {
     subscribe: () => () => {},
   },

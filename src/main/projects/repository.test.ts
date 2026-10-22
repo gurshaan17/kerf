@@ -181,6 +181,39 @@ describe('ProjectRepository', () => {
     expect(repository.getSummary(projectId)?.assetCount).toBe(1);
   });
 
+  it('stores and updates export history records', () => {
+    const repository = makeRepository();
+    const bundle = repository.create({ name: 'Exports', now: 1_000 });
+    const record = {
+      id: newId('export'),
+      projectId: bundle.project.id,
+      preset: '1080p',
+      outputPath: '/tmp/exports/cut.mp4',
+      status: 'rendering' as const,
+      progress: 0.25,
+      error: null,
+      createdAt: 2_000,
+      completedAt: null,
+    };
+
+    repository.saveExport(record);
+    expect(repository.findExport(record.id)).toEqual(record);
+    expect(repository.listExports(bundle.project.id)).toEqual([record]);
+
+    repository.saveExport({
+      ...record,
+      status: 'succeeded',
+      progress: 1,
+      completedAt: 3_000,
+    });
+    expect(repository.findExport(record.id)).toMatchObject({
+      status: 'succeeded',
+      progress: 1,
+      completedAt: 3_000,
+    });
+    expect(repository.listExports(bundle.project.id)).toHaveLength(1);
+  });
+
   it('commits snapshot and edit log atomically', () => {
     const repository = makeRepository();
     const bundle = repository.create({ name: 'History', now: 1_000 });

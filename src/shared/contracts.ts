@@ -112,7 +112,94 @@ export interface JobEvent {
   readonly job: JobSummary;
 }
 
-export type KerfEvent = ProjectEvent | JobEvent;
+export interface ExportPreset {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  /** Null dimensions mean the preset uses the sequence size. */
+  readonly width: number | null;
+  readonly height: number | null;
+}
+
+export const EXPORT_PRESETS: readonly ExportPreset[] = [
+  {
+    id: 'sequence',
+    name: 'Match sequence',
+    description: 'Use the sequence frame size.',
+    width: null,
+    height: null,
+  },
+  {
+    id: '1080p',
+    name: 'Full HD · 1080p',
+    description: '1920 × 1080 landscape.',
+    width: 1920,
+    height: 1080,
+  },
+  {
+    id: '720p',
+    name: 'HD · 720p',
+    description: '1280 × 720 landscape.',
+    width: 1280,
+    height: 720,
+  },
+  {
+    id: 'vertical',
+    name: 'Vertical · 1080p',
+    description: '1080 × 1920 for social.',
+    width: 1080,
+    height: 1920,
+  },
+];
+
+export const DEFAULT_EXPORT_PRESET_ID = 'sequence';
+
+export type ExportStatus =
+  | 'rendering'
+  | 'encoding'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
+export interface ExportRecord {
+  readonly id: string;
+  readonly projectId: string;
+  readonly preset: string;
+  readonly outputPath: string;
+  readonly status: ExportStatus;
+  readonly progress: number;
+  readonly error: string | null;
+  readonly createdAt: number;
+  readonly completedAt: number | null;
+}
+
+export interface ExportStartRequest {
+  readonly presetId: string;
+  readonly startFrame: number;
+  readonly endFrame: number;
+  readonly outputPath?: string | null;
+}
+
+export interface ExportStartResult {
+  readonly export: ExportRecord;
+  readonly width: number;
+  readonly height: number;
+  readonly frameRate: FrameRate;
+  readonly startFrame: number;
+  readonly endFrame: number;
+  readonly frameCount: number;
+}
+
+export interface ExportEvent {
+  readonly type: 'export.changed';
+  readonly export: ExportRecord;
+}
+
+export interface ExportOtioResult {
+  readonly path: string;
+}
+
+export type KerfEvent = ProjectEvent | JobEvent | ExportEvent;
 
 export const KERF_IPC = {
   app: {
@@ -146,9 +233,14 @@ export const KERF_IPC = {
     cancel: 'kerf:jobs:cancel',
   },
   export: {
-    presets: 'kerf:export:presets',
+    pickPath: 'kerf:export:pick-path',
     start: 'kerf:export:start',
+    writeFrame: 'kerf:export:write-frame',
+    finish: 'kerf:export:finish',
+    cancel: 'kerf:export:cancel',
     list: 'kerf:export:list',
+    reveal: 'kerf:export:reveal',
+    otio: 'kerf:export:otio',
   },
   analysis: {
     run: 'kerf:analysis:run',
@@ -199,6 +291,20 @@ export interface KerfBridge {
   readonly jobs: {
     readonly list: (projectId?: string) => Promise<JobSummary[]>;
     readonly cancel: (id: string) => Promise<boolean>;
+  };
+  readonly export: {
+    readonly pickPath: (presetId?: string) => Promise<string | null>;
+    readonly start: (request: ExportStartRequest) => Promise<ExportStartResult>;
+    readonly writeFrame: (
+      id: string,
+      index: number,
+      data: Uint8Array,
+    ) => Promise<void>;
+    readonly finish: (id: string) => Promise<ExportRecord>;
+    readonly cancel: (id: string) => Promise<boolean>;
+    readonly list: (projectId?: string) => Promise<ExportRecord[]>;
+    readonly reveal: (id: string) => Promise<void>;
+    readonly otio: () => Promise<ExportOtioResult | null>;
   };
   readonly events: {
     readonly subscribe: (listener: (event: KerfEvent) => void) => () => void;

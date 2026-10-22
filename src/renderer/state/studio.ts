@@ -4,6 +4,9 @@ import type { Clip, EditCommand } from '@kerf/model';
 import { sequenceDurationFrames } from '@kerf/engine';
 import type {
   EditResult,
+  ExportRecord,
+  ExportStartRequest,
+  ExportStartResult,
   JobSummary,
   KerfBridge,
   KerfEvent,
@@ -39,6 +42,7 @@ export interface StudioState {
   readonly tool: StudioTool;
   readonly toasts: StudioToast[];
   readonly playing: boolean;
+  readonly exports: ExportRecord[];
 
   hydrate: () => Promise<void>;
   handleEvent: (event: KerfEvent) => void;
@@ -53,6 +57,21 @@ export interface StudioState {
   relinkAsset: (assetId: string) => Promise<void>;
   refreshAssets: () => Promise<void>;
   cancelJob: (jobId: string) => Promise<void>;
+
+  refreshExports: () => Promise<void>;
+  startExport: (
+    request: ExportStartRequest,
+  ) => Promise<ExportStartResult | null>;
+  writeExportFrame: (
+    id: string,
+    index: number,
+    data: Uint8Array,
+  ) => Promise<void>;
+  finishExport: (id: string) => Promise<ExportRecord | null>;
+  cancelExport: (id: string) => Promise<void>;
+  pickExportPath: (presetId?: string) => Promise<string | null>;
+  revealExport: (id: string) => void;
+  exportOtio: () => Promise<string | null>;
 
   apply: (command: EditCommand, label?: string) => Promise<EditResult | null>;
   undo: () => Promise<void>;
@@ -107,6 +126,23 @@ function jobMerge(jobs: readonly JobSummary[], job: JobSummary): JobSummary[] {
 
 function assetJob(job: JobSummary): boolean {
   return job.kind === 'media.ingest' || job.kind.startsWith('media.');
+}
+
+function exportMerge(
+  exports: readonly ExportRecord[],
+  record: ExportRecord,
+): ExportRecord[] {
+  const existing = exports.findIndex((candidate) => candidate.id === record.id);
+  if (existing === -1) {
+    return [record, ...exports];
+  }
+  return exports.map((candidate, index) =>
+    index === existing ? record : candidate,
+  );
+}
+
+function outputName(path: string): string {
+  return path.split(/[\\/]/).at(-1) ?? path;
 }
 
 let toastCounter = 0;
@@ -175,6 +211,7 @@ export function createStudioStore(bridge: KerfBridge) {
       tool: 'select',
       toasts: [],
       playing: false,
+      exports: [],
 
       async hydrate() {
         set({ busy: true, error: null });
@@ -183,7 +220,10 @@ export function createStudioStore(bridge: KerfBridge) {
             bridge.projects.list(),
             bridge.projects.active(),
           ]);
-          set({ projects });
+          const exports = snapshot
+            ? await bridge.export.list(snapshot.project.id)
+            : [];
+          set({ projects, exports });
           setSnapshot(snapshot);
           set({ busy: false });
         } catch (cause) {
@@ -196,7 +236,31 @@ export function createStudioStore(bridge: KerfBridge) {
         if (event.type === 'project.closed') {
           if (get().snapshot?.project.id === event.projectId) {
             setSnapshot(null, { clearSelection: true });
-            set({ playing: false });
+            set({ playing: false, exports: [] });
+          }
+          return;
+        }
+
+        if (event.type === 'export.changed') {
+          const snapshot = get().snapshot;
+          if (!snapshot || event.export.projectId !== snapshot.project.id) {
+            return;
+          }
+          set((state) => ({
+            exports: exportMerge(state.exports, event.export),
+          }));
+          if (event.export.status === 'succeeded') {
+            pushToast({
+              title: 'Export complete',
+              description: outputName(event.export.outputPath),
+              tone: 'success',
+            });
+          } else if (event.export.status === 'failed') {
+            pushToast({
+              title: 'Export failed',
+              description: event.export.error ?? 'The encoder stopped early.',
+              tone: 'error',
+            });
           }
           return;
         }
@@ -243,8 +307,8 @@ export function createStudioStore(bridge: KerfBridge) {
         try {
           const snapshot = await bridge.projects.create(name);
           setSnapshot(snapshot, { clearSelection: true });
-          set({ playhead: 0, playing: false });
-          await get().refreshProjects();
+          set({ playhead: 0, playing: false, exports: [] });
+          await Promise.all([get().refreshProjects(), get().refreshExports()]);
           pushToast({
             title: 'Project created',
             description: snapshot.project.name,
@@ -263,8 +327,8 @@ export function createStudioStore(bridge: KerfBridge) {
         try {
           const snapshot = await bridge.projects.open(id);
           setSnapshot(snapshot, { clearSelection: true });
-          set({ playhead: 0, playing: false });
-          await get().refreshProjects();
+          set({ playhead: 0, playing: false, exports: [] });
+          await Promise.all([get().refreshProjects(), get().refreshExports()]);
         } catch (cause) {
           fail(cause, 'Could not open the project');
         } finally {
@@ -277,6 +341,7 @@ export function createStudioStore(bridge: KerfBridge) {
         try {
           await bridge.projects.close();
           setSnapshot(null, { clearSelection: true });
+          set({ exports: [] });
           await get().refreshProjects();
         } catch (cause) {
           fail(cause, 'Could not close the project');
@@ -311,6 +376,7 @@ export function createStudioStore(bridge: KerfBridge) {
           await bridge.projects.delete(id, true);
           if (get().snapshot?.project.id === id) {
             setSnapshot(null, { clearSelection: true });
+            set({ exports: [] });
           }
           await get().refreshProjects();
         } catch (cause) {
@@ -387,6 +453,93 @@ export function createStudioStore(bridge: KerfBridge) {
           await bridge.jobs.cancel(jobId);
         } catch (cause) {
           fail(cause, 'Could not cancel the job');
+        }
+      },
+
+      async refreshExports() {
+        const snapshot = get().snapshot;
+        if (!snapshot) {
+          set({ exports: [] });
+          return;
+        }
+        try {
+          const exports = await bridge.export.list(snapshot.project.id);
+          if (get().snapshot?.project.id === snapshot.project.id) {
+            set({ exports });
+          }
+        } catch (cause) {
+          fail(cause, 'Could not load export history');
+        }
+      },
+
+      async startExport(request) {
+        try {
+          const result = await bridge.export.start(request);
+          set((state) => ({
+            exports: exportMerge(state.exports, result.export),
+          }));
+          return result;
+        } catch (cause) {
+          fail(cause, 'Could not start the export');
+          return null;
+        }
+      },
+
+      async writeExportFrame(id, index, data) {
+        await bridge.export.writeFrame(id, index, data);
+      },
+
+      async finishExport(id) {
+        try {
+          const record = await bridge.export.finish(id);
+          set((state) => ({
+            exports: exportMerge(state.exports, record),
+          }));
+          return record;
+        } catch (cause) {
+          fail(cause, 'Could not finish the export');
+          return null;
+        }
+      },
+
+      async cancelExport(id) {
+        try {
+          await bridge.export.cancel(id);
+        } catch (cause) {
+          fail(cause, 'Could not cancel the export');
+        }
+      },
+
+      async pickExportPath(presetId) {
+        try {
+          return await bridge.export.pickPath(presetId);
+        } catch (cause) {
+          fail(cause, 'Could not choose an export folder');
+          return null;
+        }
+      },
+
+      revealExport(id) {
+        void bridge.export.reveal(id).catch((cause) => {
+          fail(cause, 'Could not reveal the export');
+        });
+      },
+
+      async exportOtio() {
+        try {
+          const result = await bridge.export.otio();
+          if (!result) {
+            return null;
+          }
+          pushToast({
+            title: 'Timeline exported',
+            description: outputName(result.path),
+            tone: 'success',
+          });
+          return result.path;
+        } catch (cause) {
+          fail(cause, 'Could not export the OTIO timeline');
+          return null;
         }
       },
 

@@ -21,7 +21,12 @@ import {
   transcriptSchema,
 } from '@kerf/model';
 import type { DatabaseLogger, SqliteDatabase } from '../db';
-import type { ProjectBundle, ProjectSummary } from '../../shared/contracts';
+import type {
+  ExportRecord,
+  ExportStatus,
+  ProjectBundle,
+  ProjectSummary,
+} from '../../shared/contracts';
 import { ensureProjectFolders, isPathInside, projectFolderName } from './paths';
 
 export interface ProjectRepositoryOptions {
@@ -65,6 +70,45 @@ interface ProjectRow {
   created_at: number;
   updated_at: number;
   asset_count?: number;
+}
+
+interface ExportRow {
+  id: string;
+  project_id: string;
+  preset: string;
+  output_path: string;
+  status: string;
+  progress: number;
+  error: string | null;
+  created_at: number;
+  completed_at: number | null;
+}
+
+function exportStatus(value: string): ExportStatus {
+  switch (value) {
+    case 'rendering':
+    case 'encoding':
+    case 'succeeded':
+    case 'failed':
+    case 'cancelled':
+      return value;
+    default:
+      return 'failed';
+  }
+}
+
+function exportFromRow(row: ExportRow): ExportRecord {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    preset: row.preset,
+    outputPath: row.output_path,
+    status: exportStatus(row.status),
+    progress: Math.max(0, Math.min(1, row.progress)),
+    error: row.error,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+  };
 }
 
 interface ChildRow {
@@ -670,6 +714,55 @@ export class ProjectRepository {
         created_at: profile.createdAt,
       });
     return profile;
+  }
+
+  listExports(projectId: string, limit = 50): ExportRecord[] {
+    const rows = this.database
+      .prepare(
+        `SELECT * FROM exports WHERE project_id = ?
+         ORDER BY created_at DESC LIMIT ?`,
+      )
+      .all(projectId, Math.max(1, Math.min(limit, 500))) as ExportRow[];
+    return rows.map(exportFromRow);
+  }
+
+  findExport(id: string): ExportRecord | null {
+    const row = this.database
+      .prepare('SELECT * FROM exports WHERE id = ?')
+      .get(id) as ExportRow | undefined;
+    return row ? exportFromRow(row) : null;
+  }
+
+  saveExport(record: ExportRecord): ExportRecord {
+    this.database
+      .prepare(
+        `INSERT INTO exports (
+          id, project_id, preset, output_path, status, progress, error,
+          created_at, completed_at
+        ) VALUES (
+          @id, @project_id, @preset, @output_path, @status, @progress, @error,
+          @created_at, @completed_at
+        )
+        ON CONFLICT(id) DO UPDATE SET
+          preset = excluded.preset,
+          output_path = excluded.output_path,
+          status = excluded.status,
+          progress = excluded.progress,
+          error = excluded.error,
+          completed_at = excluded.completed_at`,
+      )
+      .run({
+        id: record.id,
+        project_id: record.projectId,
+        preset: record.preset,
+        output_path: record.outputPath,
+        status: record.status,
+        progress: record.progress,
+        error: record.error,
+        created_at: record.createdAt,
+        completed_at: record.completedAt,
+      });
+    return record;
   }
 
   commitEdit(project: Project, entry: EditLogEntryInput): void {

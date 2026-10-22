@@ -81,6 +81,20 @@ function makeBridge(snapshot: ProjectSnapshot) {
       list: vi.fn(async () => []),
       cancel: vi.fn(async () => true),
     },
+    export: {
+      pickPath: vi.fn(async () => null),
+      start: vi.fn(async () => {
+        throw new Error('not used');
+      }),
+      writeFrame: vi.fn(async () => undefined),
+      finish: vi.fn(async () => {
+        throw new Error('not used');
+      }),
+      cancel: vi.fn(async () => true),
+      list: vi.fn(async () => []),
+      reveal: vi.fn(async () => undefined),
+      otio: vi.fn(async () => null),
+    },
     events: {
       subscribe: vi.fn(() => () => undefined),
     },
@@ -175,6 +189,34 @@ describe('studio store', () => {
     expect(apply).toHaveBeenCalledWith(command);
     expect(result?.snapshot).toBe(snapshot);
     expect(store.getState().snapshot).toBe(snapshot);
+  });
+
+  it('merges export progress and terminal events', () => {
+    const snapshot = makeSnapshot();
+    const { bridge } = makeBridge(snapshot);
+    const store = createStudioStore(bridge);
+    store.setState({ snapshot });
+    const record = {
+      id: 'export_1',
+      projectId: snapshot.project.id,
+      preset: 'sequence',
+      outputPath: '/tmp/cut.mp4',
+      status: 'rendering' as const,
+      progress: 0.25,
+      error: null,
+      createdAt: 1,
+      completedAt: null,
+    };
+
+    store.getState().handleEvent({ type: 'export.changed', export: record });
+    expect(store.getState().exports).toEqual([record]);
+
+    store.getState().handleEvent({
+      type: 'export.changed',
+      export: { ...record, status: 'succeeded', progress: 1 },
+    });
+    expect(store.getState().exports[0]?.status).toBe('succeeded');
+    expect(store.getState().toasts.at(-1)?.title).toBe('Export complete');
   });
 
   it('surfaces edit failures as a toast', async () => {

@@ -4,6 +4,10 @@ import type { Asset, EditCommand } from '@kerf/model';
 import {
   KERF_IPC,
   type EditResult,
+  type ExportOtioResult,
+  type ExportRecord,
+  type ExportStartRequest,
+  type ExportStartResult,
   type JobSummary,
   type KerfBridge,
   type KerfEvent,
@@ -54,6 +58,20 @@ const bridge: KerfBridge = {
   jobs: {
     list: (projectId) => invoke<JobSummary[]>(KERF_IPC.jobs.list, projectId),
     cancel: (id) => invoke<boolean>(KERF_IPC.jobs.cancel, id),
+  },
+  export: {
+    pickPath: (presetId) =>
+      invoke<string | null>(KERF_IPC.export.pickPath, presetId),
+    start: (request: ExportStartRequest) =>
+      invoke<ExportStartResult>(KERF_IPC.export.start, request),
+    writeFrame: (id, index, data) =>
+      invoke<void>(KERF_IPC.export.writeFrame, id, index, data),
+    finish: (id) => invoke<ExportRecord>(KERF_IPC.export.finish, id),
+    cancel: (id) => invoke<boolean>(KERF_IPC.export.cancel, id),
+    list: (projectId) =>
+      invoke<ExportRecord[]>(KERF_IPC.export.list, projectId),
+    reveal: (id) => invoke<void>(KERF_IPC.export.reveal, id),
+    otio: () => invoke<ExportOtioResult | null>(KERF_IPC.export.otio),
   },
   events: {
     subscribe(listener: (event: KerfEvent) => void) {
