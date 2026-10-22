@@ -1,135 +1,146 @@
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-}
-
-html {
-  background: var(--k-surface-0);
-}
-
-body {
-  margin: 0;
-  background: var(--k-surface-0);
-  color: var(--k-text);
-  font-family: var(--k-font-ui);
-  font-size: var(--k-text-base);
-  line-height: var(--k-leading-base);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  user-select: none;
-}
-
-input,
-textarea,
-select,
-button {
-  color: inherit;
-  font: inherit;
-}
-
-input,
-textarea,
-[contenteditable='true'] {
-  user-select: text;
-}
-
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-}
-
-h1,
-h2,
-h3,
-h4 {
-  margin: 0;
-  font-family: var(--k-font-display);
-  font-weight: 500;
-  line-height: var(--k-leading-tight);
-  letter-spacing: var(--k-tracking-tight);
-}
-
-p {
-  margin: 0;
-}
-
-a {
-  color: var(--k-accent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.18em;
-}
-
-a:hover {
-  color: var(--k-accent-bright);
-}
-
-code,
-kbd,
-pre,
-samp {
-  font-family: var(--k-font-mono);
-  font-size: 0.92em;
-}
-
-::selection {
-  background: color-mix(in srgb, var(--k-accent) 30%, transparent);
-  color: var(--k-text);
-}
-
-:focus-visible {
-  outline: none;
-  box-shadow: var(--k-focus);
-}
-
-:focus:not(:focus-visible) {
-  outline: none;
-}
-
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--k-line);
-  border: 2px solid var(--k-surface-0);
-  border-radius: var(--k-radius-pill);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--k-line-strong);
-}
-
-::placeholder {
-  color: var(--k-text-faint);
-}
-
-[hidden] {
-  display: none !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
+/*
+ * Base styles live in Tailwind's base layer. Unlayered rules outrank utilities,
+ * so keeping resets here lets component classes override them deliberately.
+ */
+@layer base {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  html {
+    background: var(--k-surface-0);
+  }
+
+  body {
+    margin: 0;
+    background: var(--k-surface-0);
+    color: var(--k-text);
+    font-family: var(--k-font-ui);
+    font-size: var(--k-text-base);
+    line-height: var(--k-leading-base);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  /*
+   * Keep form inheritance in the base layer so component utilities can set a
+   * deliberate text colour. Unlayered rules outrank Tailwind utilities, which
+   * previously made every button inherit its parent's near-white ink.
+   */
+  input,
+  textarea,
+  select,
+  button {
+    color: inherit;
+    font: inherit;
+  }
+
+  input,
+  textarea,
+  [contenteditable='true'] {
+    user-select: text;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: 0;
+    font-family: var(--k-font-display);
+    font-weight: 500;
+    line-height: var(--k-leading-tight);
+    letter-spacing: var(--k-tracking-tight);
+  }
+
+  p {
+    margin: 0;
+  }
+
+  a {
+    color: var(--k-accent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.18em;
+  }
+
+  a:hover {
+    color: var(--k-accent-bright);
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--k-font-mono);
+    font-size: 0.92em;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--k-accent) 30%, transparent);
+    color: var(--k-text);
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--k-focus);
+  }
+
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--k-line);
+    border: 2px solid var(--k-surface-0);
+    border-radius: var(--k-radius-pill);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--k-line-strong);
+  }
+
+  ::placeholder {
+    color: var(--k-text-faint);
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

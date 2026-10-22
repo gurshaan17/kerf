@@ -236,7 +236,7 @@ export function ProjectBrowserScreen({
           )}
         </section>
 
-        <p className="mt-4 text-center font-mono text-[9px] tracking-[0.02em] text-ink-faint">
+        <p className="mt-8 text-center font-mono text-[9px] tracking-[0.02em] text-ink-faint">
           Projects live in your Videos folder · Assets never leave this machine
         </p>
       </div>
