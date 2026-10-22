@@ -51,6 +51,7 @@ if (!hasSingleInstanceLock) {
       jobs: services.jobs,
       imports: services.imports,
       exports: services.exports,
+      analysis: services.analysis,
       broadcast: broadcastEvent,
     });
     unsubscribeJobs = services.jobs.subscribe((job) => {

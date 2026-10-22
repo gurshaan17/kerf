@@ -9,6 +9,7 @@ import {
   VIDEO_EXTENSIONS,
   type AssetKind,
 } from '@kerf/model';
+import type { AnalysisService } from '../analysis/service';
 import type { ExportService } from '../export';
 import { buildOtioTimeline } from '../export/otio';
 import type { JobQueue } from '../jobs';
@@ -30,6 +31,49 @@ const exportStartSchema = z.object({
   outputPath: z.string().min(1).nullable().optional(),
 });
 const exportFrameIndexSchema = z.number().int().nonnegative();
+const analysisKindSchema = z.enum([
+  'transcript',
+  'scenes',
+  'beats',
+  'vision',
+  'embeddings',
+]);
+const analysisRunSchema = z.object({
+  assetId: z.string().min(1),
+  kinds: z.array(analysisKindSchema).min(1).max(5),
+});
+const searchSchema = z.object({
+  query: z.string().max(200),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+const providerKindSchema = z.enum([
+  'openai',
+  'anthropic',
+  'google',
+  'xai',
+  'ollama',
+  'openai-compatible',
+]);
+const providerSaveSchema = z.object({
+  id: z.string().min(1).optional(),
+  kind: providerKindSchema,
+  label: z.string().trim().min(1).max(80),
+  baseUrl: z.string().trim().max(500).nullable().optional(),
+  model: z.string().trim().max(200).nullable().optional(),
+  apiKey: z.string().max(1_000).nullable().optional(),
+  clearKey: z.boolean().optional(),
+  enabled: z.boolean().optional(),
+  visionConsent: z.boolean().optional(),
+});
+const modelIdSchema = z.string().min(1).max(40);
+const compositionSaveSchema = z.object({
+  id: z.string().min(1).optional(),
+  name: z.string().trim().min(1).max(120),
+  source: z.string().min(1).max(60_000),
+  width: z.number().int().min(16).max(16_384).optional(),
+  height: z.number().int().min(16).max(16_384).optional(),
+  durationFrames: z.number().int().positive().max(100_000).optional(),
+});
 const MEDIA_EXTENSIONS = [
   ...VIDEO_EXTENSIONS,
   ...AUDIO_EXTENSIONS,
@@ -42,6 +86,7 @@ export interface ProjectIpcOptions {
   readonly jobs: JobQueue;
   readonly imports: MediaImportService;
   readonly exports: ExportService;
+  readonly analysis: AnalysisService;
   readonly broadcast: (event: KerfEvent) => void;
 }
 
@@ -67,7 +112,8 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
-  const { projects, repository, jobs, imports, exports, broadcast } = options;
+  const { projects, repository, jobs, imports, exports, analysis, broadcast } =
+    options;
 
   ipcMain.handle(KERF_IPC.projects.list, () => projects.list());
   ipcMain.handle(KERF_IPC.projects.active, () => projects.current());
@@ -78,6 +124,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     const projectId = projectIdSchema.parse(id);
     const snapshot = projects.open(projectId);
     await imports.refreshAvailability(projectId);
+    analysis.reindexActive();
     return projects.current() ?? snapshot;
   });
   ipcMain.handle(KERF_IPC.projects.close, () => {
@@ -176,6 +223,37 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
 
       return imports.relink(asset.id, sourcePath);
     },
+  );
+
+  ipcMain.handle(KERF_IPC.analysis.run, (_event, request: unknown) =>
+    analysis.run(analysisRunSchema.parse(request)),
+  );
+  ipcMain.handle(KERF_IPC.analysis.status, () => analysis.status());
+  ipcMain.handle(KERF_IPC.analysis.search, (_event, request: unknown) =>
+    analysis.query(searchSchema.parse(request)),
+  );
+  ipcMain.handle(KERF_IPC.analysis.providers, () => analysis.listProviders());
+  ipcMain.handle(KERF_IPC.analysis.saveProvider, (_event, request: unknown) =>
+    analysis.saveProvider(providerSaveSchema.parse(request)),
+  );
+  ipcMain.handle(KERF_IPC.analysis.deleteProvider, (_event, id: unknown) =>
+    analysis.deleteProvider(projectIdSchema.parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.analysis.testProvider, (_event, id: unknown) =>
+    analysis.testProvider(projectIdSchema.parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.analysis.models, () => analysis.models());
+  ipcMain.handle(KERF_IPC.analysis.downloadModel, (_event, id: unknown) =>
+    analysis.downloadModel(modelIdSchema.parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.analysis.deleteModel, (_event, id: unknown) =>
+    analysis.deleteModel(modelIdSchema.parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.motion.save, (_event, request: unknown) =>
+    analysis.saveComposition(compositionSaveSchema.parse(request)),
+  );
+  ipcMain.handle(KERF_IPC.motion.delete, (_event, id: unknown) =>
+    analysis.deleteComposition(projectIdSchema.parse(id)),
   );
 
   ipcMain.handle(KERF_IPC.edits.apply, (_event, command: unknown) =>
@@ -306,6 +384,8 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       ...Object.values(KERF_IPC.assets),
       ...Object.values(KERF_IPC.jobs),
       ...Object.values(KERF_IPC.export),
+      ...Object.values(KERF_IPC.analysis),
+      ...Object.values(KERF_IPC.motion),
     ]) {
       ipcMain.removeHandler(channel);
     }

@@ -4,8 +4,10 @@ import type { DatabaseHandle } from './db';
 import { openDatabase } from './db';
 import { JobQueue } from './jobs';
 import { ExportService } from './export';
+import { electronSecrets } from './security/secrets';
 import { MediaImportService } from './media';
 import { ProjectRepository, ProjectService } from './projects';
+import { AnalysisService } from './analysis/service';
 
 export interface KerfServices {
   readonly database: DatabaseHandle;
@@ -14,6 +16,7 @@ export interface KerfServices {
   readonly jobs: JobQueue;
   readonly imports: MediaImportService;
   readonly exports: ExportService;
+  readonly analysis: AnalysisService;
   dispose(): void;
 }
 
@@ -56,6 +59,14 @@ export function createKerfServices(): KerfServices {
       },
     });
     const exportService = new ExportService({ repository, projects });
+    const analysis = new AnalysisService({
+      database,
+      repository,
+      projects,
+      jobs,
+      userData: app.getPath('userData'),
+      secrets: electronSecrets,
+    });
     return {
       database,
       repository,
@@ -63,6 +74,7 @@ export function createKerfServices(): KerfServices {
       jobs,
       imports,
       exports: exportService,
+      analysis,
       dispose() {
         exportService.dispose();
         projects.close();
