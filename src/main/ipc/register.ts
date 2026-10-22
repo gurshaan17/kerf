@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { OpenDialogOptions } from 'electron';
-import { dirname } from 'node:path';
+import { writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import {
   AUDIO_EXTENSIONS,
@@ -8,15 +9,27 @@ import {
   VIDEO_EXTENSIONS,
   type AssetKind,
 } from '@kerf/model';
+import type { ExportService } from '../export';
+import { buildOtioTimeline } from '../export/otio';
 import type { JobQueue } from '../jobs';
 import type { MediaImportService } from '../media';
 import type { ProjectRepository } from '../projects';
 import type { ProjectService } from '../projects';
 import { KERF_IPC, type KerfEvent } from '../../shared/contracts';
+import { suggestedExportName } from '../../shared/export-plan';
 
 const projectIdSchema = z.string().min(1);
 const projectNameSchema = z.string().trim().min(1).max(120);
 const importPathsSchema = z.array(z.string().min(1)).max(100);
+const exportIdSchema = z.string().min(1);
+const exportPresetSchema = z.string().min(1).optional();
+const exportStartSchema = z.object({
+  presetId: z.string().min(1).max(40),
+  startFrame: z.number().int().nonnegative(),
+  endFrame: z.number().int().nonnegative(),
+  outputPath: z.string().min(1).nullable().optional(),
+});
+const exportFrameIndexSchema = z.number().int().nonnegative();
 const MEDIA_EXTENSIONS = [
   ...VIDEO_EXTENSIONS,
   ...AUDIO_EXTENSIONS,
@@ -28,6 +41,7 @@ export interface ProjectIpcOptions {
   readonly repository: ProjectRepository;
   readonly jobs: JobQueue;
   readonly imports: MediaImportService;
+  readonly exports: ExportService;
   readonly broadcast: (event: KerfEvent) => void;
 }
 
@@ -53,7 +67,7 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
-  const { projects, repository, jobs, imports, broadcast } = options;
+  const { projects, repository, jobs, imports, exports, broadcast } = options;
 
   ipcMain.handle(KERF_IPC.projects.list, () => projects.list());
   ipcMain.handle(KERF_IPC.projects.active, () => projects.current());
@@ -180,6 +194,106 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     jobs.cancel(projectIdSchema.parse(id)),
   );
 
+  ipcMain.handle(
+    KERF_IPC.export.pickPath,
+    async (_event, presetId: unknown) => {
+      requireActiveProject(projects);
+      const parsedPreset = exportPresetSchema.parse(presetId);
+      const options: Electron.SaveDialogOptions = {
+        title: 'Export video',
+        buttonLabel: 'Export',
+        defaultPath: exports.suggestedPath(parsedPreset ?? 'sequence'),
+        filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
+        properties: ['createDirectory', 'showOverwriteConfirmation'],
+      };
+      const window = BrowserWindow.getFocusedWindow();
+      const result = window
+        ? await dialog.showSaveDialog(window, options)
+        : await dialog.showSaveDialog(options);
+      return result.canceled ? null : (result.filePath ?? null);
+    },
+  );
+  ipcMain.handle(KERF_IPC.export.start, (_event, request: unknown) =>
+    exports.start(exportStartSchema.parse(request)),
+  );
+  ipcMain.handle(
+    KERF_IPC.export.writeFrame,
+    async (_event, id: unknown, index: unknown, data: unknown) => {
+      const bytes =
+        data instanceof Uint8Array
+          ? data
+          : data instanceof ArrayBuffer
+            ? new Uint8Array(data)
+            : null;
+      if (!bytes) {
+        throw new Error('The exported frame data was not a byte buffer.');
+      }
+      await exports.writeFrame(
+        exportIdSchema.parse(id),
+        exportFrameIndexSchema.parse(index),
+        bytes,
+      );
+    },
+  );
+  ipcMain.handle(KERF_IPC.export.finish, (_event, id: unknown) =>
+    exports.finish(exportIdSchema.parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.export.cancel, (_event, id: unknown) =>
+    exports.cancel(exportIdSchema.parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.export.list, (_event, projectId: unknown) =>
+    exports.list(
+      projectId === undefined || projectId === null
+        ? undefined
+        : projectIdSchema.parse(projectId),
+    ),
+  );
+  ipcMain.handle(KERF_IPC.export.reveal, (_event, id: unknown) => {
+    const record = exports.get(exportIdSchema.parse(id));
+    if (!record) {
+      throw new Error('The export record was not found.');
+    }
+    shell.showItemInFolder(record.outputPath);
+  });
+  ipcMain.handle(KERF_IPC.export.otio, async () => {
+    const active = requireActiveProject(projects);
+    const folder = repository.folderFor(active.project.id);
+    if (!folder) {
+      throw new Error('The project folder was not found.');
+    }
+    const defaultPath = join(
+      folder,
+      'exports',
+      suggestedExportName(active.project.name, 'timeline').replace(
+        /\.mp4$/i,
+        '.otio',
+      ),
+    );
+    const options: Electron.SaveDialogOptions = {
+      title: 'Export timeline as OTIO',
+      buttonLabel: 'Export OTIO',
+      defaultPath,
+      filters: [{ name: 'OpenTimelineIO', extensions: ['otio'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    };
+    const window = BrowserWindow.getFocusedWindow();
+    const result = window
+      ? await dialog.showSaveDialog(window, options)
+      : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) {
+      return null;
+    }
+    const path = result.filePath.toLowerCase().endsWith('.otio')
+      ? result.filePath
+      : `${result.filePath}.otio`;
+    writeFileSync(
+      path,
+      JSON.stringify(buildOtioTimeline(active.project, active.assets), null, 2),
+      'utf8',
+    );
+    return { path };
+  });
+
   const unsubscribe = projects.subscribe((event) => {
     broadcast(event);
   });
@@ -191,6 +305,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       ...Object.values(KERF_IPC.edits),
       ...Object.values(KERF_IPC.assets),
       ...Object.values(KERF_IPC.jobs),
+      ...Object.values(KERF_IPC.export),
     ]) {
       ipcMain.removeHandler(channel);
     }

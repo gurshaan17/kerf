@@ -26,6 +26,7 @@ if (!hasSingleInstanceLock) {
   let services: KerfServices | null = null;
   let unregisterIpc: (() => void) | null = null;
   let unsubscribeJobs: (() => void) | null = null;
+  let unsubscribeExports: (() => void) | null = null;
 
   app.on('second-instance', () => {
     const [window] = BrowserWindow.getAllWindows();
@@ -49,10 +50,14 @@ if (!hasSingleInstanceLock) {
       repository: services.repository,
       jobs: services.jobs,
       imports: services.imports,
+      exports: services.exports,
       broadcast: broadcastEvent,
     });
     unsubscribeJobs = services.jobs.subscribe((job) => {
       broadcastEvent({ type: 'jobs.changed', job });
+    });
+    unsubscribeExports = services.exports.subscribe((event) => {
+      broadcastEvent(event);
     });
     services.jobs.start();
 
@@ -70,6 +75,8 @@ if (!hasSingleInstanceLock) {
     unregisterIpc = null;
     unsubscribeJobs?.();
     unsubscribeJobs = null;
+    unsubscribeExports?.();
+    unsubscribeExports = null;
     services?.dispose();
     services = null;
   });

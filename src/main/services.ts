@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { DatabaseHandle } from './db';
 import { openDatabase } from './db';
 import { JobQueue } from './jobs';
+import { ExportService } from './export';
 import { MediaImportService } from './media';
 import { ProjectRepository, ProjectService } from './projects';
 
@@ -12,6 +13,7 @@ export interface KerfServices {
   readonly projects: ProjectService;
   readonly jobs: JobQueue;
   readonly imports: MediaImportService;
+  readonly exports: ExportService;
   dispose(): void;
 }
 
@@ -53,13 +55,16 @@ export function createKerfServices(): KerfServices {
         }
       },
     });
+    const exportService = new ExportService({ repository, projects });
     return {
       database,
       repository,
       projects,
       jobs,
       imports,
+      exports: exportService,
       dispose() {
+        exportService.dispose();
         projects.close();
         jobs.stop();
         database.close();
