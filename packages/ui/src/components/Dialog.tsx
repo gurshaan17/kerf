@@ -68,7 +68,7 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className="w-[calc(100vw-48px)] max-w-[480px] border-0 bg-transparent p-0 text-ink backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+      className="m-auto max-h-[calc(100dvh-48px)] w-[calc(100vw-48px)] max-w-[480px] overflow-y-auto border-0 bg-transparent p-0 text-ink backdrop:bg-black/60 backdrop:backdrop-blur-sm"
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       onClick={handleBackdropClick}
