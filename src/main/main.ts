@@ -10,6 +10,9 @@ import {
 import { createKerfServices } from './services';
 import type { KerfServices } from './services';
 import { createMainWindow } from './windows';
+import { installProcessStreamGuards } from './process-streams';
+
+installProcessStreamGuards();
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
