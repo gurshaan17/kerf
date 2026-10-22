@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -117,27 +117,32 @@ export function Preview() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const assets = snapshot?.assets ?? [];
-  const pool = useMemo(() => new MediaPool(assets), []);
+  const assetsRef = useRef(assets);
+  assetsRef.current = assets;
+  const assetSignature = assets
+    .map(
+      (asset) => `${asset.id}:${asset.status}:${asset.cache.proxyPath ?? ''}`,
+    )
+    .join('|');
+  const [pool, setPool] = useState<MediaPool | null>(null);
   const sequence = snapshot?.project.sequence;
   const duration = sequence ? sequenceDurationFrames(sequence) : 0;
   const rate = sequence?.frameRate ?? { numerator: 24, denominator: 1 };
 
   useEffect(() => {
-    pool.setAssets(assets);
-  }, [assets, pool]);
-
-  useEffect(() => {
-    const unsubscribe = pool.onReady(() => {
+    const next = new MediaPool(assetsRef.current);
+    setPool(next);
+    const unsubscribe = next.onReady(() => {
       setMediaRevision((revision) => revision + 1);
     });
     return () => {
       unsubscribe();
-      pool.dispose();
+      next.dispose();
     };
-  }, [pool]);
+  }, [assetSignature]);
 
   useEffect(() => {
-    if (!sequence) {
+    if (!sequence || !pool) {
       return;
     }
     const canvas = canvasRef.current;
@@ -160,7 +165,7 @@ export function Preview() {
   }, [mediaRevision, playhead, pool, selection.clipIds, sequence]);
 
   useEffect(() => {
-    if (!sequence || playing) {
+    if (!sequence || !pool || playing) {
       return;
     }
     seekVideos(sequence, playhead, pool);
@@ -168,7 +173,7 @@ export function Preview() {
   }, [playhead, playing, pool, sequence]);
 
   useEffect(() => {
-    if (!playing || !sequence) {
+    if (!playing || !sequence || !pool) {
       return;
     }
     const state = store.getState();
