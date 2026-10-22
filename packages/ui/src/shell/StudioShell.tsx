@@ -37,12 +37,20 @@ import { Select } from '../components/Select';
 import { SplitPane } from '../components/SplitPane';
 import { Tabs } from '../components/Tabs';
 import { ToastViewport, useToastQueue } from '../components/Toast';
+import type { ToastItem } from '../components/Toast';
 
 export interface StudioShellProps {
   projectName?: string;
   sequenceLabel?: string;
   assetCount?: number;
   leftPanel?: ReactNode;
+  stage?: ReactNode;
+  timeline?: ReactNode;
+  inspector?: ReactNode;
+  toasts?: readonly ToastItem[];
+  exporting?: boolean;
+  onDismissToast?: (id: string) => void;
+  onExport?: () => void;
   onOpenProject?: () => void;
 }
 
@@ -380,11 +388,20 @@ export function StudioShell({
   sequenceLabel = '1920 × 1080 · 24 fps',
   assetCount = 0,
   leftPanel,
+  stage,
+  timeline,
+  inspector,
+  toasts,
+  exporting = false,
+  onDismissToast,
+  onExport,
   onOpenProject,
 }: StudioShellProps) {
   const [rail, setRail] = useState('media');
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const { items, push, dismiss } = useToastQueue();
+  const queue = useToastQueue();
+  const toastItems = toasts ?? queue.items;
+  const dismissToast = onDismissToast ?? queue.dismiss;
   const isMac =
     typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
   const showLibrary = Boolean(leftPanel) && rail === 'media';
@@ -436,15 +453,20 @@ export function StudioShell({
             variant="primary"
             size="sm"
             leadingIcon={<Scissors size={14} />}
-            onClick={() =>
-              push({
+            loading={exporting}
+            onClick={() => {
+              if (onExport) {
+                onExport();
+                return;
+              }
+              queue.push({
                 title: 'Export queued',
                 description: 'Encoding arrives with the export pipeline.',
                 tone: 'success',
-              })
-            }
+              });
+            }}
           >
-            Export
+            {exporting ? 'Exporting' : 'Export'}
           </Button>
         </div>
       </header>
@@ -485,13 +507,13 @@ export function StudioShell({
             initial={62}
             min={42}
             max={80}
-            primary={<Stage />}
-            secondary={<Timeline />}
+            primary={stage ?? <Stage />}
+            secondary={timeline ?? <Timeline />}
           />
         </main>
 
         <aside className="k-shell__inspector" aria-label="Inspector">
-          <Inspector />
+          {inspector ?? <Inspector />}
         </aside>
       </div>
 
@@ -537,7 +559,7 @@ export function StudioShell({
         </dl>
       </Dialog>
 
-      <ToastViewport items={items} onDismiss={dismiss} />
+      <ToastViewport items={[...toastItems]} onDismiss={dismissToast} />
     </div>
   );
 }

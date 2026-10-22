@@ -264,6 +264,7 @@
 
 /* Timeline */
 .k-timeline {
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
@@ -339,6 +340,8 @@
   position: relative;
   border-bottom: 1px solid var(--k-line);
   background: var(--k-surface-1);
+  cursor: ew-resize;
+  touch-action: none;
 }
 
 .k-timeline__tick {
@@ -405,6 +408,31 @@
   background: var(--k-track-audio);
 }
 
+.k-track-head__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.k-track-head:hover .k-track-head__actions,
+.k-track-head:focus-within .k-track-head__actions {
+  opacity: 1;
+}
+
+.k-track-head__actions button {
+  width: 17px;
+  height: 17px;
+  min-height: 17px;
+  padding: 0;
+  color: var(--k-text-faint);
+}
+
+.k-track-head__actions button:hover {
+  color: var(--k-text);
+}
+
 .k-track-head__id {
   color: var(--k-text-faint);
   font-family: var(--k-font-mono);
@@ -431,6 +459,14 @@
   background-size: 96px 100%;
 }
 
+.k-track-lane.is-hidden {
+  opacity: 0.48;
+}
+
+.k-track-lane.is-locked {
+  background-color: color-mix(in srgb, var(--k-surface-0) 36%, transparent);
+}
+
 .k-clip {
   position: absolute;
   top: 7px;
@@ -442,12 +478,38 @@
   border: 1px solid color-mix(in srgb, var(--k-clip-color) 50%, transparent);
   border-radius: 4px;
   background: color-mix(in srgb, var(--k-clip-color) 22%, var(--k-surface-2));
+  background-position: center;
+  background-size: cover;
   color: var(--k-text);
+  cursor: default;
   font-size: 10px;
   letter-spacing: 0.01em;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.k-clip__label {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  padding: 2px 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--k-surface-0) 52%, transparent);
+  text-overflow: ellipsis;
+}
+
+.k-clip.is-selected {
+  z-index: 2;
+  border-color: var(--k-accent);
+  box-shadow:
+    0 0 0 1px var(--k-accent),
+    0 4px 14px color-mix(in srgb, var(--k-accent) 16%, transparent);
+}
+
+.k-clip.is-locked,
+.k-clip.is-track-locked {
+  cursor: not-allowed;
 }
 
 .k-clip::before {
@@ -475,6 +537,44 @@
 
 .k-clip--audio {
   --k-clip-color: var(--k-track-audio);
+}
+
+.k-clip--image {
+  --k-clip-color: var(--k-track-video);
+}
+
+.k-clip--text {
+  --k-clip-color: var(--k-accent);
+}
+
+.k-clip--caption {
+  --k-clip-color: var(--k-track-caption, var(--k-accent-dim));
+}
+
+.k-clip--shape {
+  --k-clip-color: var(--k-track-overlay, var(--k-ok));
+}
+
+.k-clip--composition {
+  --k-clip-color: var(--k-track-overlay, var(--k-accent-dim));
+}
+
+.k-timeline__selection {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--k-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--k-surface-2) 92%, transparent);
+  box-shadow: var(--k-shadow-2);
+  color: var(--k-text-muted);
+  font-family: var(--k-font-mono);
+  font-size: 10px;
 }
 
 .k-lane-playhead {

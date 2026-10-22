@@ -2,6 +2,7 @@ import { StudioShell } from '@kerf/ui';
 import { FootageBin } from './FootageBin';
 import { ProjectBrowserScreen } from './ProjectBrowserScreen';
 import { useStudio } from './state/StudioProvider';
+import { Timeline } from './timeline/Timeline';
 
 function sequenceLabel(
   width: number,
@@ -29,6 +30,8 @@ export default function App() {
   const relinkAsset = useStudio((state) => state.relinkAsset);
   const cancelJob = useStudio((state) => state.cancelJob);
   const refreshAssets = useStudio((state) => state.refreshAssets);
+  const toasts = useStudio((state) => state.toasts);
+  const dismissToast = useStudio((state) => state.dismissToast);
 
   if (!snapshot) {
     return (
@@ -58,6 +61,9 @@ export default function App() {
         sequence.frameRate.denominator,
       )}
       assetCount={assets.length}
+      toasts={toasts}
+      onDismissToast={dismissToast}
+      timeline={<Timeline />}
       leftPanel={
         <FootageBin
           assets={assets}

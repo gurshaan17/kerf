@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 import { cn } from '../cn';
 import { IconButton } from './IconButton';
 
-export type ToastTone = 'info' | 'success' | 'error';
+export type ToastTone = 'info' | 'success' | 'warning' | 'error';
 
 export interface ToastItem {
   id: string;
@@ -22,6 +22,7 @@ export interface ToastViewportProps {
 const toneClasses: Record<ToastTone, string> = {
   info: 'border-l-accent',
   success: 'border-l-ok',
+  warning: 'border-l-warn',
   error: 'border-l-danger',
 };
 
