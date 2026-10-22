@@ -10,6 +10,7 @@ import { clipEndFrame, clipSchema, newId, secondsToFrames } from '@kerf/model';
 import {
   clipsOnTrack,
   findClip,
+  isClipCompatible,
   rippleDeleteCommand,
   tracksInOrder,
 } from '@kerf/engine';
@@ -89,7 +90,7 @@ export function insertAssetCommand(
   sequence: Sequence,
   trackId: string,
   startFrame: number,
-): EditCommand | null {
+): Extract<EditCommand, { type: 'clip.insert' }> | null {
   const track = sequence.tracks.find((candidate) => candidate.id === trackId);
   if (!track || track.locked) {
     return null;
@@ -230,6 +231,83 @@ export function duplicateClipsCommand(
         label: 'Duplicate clips',
         commands,
       };
+}
+
+export interface PasteClipsResult {
+  readonly command: EditCommand;
+  readonly clipIds: Clip['id'][];
+}
+
+/**
+ * Builds an insert batch that drops copied clips at `frame`, keeping their
+ * relative spacing and pushing the whole group later until every copy fits on
+ * a compatible unlocked track.
+ */
+export function pasteClipsCommand(
+  sequence: Sequence,
+  clips: readonly Clip[],
+  frame: number,
+): PasteClipsResult | null {
+  const targets = clips.flatMap((clip) => {
+    const original = sequence.tracks.find((track) => track.id === clip.trackId);
+    const track =
+      original && !original.locked && isClipCompatible(original.kind, clip.type)
+        ? original
+        : tracksInOrder(sequence).find(
+            (candidate) =>
+              !candidate.locked && isClipCompatible(candidate.kind, clip.type),
+          );
+    return track ? [{ clip, track }] : [];
+  });
+  if (targets.length === 0) {
+    return null;
+  }
+
+  const firstStart = Math.min(...targets.map(({ clip }) => clip.startFrame));
+  let shift = Math.max(0, Math.round(frame)) - firstStart;
+
+  for (let attempts = 0; attempts < 1000; attempts += 1) {
+    const collisions: number[] = [];
+    for (const { clip, track } of targets) {
+      const start = clip.startFrame + shift;
+      const end = start + clip.durationFrames;
+      for (const existing of track.clips) {
+        if (existing.startFrame < end && clipEndFrame(existing) > start) {
+          collisions.push(clipEndFrame(existing) - clip.startFrame);
+        }
+      }
+    }
+    if (collisions.length === 0) {
+      break;
+    }
+    shift = Math.max(shift, ...collisions);
+  }
+
+  const commands: EditCommand[] = [];
+  const clipIds: Clip['id'][] = [];
+  for (const { clip, track } of targets) {
+    const copy: Clip = clipSchema.parse({
+      ...clip,
+      id: newId('clip'),
+      trackId: track.id,
+      startFrame: clip.startFrame + shift,
+      locked: false,
+    });
+    commands.push({ type: 'clip.insert', clip: copy });
+    clipIds.push(copy.id);
+  }
+
+  if (commands.length === 0) {
+    return null;
+  }
+
+  return {
+    command:
+      commands.length === 1
+        ? commands[0]!
+        : { type: 'batch', label: 'Paste clips', commands },
+    clipIds,
+  };
 }
 
 function nextFreeOffset(sequence: Sequence, clip: Clip): number {

@@ -16,6 +16,7 @@ import {
 import type { Asset, AssetStatus } from '@kerf/model';
 import { Button, IconButton, Input, Panel, cn } from '@kerf/ui';
 import type { JobSummary } from '../shared/contracts';
+import { ASSET_DRAG_MIME } from './drag';
 
 export interface FootageBinProps {
   readonly assets: Asset[];
@@ -357,10 +358,21 @@ export function FootageBin({
                   type="button"
                   className={cn(
                     'group min-w-0 overflow-hidden rounded-sm border bg-surface-0 text-left transition-colors focus-visible:outline-none',
+                    asset.status === 'ready' &&
+                      'cursor-grab active:cursor-grabbing',
                     active
                       ? 'border-accent/70 shadow-1'
                       : 'border-line hover:border-line-strong',
                   )}
+                  draggable={asset.status === 'ready'}
+                  onDragStart={(event) => {
+                    if (asset.status !== 'ready') {
+                      event.preventDefault();
+                      return;
+                    }
+                    event.dataTransfer.effectAllowed = 'copy';
+                    event.dataTransfer.setData(ASSET_DRAG_MIME, asset.id);
+                  }}
                   onClick={() => setSelectedId(asset.id)}
                   aria-pressed={active}
                   title={asset.name}

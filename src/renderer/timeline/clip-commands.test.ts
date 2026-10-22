@@ -6,12 +6,14 @@ import {
   createSequence,
   createTrack,
 } from '@kerf/model';
+import { applyCommand } from '@kerf/engine';
 import {
   clipDurationFrames,
   createClipForAsset,
   deleteClipsCommand,
   duplicateClipsCommand,
   insertAssetCommand,
+  pasteClipsCommand,
   preferredTrackForAsset,
   splitAtFrameCommand,
 } from './clip-commands';
@@ -145,6 +147,54 @@ describe('timeline clip commands', () => {
     const command = splitAtFrameCommand(sequence, 50, []);
 
     expect(command?.type).toBe('batch');
+  });
+
+  it('pastes copies at the playhead and moves them clear of clips', () => {
+    const track = createTrack({ kind: 'video', order: 0 });
+    const clip = createClipForAsset(videoAsset(), track, 0, FRAME_RATES.film)!;
+    const sequence = createSequence({
+      name: 'Test',
+      tracks: [{ ...track, clips: [clip] }],
+    });
+
+    const pasted = pasteClipsCommand(sequence, [clip], 100);
+
+    expect(pasted?.command.type).toBe('clip.insert');
+    if (pasted?.command.type === 'clip.insert') {
+      expect(pasted.command.clip.startFrame).toBe(clip.durationFrames);
+      expect(pasted.command.clip.id).not.toBe(clip.id);
+      expect(pasted.clipIds).toEqual([pasted.command.clip.id]);
+      const result = applyCommand(sequence, pasted.command);
+      expect(
+        result.sequence.tracks[0]?.clips.map((candidate) => candidate.id),
+      ).toContain(pasted.command.clip.id);
+    }
+  });
+
+  it('keeps relative spacing when pasting several clips', () => {
+    const track = createTrack({ kind: 'video', order: 0 });
+    const first = createClipForAsset(videoAsset(), track, 0, FRAME_RATES.film)!;
+    const second = createClipForAsset(
+      videoAsset(),
+      track,
+      300,
+      FRAME_RATES.film,
+    )!;
+    const sequence = createSequence({
+      name: 'Test',
+      tracks: [{ ...track, clips: [first, second] }],
+    });
+
+    const pasted = pasteClipsCommand(sequence, [first, second], 1000);
+
+    expect(pasted?.command.type).toBe('batch');
+    if (pasted?.command.type === 'batch') {
+      const starts = pasted.command.commands.map((command) =>
+        command.type === 'clip.insert' ? command.clip.startFrame : -1,
+      );
+      expect(starts).toEqual([1000, 1300]);
+      expect(pasted.clipIds).toHaveLength(2);
+    }
   });
 
   it('deletes or duplicates selected clips', () => {

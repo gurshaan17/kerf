@@ -470,6 +470,42 @@
   text-align: right;
 }
 
+.k-ruler-marker {
+  position: absolute;
+  bottom: 1px;
+  z-index: 2;
+  display: flex;
+  max-width: 112px;
+  height: 13px;
+  align-items: center;
+  gap: 3px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--k-surface-1) 82%, transparent);
+  color: var(--k-accent-bright);
+  font-family: var(--k-font-mono);
+  font-size: 8px;
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.k-ruler-marker svg {
+  flex: 0 0 auto;
+}
+
+.k-ruler-marker span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.k-ruler-marker:hover,
+.k-ruler-marker.is-selected {
+  background: color-mix(in srgb, var(--k-accent) 18%, var(--k-surface-1));
+  color: var(--k-text);
+}
+
 .k-ruler-playhead {
   position: absolute;
   top: 0;
@@ -567,6 +603,12 @@
 
 .k-track-lane.is-hidden {
   opacity: 0.48;
+}
+
+.k-track-lane.is-drop-target {
+  background-color: color-mix(in srgb, var(--k-accent) 7%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--k-accent) 55%, transparent);
 }
 
 .k-track-lane.is-locked {
@@ -800,6 +842,10 @@
 
 .k-context-menu button:disabled {
   opacity: 0.4;
+}
+
+.k-context-menu__field {
+  padding: 1px 5px 5px;
 }
 
 .k-context-menu__hint {
