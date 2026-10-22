@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import { useStore } from 'zustand';
 import type { Clip, EditCommand } from '@kerf/model';
+import type { SceneTree } from '@kerf/motion';
 import { sequenceDurationFrames } from '@kerf/engine';
 import type {
+  CompositionSaveRequest,
+  CompositionSaveResult,
   EditResult,
   ExportRecord,
   ExportStartRequest,
@@ -43,6 +46,7 @@ export interface StudioState {
   readonly toasts: StudioToast[];
   readonly playing: boolean;
   readonly exports: ExportRecord[];
+  readonly compositionTrees: Readonly<Record<string, SceneTree>>;
 
   hydrate: () => Promise<void>;
   handleEvent: (event: KerfEvent) => void;
@@ -57,6 +61,12 @@ export interface StudioState {
   relinkAsset: (assetId: string) => Promise<void>;
   refreshAssets: () => Promise<void>;
   cancelJob: (jobId: string) => Promise<void>;
+  saveComposition: (
+    request: CompositionSaveRequest,
+  ) => Promise<CompositionSaveResult | null>;
+  deleteComposition: (id: string) => Promise<void>;
+  setCompositionTree: (compositionId: string, tree: SceneTree) => void;
+  clearCompositionTrees: (keep?: readonly string[]) => void;
 
   refreshExports: () => Promise<void>;
   startExport: (
@@ -212,6 +222,7 @@ export function createStudioStore(bridge: KerfBridge) {
       toasts: [],
       playing: false,
       exports: [],
+      compositionTrees: {},
 
       async hydrate() {
         set({ busy: true, error: null });
@@ -454,6 +465,51 @@ export function createStudioStore(bridge: KerfBridge) {
         } catch (cause) {
           fail(cause, 'Could not cancel the job');
         }
+      },
+
+      async saveComposition(request) {
+        try {
+          const result = await window.kerf.motion.save(request);
+          setSnapshot(result.snapshot);
+          pushToast({
+            title: 'Composition saved',
+            description: result.composition.name,
+            tone: 'success',
+          });
+          return result;
+        } catch (cause) {
+          fail(cause, 'Could not save the composition');
+          return null;
+        }
+      },
+
+      async deleteComposition(id) {
+        try {
+          const snapshot = await window.kerf.motion.delete(id);
+          setSnapshot(snapshot);
+        } catch (cause) {
+          fail(cause, 'Could not delete the composition');
+        }
+      },
+
+      setCompositionTree(compositionId, tree) {
+        set((state) => ({
+          compositionTrees: {
+            ...state.compositionTrees,
+            [compositionId]: tree,
+          },
+        }));
+      },
+
+      clearCompositionTrees(keep = []) {
+        const allowed = new Set(keep);
+        set((state) => ({
+          compositionTrees: Object.fromEntries(
+            Object.entries(state.compositionTrees).filter(([id]) =>
+              allowed.has(id),
+            ),
+          ),
+        }));
       },
 
       async refreshExports() {

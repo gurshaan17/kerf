@@ -11,7 +11,8 @@
   "sideEffects": false,
   "dependencies": {
     "@kerf/model": "workspace:*",
-    "@kerf/engine": "workspace:*"
+    "@kerf/engine": "workspace:*",
+    "@kerf/motion": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

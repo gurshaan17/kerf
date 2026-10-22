@@ -7,6 +7,7 @@ import {
   seekVideo,
 } from '@kerf/canvas';
 import { visualTracksInOrder } from '@kerf/engine';
+import type { SceneTree } from '@kerf/motion';
 import type { ExportStartResult } from '../../shared/contracts';
 
 export class ExportCancelledError extends Error {
@@ -20,6 +21,7 @@ export interface RenderExportOptions {
   readonly result: ExportStartResult;
   readonly sequence: Sequence;
   readonly assets: readonly Asset[];
+  readonly compositionTrees?: ReadonlyMap<string, SceneTree>;
   readonly writeFrame: (index: number, data: Uint8Array) => Promise<void>;
   readonly onProgress?: (rendered: number, total: number) => void;
   readonly isCancelled?: () => boolean;
@@ -122,6 +124,7 @@ export async function renderExportFrames({
   result,
   sequence,
   assets,
+  compositionTrees,
   writeFrame,
   onProgress,
   isCancelled = () => false,
@@ -143,7 +146,7 @@ export async function renderExportFrames({
         throw new ExportCancelledError();
       }
       await seekFrameMedia(sequence, frame, pool, isCancelled);
-      renderFrame(context, sequence, frame, { pool });
+      renderFrame(context, sequence, frame, { pool, compositionTrees });
       const blob = await canvasToPng(canvas);
       const data = new Uint8Array(await blob.arrayBuffer());
       await writeFrame(frame - result.startFrame, data);

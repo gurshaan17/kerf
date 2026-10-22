@@ -10,6 +10,8 @@ import type {
 } from '@kerf/model';
 import { fpsToNumber, sampleTransform } from '@kerf/model';
 import { sourceFrameAt, tracksInOrder } from '@kerf/engine';
+import { renderSceneTree } from '@kerf/motion';
+import type { SceneTree } from '@kerf/motion';
 import { MediaPool } from './media-pool';
 
 export interface RenderFrameOptions {
@@ -17,6 +19,7 @@ export interface RenderFrameOptions {
   readonly selectedClipId?: string | null;
   /** Pass null to show the checkerboard through the frame. */
   readonly background?: string | null;
+  readonly compositionTrees?: ReadonlyMap<string, SceneTree>;
 }
 
 export interface RenderStats {
@@ -241,6 +244,25 @@ function withClipTransform(
   applyMasks(context, clip, width, height);
   draw();
   context.restore();
+}
+
+function drawComposition(
+  context: CanvasRenderingContext2D,
+  clip: Extract<Clip, { type: 'composition' }>,
+  width: number,
+  height: number,
+  tree: SceneTree | undefined,
+): void {
+  if (tree) {
+    // Scene trees use top-left percentage coordinates; the compositor is
+    // centred on the frame before drawing clips.
+    context.save();
+    context.translate(-width / 2, -height / 2);
+    renderSceneTree(context, tree, width, height);
+    context.restore();
+    return;
+  }
+  drawCompositionPlaceholder(context, clip, width, height);
 }
 
 function drawCompositionPlaceholder(
@@ -608,7 +630,14 @@ export function renderFrame(
           width,
           height,
           { x: width / 2, y: height / 2 },
-          () => drawCompositionPlaceholder(context, clip, width, height),
+          () =>
+            drawComposition(
+              context,
+              clip,
+              width,
+              height,
+              options.compositionTrees?.get(clip.compositionId),
+            ),
         );
         return true;
       }

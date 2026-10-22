@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -110,10 +110,15 @@ export function Preview() {
   const playing = useStudio((state) => state.playing);
   const setPlayhead = useStudio((state) => state.setPlayhead);
   const togglePlaying = useStudio((state) => state.togglePlaying);
+  const compositionTrees = useStudio((state) => state.compositionTrees);
   const store = useStudioStoreApi();
   const [safeZones, setSafeZones] = useState(true);
   const [missingMedia, setMissingMedia] = useState(false);
   const [mediaRevision, setMediaRevision] = useState(0);
+  const treeMap = useMemo(
+    () => new Map(Object.entries(compositionTrees)),
+    [compositionTrees],
+  );
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const assets = snapshot?.assets ?? [];
@@ -160,9 +165,10 @@ export function Preview() {
     const stats = renderFrame(context, sequence, playhead, {
       pool,
       selectedClipId: selection.clipIds[0] ?? null,
+      compositionTrees: treeMap,
     });
     setMissingMedia(stats.missingAssets.length > 0);
-  }, [mediaRevision, playhead, pool, selection.clipIds, sequence]);
+  }, [mediaRevision, playhead, pool, selection.clipIds, sequence, treeMap]);
 
   useEffect(() => {
     if (!sequence || !pool || playing) {

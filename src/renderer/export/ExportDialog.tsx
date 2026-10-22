@@ -62,6 +62,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
   const exports = useStudio((state) => state.exports);
   const startExport = useStudio((state) => state.startExport);
   const writeExportFrame = useStudio((state) => state.writeExportFrame);
+  const compositionTrees = useStudio((state) => state.compositionTrees);
   const finishExport = useStudio((state) => state.finishExport);
   const cancelExport = useStudio((state) => state.cancelExport);
   const refreshExports = useStudio((state) => state.refreshExports);
@@ -152,6 +153,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
         result,
         sequence,
         assets: snapshot.assets,
+        compositionTrees: new Map(Object.entries(compositionTrees)),
         writeFrame: (index, data) =>
           writeExportFrame(result.export.id, index, data),
         onProgress: (rendered) => setRenderedFrames(rendered),
