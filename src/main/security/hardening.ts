@@ -2,28 +2,28 @@ import { app, session } from 'electron';
 
 const CONTENT_SECURITY_POLICY =
   "default-src 'self'; " +
-  "script-src 'self'; " +
+  "script-src 'self' blob: 'nonce-kerf-motion-bootstrap'; " +
   "style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data: blob: kerfmedia:; " +
   "media-src 'self' blob: kerfmedia:; " +
   "font-src 'self'; " +
   "connect-src 'self'; " +
   "object-src 'none'; " +
-  "frame-src 'none'; " +
+  'frame-src blob:; ' +
   "worker-src 'self' blob:; " +
   "base-uri 'self'; " +
   "form-action 'none'";
 
 const DEV_CONTENT_SECURITY_POLICY =
   "default-src 'self'; " +
-  "script-src 'self' 'unsafe-inline'; " +
+  "script-src 'self' 'unsafe-inline' blob: 'nonce-kerf-motion-bootstrap'; " +
   "style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data: blob: kerfmedia:; " +
   "media-src 'self' blob: kerfmedia:; " +
   "font-src 'self'; " +
   "connect-src 'self' ws://localhost:* http://localhost:*; " +
   "object-src 'none'; " +
-  "frame-src 'none'; " +
+  'frame-src blob:; ' +
   "worker-src 'self' blob:; " +
   "base-uri 'self'; " +
   "form-action 'none'";

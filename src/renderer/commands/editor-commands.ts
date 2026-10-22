@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { Clip, TrackKind } from '@kerf/model';
+import type { AnalysisKind } from '../../shared/contracts';
 import { createMarker, createTrack } from '@kerf/model';
 import { findClip, nextTrackOrder, sequenceDurationFrames } from '@kerf/engine';
 import {
@@ -170,6 +171,28 @@ function selectAll(store: StudioStore): void {
   ids.forEach((id, index) => state.selectClip(id, index > 0));
 }
 
+function analyzeSelected(
+  store: StudioStore,
+  kinds: readonly AnalysisKind[],
+): void {
+  const state = store.getState();
+  const clips = selectedClips(state);
+  const clip = clips.find(
+    (candidate) =>
+      (candidate.type === 'video' || candidate.type === 'audio') &&
+      candidate.assetId,
+  );
+  if (!clip || (clip.type !== 'video' && clip.type !== 'audio')) {
+    state.pushToast({
+      title: 'No source clip selected',
+      description: 'Select a video or audio clip to analyse its source.',
+      tone: 'warning',
+    });
+    return;
+  }
+  void state.analyze(clip.assetId, kinds);
+}
+
 function addMarker(store: StudioStore): void {
   const state = store.getState();
   const sequence = state.snapshot?.project.sequence;
@@ -233,6 +256,8 @@ export function useEditorCommands() {
       selectAll: () => selectAll(store),
       addMarker: () => addMarker(store),
       addTrack: (kind: TrackKind) => addTrack(store, kind),
+      analyzeSelected: (kinds: readonly AnalysisKind[]) =>
+        analyzeSelected(store, kinds),
       undo: () => store.getState().undo(),
       redo: () => store.getState().redo(),
       togglePlay: () => store.getState().togglePlaying(),

@@ -7,6 +7,7 @@ import {
   Film,
   Image as ImageIcon,
   Captions,
+  Clapperboard,
   Loader2,
   Music2,
   Plus,
@@ -39,6 +40,7 @@ export interface FootageBinProps {
   ) => Promise<void>;
   readonly onOpenSearch: () => void;
   readonly onOpenAnalysis: () => void;
+  readonly onOpenMotion: () => void;
 }
 
 const STATUS_LABEL: Record<AssetStatus, string> = {
@@ -186,6 +188,7 @@ export function FootageBin({
   onAnalyze,
   onOpenSearch,
   onOpenAnalysis,
+  onOpenMotion,
 }: FootageBinProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -254,6 +257,13 @@ export function FootageBin({
             size="sm"
             icon={<Search size={14} />}
             onClick={onOpenSearch}
+          />
+          <IconButton
+            label="Compositions"
+            tooltip="Compositions"
+            size="sm"
+            icon={<Clapperboard size={14} />}
+            onClick={onOpenMotion}
           />
           <IconButton
             label="Analysis settings"

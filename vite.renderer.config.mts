@@ -6,6 +6,9 @@ import { kerfAliases } from './vite.shared.mts';
 // https://vitejs.dev/config
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  html: {
+    cspNonce: 'kerf-motion-bootstrap',
+  },
   resolve: {
     alias: kerfAliases,
   },

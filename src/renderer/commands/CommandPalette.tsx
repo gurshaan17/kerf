@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   AudioLines,
+  Clapperboard,
   Copy,
   CopyPlus,
   FileVideo,
@@ -16,7 +17,9 @@ import {
   Plus,
   Redo2,
   Scissors,
+  ScanLine,
   Search,
+  Settings2,
   SkipBack,
   SkipForward,
   Trash2,
@@ -45,6 +48,9 @@ export interface CommandPaletteProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly onShowShortcuts: () => void;
   readonly onExport: () => void;
+  readonly onOpenSearch: () => void;
+  readonly onOpenAnalysis: () => void;
+  readonly onOpenMotion: () => void;
 }
 
 export function CommandPalette({
@@ -52,6 +58,9 @@ export function CommandPalette({
   onOpenChange,
   onShowShortcuts,
   onExport,
+  onOpenSearch,
+  onOpenAnalysis,
+  onOpenMotion,
 }: CommandPaletteProps) {
   const commands = useEditorCommands();
   const snapshot = useStudio((state) => state.snapshot);
@@ -270,6 +279,37 @@ export function CommandPalette({
         run: commands.zoomOut,
       },
       {
+        id: 'analysis.search',
+        label: 'Search transcripts and scenes',
+        keywords: 'find words shots descriptions',
+        icon: <Search size={14} />,
+        disabled: !hasSequence,
+        run: onOpenSearch,
+      },
+      {
+        id: 'analysis.settings',
+        label: 'Analysis settings',
+        keywords: 'whisper transcribe provider key vision consent models',
+        icon: <Settings2 size={14} />,
+        run: onOpenAnalysis,
+      },
+      {
+        id: 'analysis.scenes',
+        label: 'Detect scenes for selected asset',
+        keywords: 'shots cuts keyframes',
+        icon: <ScanLine size={14} />,
+        disabled: !hasSequence,
+        run: () => void commands.analyzeSelected(['scenes']),
+      },
+      {
+        id: 'motion.open',
+        label: 'Compositions',
+        keywords: 'motion scene tree sandbox title lower third',
+        icon: <Clapperboard size={14} />,
+        disabled: !hasSequence,
+        run: onOpenMotion,
+      },
+      {
         id: 'file.import',
         label: 'Import footage',
         keywords: 'media file video audio image',
@@ -307,6 +347,9 @@ export function CommandPalette({
   }, [
     commands,
     onExport,
+    onOpenAnalysis,
+    onOpenMotion,
+    onOpenSearch,
     onShowShortcuts,
     open,
     playing,

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StudioShell } from '@kerf/ui';
 import { CommandPalette } from './commands/CommandPalette';
 import { ShortcutsDialog } from './commands/ShortcutsDialog';
@@ -12,6 +12,8 @@ import { Inspector } from './inspector/Inspector';
 import { ExportDialog } from './export/ExportDialog';
 import { AnalysisSettingsDialog } from './analysis/AnalysisSettingsDialog';
 import { SearchDialog } from './search/SearchDialog';
+import { MotionDialog } from './motion/MotionDialog';
+import { createCompositionSandbox } from './motion/sandbox';
 import type { AnalysisAssetStatus } from '../shared/contracts';
 
 function sequenceLabel(
@@ -44,12 +46,17 @@ export default function App() {
   const toasts = useStudio((state) => state.toasts);
   const dismissToast = useStudio((state) => state.dismissToast);
   const exports = useStudio((state) => state.exports);
+  const setCompositionTree = useStudio((state) => state.setCompositionTree);
+  const clearCompositionTrees = useStudio(
+    (state) => state.clearCompositionTrees,
+  );
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [motionOpen, setMotionOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
   const openExport = useCallback(() => {
@@ -64,10 +71,63 @@ export default function App() {
     setPaletteOpen(false);
     setAnalysisOpen(true);
   }, []);
+  const openMotion = useCallback(() => {
+    setPaletteOpen(false);
+    setMotionOpen(true);
+  }, []);
   const showShortcutsFromPalette = useCallback(() => {
     setPaletteOpen(false);
     setShortcutsOpen(true);
   }, []);
+  const compositionsRef = useRef(snapshot?.compositions ?? []);
+  compositionsRef.current = snapshot?.compositions ?? [];
+  const compositionSignature = useMemo(
+    () =>
+      (snapshot?.compositions ?? [])
+        .map((composition) => `${composition.id}:${composition.updatedAt}`)
+        .join('|'),
+    [snapshot?.compositions],
+  );
+
+  useEffect(() => {
+    const compositions = compositionsRef.current;
+    clearCompositionTrees(compositions.map((composition) => composition.id));
+    if (compositions.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    let sandbox: ReturnType<typeof createCompositionSandbox> extends Promise<
+      infer Sandbox
+    >
+      ? Sandbox
+      : never;
+    void createCompositionSandbox()
+      .then(async (created) => {
+        sandbox = created;
+        if (cancelled) {
+          created.dispose();
+          return;
+        }
+        for (const composition of compositions) {
+          if (cancelled) {
+            return;
+          }
+          try {
+            const tree = await created.evaluate(composition.source);
+            if (!cancelled) {
+              setCompositionTree(composition.id, tree);
+            }
+          } catch {
+            // The editor shows the detailed policy/runtime error.
+          }
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      sandbox?.dispose();
+    };
+  }, [compositionSignature, clearCompositionTrees, setCompositionTree]);
 
   useGlobalShortcuts({
     onOpenPalette: openPalette,
@@ -80,7 +140,8 @@ export default function App() {
       !shortcutsOpen &&
       !exportOpen &&
       !searchOpen &&
-      !analysisOpen,
+      !analysisOpen &&
+      !motionOpen,
   });
 
   const analysis: AnalysisAssetStatus[] = useMemo(() => {
@@ -159,6 +220,7 @@ export default function App() {
             onAnalyze={analyze}
             onOpenSearch={openSearch}
             onOpenAnalysis={openAnalysis}
+            onOpenMotion={openMotion}
           />
         }
         onOpenProject={() => void closeProject()}
@@ -171,6 +233,9 @@ export default function App() {
         onOpenChange={setPaletteOpen}
         onShowShortcuts={showShortcutsFromPalette}
         onExport={openExport}
+        onOpenSearch={openSearch}
+        onOpenAnalysis={openAnalysis}
+        onOpenMotion={openMotion}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
@@ -179,6 +244,7 @@ export default function App() {
         open={analysisOpen}
         onOpenChange={setAnalysisOpen}
       />
+      <MotionDialog open={motionOpen} onOpenChange={setMotionOpen} />
     </>
   );
 }
