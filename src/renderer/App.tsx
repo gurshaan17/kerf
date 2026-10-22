@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { StudioShell } from '@kerf/ui';
 import { CommandPalette } from './commands/CommandPalette';
 import { ShortcutsDialog } from './commands/ShortcutsDialog';
@@ -10,6 +10,9 @@ import { Timeline } from './timeline/Timeline';
 import { Preview } from './preview/Preview';
 import { Inspector } from './inspector/Inspector';
 import { ExportDialog } from './export/ExportDialog';
+import { AnalysisSettingsDialog } from './analysis/AnalysisSettingsDialog';
+import { SearchDialog } from './search/SearchDialog';
+import type { AnalysisAssetStatus } from '../shared/contracts';
 
 function sequenceLabel(
   width: number,
@@ -37,6 +40,7 @@ export default function App() {
   const relinkAsset = useStudio((state) => state.relinkAsset);
   const cancelJob = useStudio((state) => state.cancelJob);
   const refreshAssets = useStudio((state) => state.refreshAssets);
+  const analyze = useStudio((state) => state.analyze);
   const toasts = useStudio((state) => state.toasts);
   const dismissToast = useStudio((state) => state.dismissToast);
   const exports = useStudio((state) => state.exports);
@@ -44,22 +48,65 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
   const openExport = useCallback(() => {
     setPaletteOpen(false);
     setExportOpen(true);
   }, []);
+  const openSearch = useCallback(() => {
+    setPaletteOpen(false);
+    setSearchOpen(true);
+  }, []);
+  const openAnalysis = useCallback(() => {
+    setPaletteOpen(false);
+    setAnalysisOpen(true);
+  }, []);
   const showShortcutsFromPalette = useCallback(() => {
     setPaletteOpen(false);
     setShortcutsOpen(true);
   }, []);
+
   useGlobalShortcuts({
     onOpenPalette: openPalette,
     onOpenShortcuts: openShortcuts,
     onOpenExport: openExport,
-    enabled: Boolean(snapshot) && !paletteOpen && !shortcutsOpen && !exportOpen,
+    onOpenSearch: openSearch,
+    enabled:
+      Boolean(snapshot) &&
+      !paletteOpen &&
+      !shortcutsOpen &&
+      !exportOpen &&
+      !searchOpen &&
+      !analysisOpen,
   });
+
+  const analysis: AnalysisAssetStatus[] = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
+    return snapshot.assets.map((asset) => {
+      const scenes = snapshot.scenes.filter(
+        (scene) => scene.assetId === asset.id,
+      );
+      return {
+        assetId: asset.id,
+        transcript: snapshot.transcripts.some(
+          (transcript) => transcript.assetId === asset.id,
+        ),
+        sceneCount: scenes.length,
+        descriptions: scenes.filter(
+          (scene) => scene.description !== null && scene.description.length > 0,
+        ).length,
+        beatMap: snapshot.beatMaps.some(
+          (beatMap) => beatMap.assetId === asset.id,
+        ),
+        embeddings: false,
+      };
+    });
+  }, [snapshot]);
 
   if (!snapshot) {
     return (
@@ -108,6 +155,10 @@ export default function App() {
             onRelink={relinkAsset}
             onCancelJob={cancelJob}
             onRefresh={refreshAssets}
+            analysis={analysis}
+            onAnalyze={analyze}
+            onOpenSearch={openSearch}
+            onOpenAnalysis={openAnalysis}
           />
         }
         onOpenProject={() => void closeProject()}
@@ -123,6 +174,11 @@ export default function App() {
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
+      <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
+      <AnalysisSettingsDialog
+        open={analysisOpen}
+        onOpenChange={setAnalysisOpen}
+      />
     </>
   );
 }

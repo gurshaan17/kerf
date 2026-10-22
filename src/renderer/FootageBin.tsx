@@ -6,16 +6,21 @@ import {
   Clock3,
   Film,
   Image as ImageIcon,
+  Captions,
   Loader2,
+  Music2,
   Plus,
   RefreshCw,
+  ScanLine,
   Search,
+  Settings2,
+  Sparkles,
   Unplug,
   X,
 } from 'lucide-react';
 import type { Asset, AssetStatus } from '@kerf/model';
 import { Button, IconButton, Input, Panel, cn } from '@kerf/ui';
-import type { JobSummary } from '../shared/contracts';
+import type { AnalysisAssetStatus, JobSummary } from '../shared/contracts';
 import { ASSET_DRAG_MIME } from './drag';
 
 export interface FootageBinProps {
@@ -27,6 +32,13 @@ export interface FootageBinProps {
   readonly onRelink: (assetId: string) => Promise<void>;
   readonly onCancelJob: (jobId: string) => Promise<void>;
   readonly onRefresh: () => Promise<void>;
+  readonly analysis: readonly AnalysisAssetStatus[];
+  readonly onAnalyze: (
+    assetId: string,
+    kinds: readonly ('transcript' | 'scenes' | 'beats' | 'vision')[],
+  ) => Promise<void>;
+  readonly onOpenSearch: () => void;
+  readonly onOpenAnalysis: () => void;
 }
 
 const STATUS_LABEL: Record<AssetStatus, string> = {
@@ -170,6 +182,10 @@ export function FootageBin({
   onRelink,
   onCancelJob,
   onRefresh,
+  analysis,
+  onAnalyze,
+  onOpenSearch,
+  onOpenAnalysis,
 }: FootageBinProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -220,6 +236,9 @@ export function FootageBin({
   const selected = selectedId
     ? (assets.find((asset) => asset.id === selectedId) ?? null)
     : null;
+  const selectedAnalysis = selected
+    ? (analysis.find((entry) => entry.assetId === selected.id) ?? null)
+    : null;
   const readyCount = assets.filter((asset) => asset.status === 'ready').length;
 
   return (
@@ -229,6 +248,20 @@ export function FootageBin({
       bodyClassName="flex flex-col p-0 overflow-hidden"
       actions={
         <>
+          <IconButton
+            label="Search transcripts and scenes"
+            tooltip="Search transcripts and scenes"
+            size="sm"
+            icon={<Search size={14} />}
+            onClick={onOpenSearch}
+          />
+          <IconButton
+            label="Analysis settings"
+            tooltip="Analysis settings"
+            size="sm"
+            icon={<Settings2 size={14} />}
+            onClick={onOpenAnalysis}
+          />
           <IconButton
             label="Check source availability"
             tooltip="Check source availability"
@@ -489,7 +522,96 @@ export function FootageBin({
             </p>
           ) : null}
 
-          <div className="mt-2.5 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span
+              className={cn(
+                'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase',
+                selectedAnalysis?.transcript
+                  ? 'border-ok/30 bg-ok/10 text-ok'
+                  : 'border-line bg-surface-2 text-ink-faint',
+              )}
+            >
+              <Captions size={9} />{' '}
+              {selectedAnalysis?.transcript ? 'Transcript' : 'No words'}
+            </span>
+            <span
+              className={cn(
+                'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase',
+                selectedAnalysis && selectedAnalysis.sceneCount > 0
+                  ? 'border-ok/30 bg-ok/10 text-ok'
+                  : 'border-line bg-surface-2 text-ink-faint',
+              )}
+            >
+              <ScanLine size={10} /> {selectedAnalysis?.sceneCount ?? 0} scenes
+            </span>
+            <span
+              className={cn(
+                'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase',
+                selectedAnalysis?.beatMap
+                  ? 'border-ok/30 bg-ok/10 text-ok'
+                  : 'border-line bg-surface-2 text-ink-faint',
+              )}
+            >
+              <Music2 size={9} />{' '}
+              {selectedAnalysis?.beatMap ? 'Beats' : 'No tempo'}
+            </span>
+            <span
+              className={cn(
+                'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase',
+                selectedAnalysis && selectedAnalysis.descriptions > 0
+                  ? 'border-ok/30 bg-ok/10 text-ok'
+                  : 'border-line bg-surface-2 text-ink-faint',
+              )}
+            >
+              <Sparkles size={9} /> {selectedAnalysis?.descriptions ?? 0}{' '}
+              described
+            </span>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              leadingIcon={<Captions size={11} />}
+              disabled={busy || selected.kind === 'image' || !selected.hasAudio}
+              onClick={() => void onAnalyze(selected.id, ['transcript'])}
+            >
+              Transcribe
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              leadingIcon={<ScanLine size={11} />}
+              disabled={busy || selected.kind !== 'video'}
+              onClick={() => void onAnalyze(selected.id, ['scenes'])}
+            >
+              Scenes
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              leadingIcon={<Music2 size={11} />}
+              disabled={
+                busy || (!selected.hasAudio && selected.kind !== 'audio')
+              }
+              onClick={() => void onAnalyze(selected.id, ['beats'])}
+            >
+              Beats
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              leadingIcon={<Sparkles size={11} />}
+              disabled={
+                busy || !selectedAnalysis || selectedAnalysis.sceneCount === 0
+              }
+              onClick={() => void onAnalyze(selected.id, ['vision'])}
+            >
+              Describe
+            </Button>
+          </div>
+
+          <div className="mt-2 flex items-center gap-2">
             <Button
               variant={selected.status === 'missing' ? 'primary' : 'secondary'}
               size="sm"
@@ -504,7 +626,7 @@ export function FootageBin({
             {selected.status === 'ready' ? (
               <span className="inline-flex items-center gap-1 font-mono text-[8px] tracking-[0.02em] text-ok uppercase">
                 <CheckCircle2 size={10} aria-hidden="true" />
-                Analysed
+                Ready
               </span>
             ) : null}
           </div>

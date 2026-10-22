@@ -5,6 +5,7 @@ export interface GlobalShortcutsOptions {
   readonly onOpenPalette: () => void;
   readonly onOpenShortcuts: () => void;
   readonly onOpenExport?: () => void;
+  readonly onOpenSearch?: () => void;
   readonly enabled?: boolean;
 }
 
@@ -26,6 +27,7 @@ export function useGlobalShortcuts({
   onOpenPalette,
   onOpenShortcuts,
   onOpenExport,
+  onOpenSearch,
   enabled = true,
 }: GlobalShortcutsOptions): void {
   const commands = useEditorCommands();
@@ -48,6 +50,12 @@ export function useGlobalShortcuts({
       if (mod && key === 'k') {
         event.preventDefault();
         onOpenPalette();
+        return;
+      }
+
+      if (mod && key === 'f' && onOpenSearch) {
+        event.preventDefault();
+        onOpenSearch();
         return;
       }
 
@@ -188,5 +196,12 @@ export function useGlobalShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [commands, enabled, onOpenExport, onOpenPalette, onOpenShortcuts]);
+  }, [
+    commands,
+    enabled,
+    onOpenExport,
+    onOpenPalette,
+    onOpenSearch,
+    onOpenShortcuts,
+  ]);
 }

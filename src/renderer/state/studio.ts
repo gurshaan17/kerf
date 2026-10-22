@@ -4,6 +4,7 @@ import type { Clip, EditCommand } from '@kerf/model';
 import type { SceneTree } from '@kerf/motion';
 import { sequenceDurationFrames } from '@kerf/engine';
 import type {
+  AnalysisKind,
   CompositionSaveRequest,
   CompositionSaveResult,
   EditResult,
@@ -15,6 +16,7 @@ import type {
   KerfEvent,
   ProjectSnapshot,
   ProjectSummary,
+  SearchResponse,
 } from '../../shared/contracts';
 
 export type StudioTool = 'select' | 'blade' | 'text';
@@ -61,10 +63,13 @@ export interface StudioState {
   relinkAsset: (assetId: string) => Promise<void>;
   refreshAssets: () => Promise<void>;
   cancelJob: (jobId: string) => Promise<void>;
+  analyze: (assetId: string, kinds: readonly AnalysisKind[]) => Promise<void>;
+  search: (query: string) => Promise<SearchResponse>;
   saveComposition: (
     request: CompositionSaveRequest,
   ) => Promise<CompositionSaveResult | null>;
   deleteComposition: (id: string) => Promise<void>;
+  revealAssetFrame: (assetId: string, sourceFrame: number) => void;
   setCompositionTree: (compositionId: string, tree: SceneTree) => void;
   clearCompositionTrees: (keep?: readonly string[]) => void;
 
@@ -135,7 +140,11 @@ function jobMerge(jobs: readonly JobSummary[], job: JobSummary): JobSummary[] {
 }
 
 function assetJob(job: JobSummary): boolean {
-  return job.kind === 'media.ingest' || job.kind.startsWith('media.');
+  return (
+    job.kind === 'media.ingest' ||
+    job.kind.startsWith('media.') ||
+    job.kind.startsWith('analysis.')
+  );
 }
 
 function exportMerge(
@@ -467,6 +476,32 @@ export function createStudioStore(bridge: KerfBridge) {
         }
       },
 
+      async analyze(assetId, kinds) {
+        try {
+          const result = await window.kerf.analysis.run({ assetId, kinds });
+          for (const job of result.jobs) {
+            pushToast({
+              title: 'Analysis queued',
+              description: `${job.kind.replace('analysis.', '')} · ${job.stage || 'waiting'}`,
+              tone: 'info',
+            });
+          }
+          for (const skip of result.skipped) {
+            pushToast({
+              title: `${skip.kind} skipped`,
+              description: skip.reason,
+              tone: 'warning',
+            });
+          }
+        } catch (cause) {
+          fail(cause, 'Could not start analysis');
+        }
+      },
+
+      async search(query) {
+        return window.kerf.analysis.search({ query });
+      },
+
       async saveComposition(request) {
         try {
           const result = await window.kerf.motion.save(request);
@@ -510,6 +545,36 @@ export function createStudioStore(bridge: KerfBridge) {
             ),
           ),
         }));
+      },
+
+      revealAssetFrame(assetId, sourceFrame) {
+        const snapshot = get().snapshot;
+        if (!snapshot) {
+          return;
+        }
+        for (const track of snapshot.project.sequence.tracks) {
+          for (const clip of track.clips) {
+            if (
+              (clip.type === 'video' || clip.type === 'audio') &&
+              clip.assetId === assetId
+            ) {
+              const local = Math.round(
+                (sourceFrame - clip.sourceInFrame) / clip.speed,
+              );
+              if (local >= 0 && local < clip.durationFrames) {
+                get().clearSelection();
+                get().selectClip(clip.id);
+                get().setPlayhead(clip.startFrame + local);
+                return;
+              }
+            }
+          }
+        }
+        pushToast({
+          title: 'Clip is not on the timeline',
+          description: 'Drag the asset to a track to reveal this moment.',
+          tone: 'info',
+        });
       },
 
       async refreshExports() {
