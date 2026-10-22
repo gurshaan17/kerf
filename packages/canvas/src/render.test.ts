@@ -8,7 +8,13 @@ import {
   createTrack,
   newId,
 } from '@kerf/model';
-import { clipAtFrame, mediaSourceSeconds, renderFrame } from './render';
+import {
+  clipAtFrame,
+  clipFadeOpacity,
+  effectsFilter,
+  mediaSourceSeconds,
+  renderFrame,
+} from './render';
 import type { MediaPool } from './media-pool';
 
 function makeSequence() {
@@ -114,6 +120,56 @@ describe('canvas compositor helpers', () => {
 
     expect(stats.drawn).toBe(0);
     expect(stats.missingAssets).toEqual([asset.id]);
+  });
+
+  it('serializes enabled effects and ignores disabled ones', () => {
+    const track = createTrack({ kind: 'overlay', order: 0 });
+    const clip = clipSchema.parse({
+      id: newId('clip'),
+      type: 'text',
+      trackId: track.id,
+      startFrame: 0,
+      durationFrames: 50,
+      text: 'Effect',
+      effects: [
+        { id: newId('effect'), type: 'blur', amount: 4 },
+        { id: newId('effect'), type: 'brightness', amount: 1.2 },
+        { id: newId('effect'), type: 'sepia', enabled: false, amount: 1 },
+      ],
+    });
+
+    expect(effectsFilter(clip)).toBe('blur(4px) brightness(1.2)');
+  });
+
+  it('ramps fades against the clip local frame', () => {
+    const track = createTrack({ kind: 'video', order: 0 });
+    const asset = {
+      ...createAsset({
+        projectId: createProject({ name: 'Fade', now: 1 }).id,
+        name: 'Fade.mp4',
+        sourcePath: '/media/fade.mp4',
+        kind: 'video',
+        now: 1,
+      }),
+      durationSeconds: 10,
+      frameRate: FRAME_RATES.film,
+    };
+    const clip = clipSchema.parse({
+      id: newId('clip'),
+      type: 'video',
+      trackId: track.id,
+      assetId: asset.id,
+      startFrame: 0,
+      durationFrames: 100,
+      sourceInFrame: 0,
+      fade: { inFrames: 10, outFrames: 20 },
+    });
+
+    expect(clipFadeOpacity(clip, 0)).toBe(0);
+    expect(clipFadeOpacity(clip, 5)).toBeCloseTo(0.5);
+    expect(clipFadeOpacity(clip, 50)).toBe(1);
+    expect(clipFadeOpacity(clip, 90)).toBeCloseTo(0.5);
+    expect(clipFadeOpacity(clip, 100)).toBe(0);
   });
 
   it('draws text, caption and shape layers', () => {

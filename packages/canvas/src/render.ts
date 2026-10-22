@@ -8,7 +8,7 @@ import type {
   TextClip,
   TextStyle,
 } from '@kerf/model';
-import { fpsToNumber } from '@kerf/model';
+import { fpsToNumber, sampleTransform } from '@kerf/model';
 import { sourceFrameAt, tracksInOrder } from '@kerf/engine';
 import { MediaPool } from './media-pool';
 
@@ -125,21 +125,142 @@ function fitBox(
   };
 }
 
+export function effectsFilter(clip: Clip): string {
+  const filters = clip.effects
+    .filter((effect) => effect.enabled)
+    .map((effect) => {
+      const amount = effect.amount;
+      switch (effect.type) {
+        case 'blur':
+          return `blur(${amount}px)`;
+        case 'brightness':
+          return `brightness(${amount})`;
+        case 'contrast':
+          return `contrast(${amount})`;
+        case 'saturate':
+          return `saturate(${amount})`;
+        case 'grayscale':
+          return `grayscale(${amount})`;
+        case 'sepia':
+          return `sepia(${amount})`;
+        case 'hue-rotate':
+          return `hue-rotate(${amount}deg)`;
+        case 'drop-shadow':
+          return `drop-shadow(0 0 ${amount}px rgba(0, 0, 0, 0.55))`;
+      }
+    });
+  return filters.length > 0 ? filters.join(' ') : 'none';
+}
+
+export function clipFadeOpacity(clip: Clip, localFrame: number): number {
+  if (clip.type !== 'video' && clip.type !== 'audio') {
+    return 1;
+  }
+  let opacity = 1;
+  if (clip.fade.inFrames > 0 && localFrame < clip.fade.inFrames) {
+    opacity *= Math.max(0, localFrame / clip.fade.inFrames);
+  }
+  const outStart = clip.durationFrames - clip.fade.outFrames;
+  if (clip.fade.outFrames > 0 && localFrame > outStart) {
+    opacity *= Math.max(
+      0,
+      (clip.durationFrames - localFrame) / clip.fade.outFrames,
+    );
+  }
+  return Math.min(1, Math.max(0, opacity));
+}
+
+function applyMasks(
+  context: CanvasRenderingContext2D,
+  clip: Clip,
+  width: number,
+  height: number,
+): void {
+  if (clip.masks.length === 0) {
+    return;
+  }
+  const path = new Path2D();
+  const inverted = clip.masks.some((mask) => mask.inverted);
+  if (inverted) {
+    path.rect(-width / 2, -height / 2, width, height);
+  }
+  for (const mask of clip.masks) {
+    const x = -width / 2 + mask.x * width;
+    const y = -height / 2 + mask.y * height;
+    const maskWidth = mask.width * width;
+    const maskHeight = mask.height * height;
+    if (mask.type === 'ellipse') {
+      path.ellipse(
+        x + maskWidth / 2,
+        y + maskHeight / 2,
+        maskWidth / 2,
+        maskHeight / 2,
+        0,
+        0,
+        Math.PI * 2,
+      );
+    } else if (mask.type === 'path' && mask.path) {
+      try {
+        const subpath = new Path2D(mask.path);
+        const matrix = new DOMMatrix()
+          .translate(x, y)
+          .scale(maskWidth, maskHeight);
+        path.addPath(subpath, matrix);
+      } catch {
+        path.rect(x, y, maskWidth, maskHeight);
+      }
+    } else {
+      path.rect(x, y, maskWidth, maskHeight);
+    }
+  }
+  context.clip(path, inverted ? 'evenodd' : 'nonzero');
+}
+
 function withClipTransform(
   context: CanvasRenderingContext2D,
   clip: Clip,
+  frame: number,
+  width: number,
+  height: number,
   origin: Point,
   draw: () => void,
 ): void {
-  const transform = clip.transform;
+  const localFrame = frame - clip.startFrame;
+  const transform = sampleTransform(clip.transform, clip.keyframes, localFrame);
   context.save();
   context.translate(origin.x + transform.x, origin.y + transform.y);
   context.rotate((transform.rotation * Math.PI) / 180);
   context.scale(transform.scale, transform.scale);
-  context.globalAlpha = transform.opacity;
+  context.translate(
+    (0.5 - transform.anchorX) * width,
+    (0.5 - transform.anchorY) * height,
+  );
+  context.globalAlpha = transform.opacity * clipFadeOpacity(clip, localFrame);
   context.globalCompositeOperation = BLEND_MODES[clip.blendMode];
+  context.filter = effectsFilter(clip);
+  applyMasks(context, clip, width, height);
   draw();
   context.restore();
+}
+
+function drawCompositionPlaceholder(
+  context: CanvasRenderingContext2D,
+  clip: Extract<Clip, { type: 'composition' }>,
+  width: number,
+  height: number,
+): void {
+  context.fillStyle = 'rgba(17, 19, 21, 0.9)';
+  context.fillRect(-width / 2, -height / 2, width, height);
+  context.strokeStyle = 'rgba(201, 164, 106, 0.7)';
+  context.lineWidth = 3;
+  context.setLineDash([10, 8]);
+  context.strokeRect(-width / 2 + 4, -height / 2 + 4, width - 8, height - 8);
+  context.setLineDash([]);
+  context.fillStyle = '#ece6dc';
+  context.font = '600 34px "Instrument Sans"';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(clip.name, 0, 0);
 }
 
 function drawMedia(
@@ -426,23 +547,32 @@ export function renderFrame(
     if (!clip) {
       continue;
     }
-    if (clip.type === 'composition') {
-      continue;
-    }
     const drawnLayer = (() => {
       if (clip.type === 'video' || clip.type === 'image') {
         if (!mediaReady(options.pool.media(clip.assetId))) {
           missing.add(clip.assetId);
           return false;
         }
-        withClipTransform(context, clip, { x: width / 2, y: height / 2 }, () =>
-          drawMedia(context, clip, options.pool, width, height),
+        withClipTransform(
+          context,
+          clip,
+          frame,
+          width,
+          height,
+          { x: width / 2, y: height / 2 },
+          () => drawMedia(context, clip, options.pool, width, height),
         );
         return true;
       }
       if (clip.type === 'text') {
-        withClipTransform(context, clip, { x: width / 2, y: height / 2 }, () =>
-          drawText(context, clip, width),
+        withClipTransform(
+          context,
+          clip,
+          frame,
+          width,
+          height,
+          { x: width / 2, y: height / 2 },
+          () => drawText(context, clip, width),
         );
         return true;
       }
@@ -450,14 +580,35 @@ export function renderFrame(
         withClipTransform(
           context,
           clip,
+          frame,
+          width,
+          height,
           { x: width / 2, y: height * 0.84 },
           () => drawCaption(context, clip, width, frame),
         );
         return true;
       }
       if (clip.type === 'shape') {
-        withClipTransform(context, clip, { x: width / 2, y: height / 2 }, () =>
-          drawPath(context, clip, width, height),
+        withClipTransform(
+          context,
+          clip,
+          frame,
+          width,
+          height,
+          { x: width / 2, y: height / 2 },
+          () => drawPath(context, clip, width, height),
+        );
+        return true;
+      }
+      if (clip.type === 'composition') {
+        withClipTransform(
+          context,
+          clip,
+          frame,
+          width,
+          height,
+          { x: width / 2, y: height / 2 },
+          () => drawCompositionPlaceholder(context, clip, width, height),
         );
         return true;
       }
