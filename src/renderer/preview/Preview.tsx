@@ -19,6 +19,7 @@ import {
 import { sequenceDurationFrames, visualTracksInOrder } from '@kerf/engine';
 import { IconButton, cn } from '@kerf/ui';
 import { useStudio, useStudioStoreApi } from '../state/StudioProvider';
+import { selectSelectedClip } from '../state/selectors';
 
 function syncVideos(
   sequence: Sequence,
@@ -104,6 +105,7 @@ function sequenceSpec(width: number, height: number, rate: FrameRate): string {
 export function Preview() {
   const snapshot = useStudio((state) => state.snapshot);
   const selection = useStudio((state) => state.selection);
+  const selectedClip = useStudio(selectSelectedClip);
   const playhead = useStudio((state) => state.playhead);
   const playing = useStudio((state) => state.playing);
   const setPlayhead = useStudio((state) => state.setPlayhead);
@@ -208,12 +210,6 @@ export function Preview() {
   }
 
   const empty = sequence.tracks.every((track) => track.clips.length === 0);
-  const selectedClip =
-    selection.clipIds.length === 1
-      ? sequence.tracks
-          .flatMap((track) => track.clips)
-          .find((clip) => clip.id === selection.clipIds[0])
-      : null;
 
   return (
     <section className="k-stage" aria-label="Preview">

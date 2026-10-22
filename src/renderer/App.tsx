@@ -1,4 +1,8 @@
+import { useCallback, useState } from 'react';
 import { StudioShell } from '@kerf/ui';
+import { CommandPalette } from './commands/CommandPalette';
+import { ShortcutsDialog } from './commands/ShortcutsDialog';
+import { useGlobalShortcuts } from './commands/use-global-shortcuts';
 import { FootageBin } from './FootageBin';
 import { ProjectBrowserScreen } from './ProjectBrowserScreen';
 import { useStudio } from './state/StudioProvider';
@@ -35,6 +39,20 @@ export default function App() {
   const toasts = useStudio((state) => state.toasts);
   const dismissToast = useStudio((state) => state.dismissToast);
 
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
+  const showShortcutsFromPalette = useCallback(() => {
+    setPaletteOpen(false);
+    setShortcutsOpen(true);
+  }, []);
+  useGlobalShortcuts({
+    onOpenPalette: openPalette,
+    onOpenShortcuts: openShortcuts,
+    enabled: Boolean(snapshot) && !paletteOpen && !shortcutsOpen,
+  });
+
   if (!snapshot) {
     return (
       <ProjectBrowserScreen
@@ -54,33 +72,42 @@ export default function App() {
   const { sequence } = project;
 
   return (
-    <StudioShell
-      projectName={project.name}
-      sequenceLabel={sequenceLabel(
-        sequence.width,
-        sequence.height,
-        sequence.frameRate.numerator,
-        sequence.frameRate.denominator,
-      )}
-      assetCount={assets.length}
-      toasts={toasts}
-      onDismissToast={dismissToast}
-      stage={<Preview />}
-      timeline={<Timeline />}
-      inspector={<Inspector />}
-      leftPanel={
-        <FootageBin
-          assets={assets}
-          jobs={jobs}
-          busy={busy}
-          error={error}
-          onImport={importFootage}
-          onRelink={relinkAsset}
-          onCancelJob={cancelJob}
-          onRefresh={refreshAssets}
-        />
-      }
-      onOpenProject={() => void closeProject()}
-    />
+    <>
+      <StudioShell
+        projectName={project.name}
+        sequenceLabel={sequenceLabel(
+          sequence.width,
+          sequence.height,
+          sequence.frameRate.numerator,
+          sequence.frameRate.denominator,
+        )}
+        assetCount={assets.length}
+        toasts={toasts}
+        onDismissToast={dismissToast}
+        stage={<Preview />}
+        timeline={<Timeline />}
+        inspector={<Inspector />}
+        leftPanel={
+          <FootageBin
+            assets={assets}
+            jobs={jobs}
+            busy={busy}
+            error={error}
+            onImport={importFootage}
+            onRelink={relinkAsset}
+            onCancelJob={cancelJob}
+            onRefresh={refreshAssets}
+          />
+        }
+        onOpenProject={() => void closeProject()}
+        onShowShortcuts={openShortcuts}
+      />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onShowShortcuts={showShortcutsFromPalette}
+      />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+    </>
   );
 }

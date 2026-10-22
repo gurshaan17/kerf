@@ -52,6 +52,7 @@ export interface StudioShellProps {
   onDismissToast?: (id: string) => void;
   onExport?: () => void;
   onOpenProject?: () => void;
+  onShowShortcuts?: () => void;
 }
 
 type TrackKind = 'video' | 'audio';
@@ -396,6 +397,7 @@ export function StudioShell({
   onDismissToast,
   onExport,
   onOpenProject,
+  onShowShortcuts,
 }: StudioShellProps) {
   const [rail, setRail] = useState('media');
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -414,10 +416,11 @@ export function StudioShell({
 
   const shortcuts = [
     { label: 'Play or pause', keys: ['Space'] },
-    { label: 'Split at playhead', keys: [isMac ? '⌘' : 'Ctrl', 'K'] },
+    { label: 'Split at playhead', keys: [isMac ? '⌘' : 'Ctrl', 'B'] },
     { label: 'Undo', keys: [isMac ? '⌘' : 'Ctrl', 'Z'] },
-    { label: 'Command palette', keys: [isMac ? '⌘' : 'Ctrl', '⇧', 'P'] },
+    { label: 'Command palette', keys: [isMac ? '⌘' : 'Ctrl', 'K'] },
     { label: 'Nudge by one frame', keys: ['←', '→'] },
+    { label: 'Add marker', keys: ['M'] },
   ];
 
   return (
@@ -439,7 +442,13 @@ export function StudioShell({
             tooltip="Keyboard shortcuts"
             size="sm"
             icon={<Keyboard size={15} />}
-            onClick={() => setShortcutsOpen(true)}
+            onClick={() => {
+              if (onShowShortcuts) {
+                onShowShortcuts();
+                return;
+              }
+              setShortcutsOpen(true);
+            }}
           />
           <Button
             variant="ghost"

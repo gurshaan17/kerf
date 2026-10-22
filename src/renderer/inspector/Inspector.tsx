@@ -44,6 +44,7 @@ import {
   cn,
 } from '@kerf/ui';
 import { useStudio } from '../state/StudioProvider';
+import { selectSelectedClip } from '../state/selectors';
 
 type InspectorTab = 'clip' | 'effects' | 'motion' | 'masks';
 
@@ -1592,19 +1593,7 @@ function SequenceSummary() {
 }
 
 export function Inspector() {
-  const snapshot = useStudio((state) => state.snapshot);
-  const selection = useStudio((state) => state.selection);
-  const clip = useMemo(() => {
-    if (!snapshot || selection.clipIds.length !== 1) {
-      return null;
-    }
-    const id = selection.clipIds[0];
-    return (
-      snapshot.project.sequence.tracks
-        .flatMap((track) => track.clips)
-        .find((candidate) => candidate.id === id) ?? null
-    );
-  }, [selection.clipIds, snapshot]);
+  const clip = useStudio(selectSelectedClip);
 
   if (!clip) {
     return <SequenceSummary />;

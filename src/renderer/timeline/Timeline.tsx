@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
@@ -32,52 +32,26 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import type { Clip, FrameRate, Marker, Track, TrackKind } from '@kerf/model';
-import {
-  createMarker,
-  createTrack,
-  formatDuration,
-  fpsToNumber,
-  secondsToFrames,
-} from '@kerf/model';
+import { formatDuration, fpsToNumber, secondsToFrames } from '@kerf/model';
 import {
   findClip,
   isClipCompatible,
-  nextTrackOrder,
   sequenceDurationFrames,
   snapStart,
   tracksInOrder,
 } from '@kerf/engine';
 import { Button, IconButton, Input, cn } from '@kerf/ui';
 import { useStudio } from '../state/StudioProvider';
+import { useEditorCommands } from '../commands/editor-commands';
 import { ASSET_DRAG_MIME } from '../drag';
-import {
-  assetForClip,
-  deleteClipsCommand,
-  duplicateClipsCommand,
-  insertAssetCommand,
-  pasteClipsCommand,
-  splitAtFrameCommand,
-} from './clip-commands';
+import { assetForClip, insertAssetCommand } from './clip-commands';
+import { clipsInWindow, visibleFrameWindow } from './windowing';
 
 const HEADER_WIDTH = 112;
 const SNAP_PIXELS = 7;
 
 function clampNumber(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
-}
-
-function nextTrackName(tracks: readonly Track[], kind: TrackKind): string {
-  const count = tracks.filter((track) => track.kind === kind).length + 1;
-  switch (kind) {
-    case 'video':
-      return `Video ${count}`;
-    case 'audio':
-      return `Audio ${count}`;
-    case 'caption':
-      return count === 1 ? 'Captions' : `Captions ${count}`;
-    case 'overlay':
-      return `Overlay ${count}`;
-  }
 }
 
 type TimelineMenu =
@@ -399,8 +373,8 @@ export function Timeline() {
   const undo = useStudio((state) => state.undo);
   const redo = useStudio((state) => state.redo);
   const selectClip = useStudio((state) => state.selectClip);
-  const clearSelection = useStudio((state) => state.clearSelection);
   const pushToast = useStudio((state) => state.pushToast);
+  const commands = useEditorCommands();
   const setPlayhead = useStudio((state) => state.setPlayhead);
   const setPixelsPerFrame = useStudio((state) => state.setPixelsPerFrame);
   const zoomBy = useStudio((state) => state.zoomBy);
@@ -411,12 +385,12 @@ export function Timeline() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(900);
+  const [scrollLeft, setScrollLeft] = useState(0);
   const [scrubbing, setScrubbing] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [menu, setMenu] = useState<TimelineMenu | null>(null);
   const [dropTrackId, setDropTrackId] = useState<string | null>(null);
-  const clipboardRef = useRef<readonly Clip[]>([]);
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -442,11 +416,6 @@ export function Timeline() {
     };
   }, []);
 
-  const projectId = snapshot?.project.id;
-  useEffect(() => {
-    clipboardRef.current = [];
-  }, [projectId]);
-
   const sequence = snapshot?.project.sequence;
   const tracks = useMemo(
     () => (sequence ? tracksInOrder(sequence) : []),
@@ -465,13 +434,30 @@ export function Timeline() {
     duration * pixelsPerFrame + 120,
   );
   const stepFrames = tickStepFrames(pixelsPerFrame, rate);
+  const clipWindow = useMemo(
+    () =>
+      visibleFrameWindow(
+        scrollLeft,
+        Math.max(1, viewportWidth - HEADER_WIDTH),
+        pixelsPerFrame,
+      ),
+    [pixelsPerFrame, scrollLeft, viewportWidth],
+  );
   const ticks = useMemo(() => {
     const next: number[] = [];
-    for (let frame = 0; frame <= duration; frame += stepFrames) {
+    const first = Math.max(
+      0,
+      Math.floor(clipWindow.startFrame / stepFrames) * stepFrames,
+    );
+    for (
+      let frame = first;
+      frame <= Math.min(duration, clipWindow.endFrame);
+      frame += stepFrames
+    ) {
       next.push(frame);
     }
     return next;
-  }, [duration, stepFrames]);
+  }, [clipWindow, duration, stepFrames]);
 
   const selectedIds = selection.clipIds;
   const selectedSet = new Set(selectedIds);
@@ -803,48 +789,18 @@ export function Timeline() {
     setPixelsPerFrame((viewportWidth - HEADER_WIDTH - 48) / visibleFrames);
   };
 
-  const split = () => {
-    if (!sequence) {
-      return;
-    }
-    const command = splitAtFrameCommand(sequence, playhead, selectedIds);
-    if (command) {
-      void apply(command, 'Split at playhead');
-    }
-  };
+  const split = () => commands.split();
 
-  const remove = (ripple = rippleEnabled) => {
-    if (!sequence || selectedIds.length === 0) {
-      return;
-    }
-    const command = deleteClipsCommand(sequence, selectedIds, ripple);
-    if (command) {
-      void apply(command, ripple ? 'Ripple delete' : 'Delete clips');
-    }
-  };
+  const remove = (ripple = rippleEnabled) => commands.deleteSelected(ripple);
 
-  const duplicate = () => {
-    if (!sequence || selectedIds.length === 0) {
-      return;
-    }
-    const command = duplicateClipsCommand(sequence, selectedIds);
-    if (command) {
-      void apply(command, 'Duplicate clips');
-    }
-  };
+  const duplicate = () => commands.duplicateSelected();
 
   const addTrack = (kind: TrackKind) => {
-    if (!sequence) {
-      return;
-    }
-    const track = createTrack({
-      kind,
-      name: nextTrackName(tracks, kind),
-      order: nextTrackOrder(sequence),
-    });
-    void apply({ type: 'track.add', track }, 'Add track');
+    commands.addTrack(kind);
     setMenu(null);
   };
+
+  const addMarker = () => commands.addMarker();
 
   const removeTrack = (track: Track) => {
     void apply({ type: 'track.remove', trackId: track.id }, 'Remove track');
@@ -863,80 +819,6 @@ export function Timeline() {
     );
     setMenu(null);
   };
-
-  const addMarker = () => {
-    if (!sequence) {
-      return;
-    }
-    const frame = Math.round(playhead);
-    if (sequence.markers.some((marker) => marker.frame === frame)) {
-      pushToast({
-        title: 'Marker already exists',
-        description: 'Move the playhead or edit the existing marker.',
-        tone: 'warning',
-      });
-      return;
-    }
-    const marker = createMarker({
-      frame,
-      label: `Marker ${sequence.markers.length + 1}`,
-    });
-    void apply({ type: 'marker.add', marker }, 'Add marker');
-  };
-
-  const copySelection = useCallback(() => {
-    if (!sequence) {
-      return;
-    }
-    const clips = selectedIds.flatMap((id) => {
-      const location = findClip(sequence, id);
-      return location ? [location.clip] : [];
-    });
-    if (clips.length === 0) {
-      pushToast({
-        title: 'Nothing to copy',
-        description: 'Select one or more clips first.',
-        tone: 'warning',
-      });
-      return;
-    }
-    clipboardRef.current = clips;
-    pushToast({
-      title:
-        clips.length === 1 ? '1 clip copied' : `${clips.length} clips copied`,
-      description: 'Press ⌘V to paste at the playhead.',
-      tone: 'info',
-    });
-  }, [pushToast, selectedIds, sequence]);
-
-  const pasteSelection = useCallback(async () => {
-    if (!sequence) {
-      return;
-    }
-    if (clipboardRef.current.length === 0) {
-      pushToast({
-        title: 'Nothing to paste',
-        description: 'Copy clips from the timeline first.',
-        tone: 'warning',
-      });
-      return;
-    }
-    const pasted = pasteClipsCommand(sequence, clipboardRef.current, playhead);
-    if (!pasted) {
-      pushToast({
-        title: 'Cannot paste here',
-        description: 'Unlock a compatible track before pasting.',
-        tone: 'warning',
-      });
-      return;
-    }
-    const result = await apply(pasted.command, 'Paste clips');
-    if (!result) {
-      return;
-    }
-    clearSelection();
-    pasted.clipIds.forEach((id, index) => selectClip(id, index > 0));
-  }, [apply, clearSelection, playhead, pushToast, selectClip, sequence]);
 
   const dropAsset = async (
     event: ReactDragEvent<HTMLDivElement>,
@@ -981,31 +863,6 @@ export function Timeline() {
     }
   };
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.altKey || !(event.metaKey || event.ctrlKey) || !sequence) {
-        return;
-      }
-      const target = event.target;
-      if (
-        target instanceof HTMLElement &&
-        target.closest('input, textarea, select, [contenteditable="true"]')
-      ) {
-        return;
-      }
-      const key = event.key.toLowerCase();
-      if (key === 'c') {
-        event.preventDefault();
-        copySelection();
-      } else if (key === 'v') {
-        event.preventDefault();
-        void pasteSelection();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [copySelection, pasteSelection, sequence]);
-
   if (!sequence) {
     return null;
   }
@@ -1043,7 +900,7 @@ export function Timeline() {
           <IconButton
             label="Blade tool"
             size="sm"
-            tooltip="Split at playhead (⌘K)"
+            tooltip="Blade tool (B)"
             active={tool === 'blade'}
             icon={<Scissors size={14} />}
             onClick={() => {
@@ -1055,7 +912,7 @@ export function Timeline() {
           <IconButton
             label="Split at playhead"
             size="sm"
-            tooltip="Split at playhead (⌘K)"
+            tooltip="Split at playhead (⌘B)"
             icon={<Scissors size={13} />}
             onClick={split}
           />
@@ -1159,7 +1016,11 @@ export function Timeline() {
         </div>
       </div>
 
-      <div className="k-timeline__scroll" ref={scrollRef}>
+      <div
+        className="k-timeline__scroll"
+        ref={scrollRef}
+        onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
+      >
         <div
           className="k-timeline__grid"
           style={{ minWidth: `${HEADER_WIDTH + contentWidth}px` }}
@@ -1197,52 +1058,58 @@ export function Timeline() {
                   {timecodeLabel(frame, rate)}
                 </span>
               ))}
-              {sequence.markers.map((marker) => (
-                <button
-                  key={marker.id}
-                  type="button"
-                  className={cn(
-                    'k-ruler-marker',
-                    menu?.kind === 'marker' &&
-                      menu.markerId === marker.id &&
-                      'is-selected',
-                  )}
-                  style={{ left: `${marker.frame * pixelsPerFrame}px` }}
-                  title={`${marker.label || 'Marker'} · ${timecodeLabel(marker.frame, rate)}`}
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                  }}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setPlayhead(marker.frame);
-                  }}
-                  onDoubleClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setMenu({
-                      kind: 'marker',
-                      x: event.clientX,
-                      y: event.clientY,
-                      markerId: marker.id,
-                    });
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setMenu({
-                      kind: 'marker',
-                      x: event.clientX,
-                      y: event.clientY,
-                      markerId: marker.id,
-                    });
-                  }}
-                >
-                  <Flag size={9} aria-hidden="true" />
-                  <span>
-                    {marker.label || timecodeLabel(marker.frame, rate)}
-                  </span>
-                </button>
-              ))}
+              {sequence.markers
+                .filter(
+                  (marker) =>
+                    marker.frame >= clipWindow.startFrame &&
+                    marker.frame <= clipWindow.endFrame,
+                )
+                .map((marker) => (
+                  <button
+                    key={marker.id}
+                    type="button"
+                    className={cn(
+                      'k-ruler-marker',
+                      menu?.kind === 'marker' &&
+                        menu.markerId === marker.id &&
+                        'is-selected',
+                    )}
+                    style={{ left: `${marker.frame * pixelsPerFrame}px` }}
+                    title={`${marker.label || 'Marker'} · ${timecodeLabel(marker.frame, rate)}`}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                    }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setPlayhead(marker.frame);
+                    }}
+                    onDoubleClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setMenu({
+                        kind: 'marker',
+                        x: event.clientX,
+                        y: event.clientY,
+                        markerId: marker.id,
+                      });
+                    }}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setMenu({
+                        kind: 'marker',
+                        x: event.clientX,
+                        y: event.clientY,
+                        markerId: marker.id,
+                      });
+                    }}
+                  >
+                    <Flag size={9} aria-hidden="true" />
+                    <span>
+                      {marker.label || timecodeLabel(marker.frame, rate)}
+                    </span>
+                  </button>
+                ))}
               <span
                 className="k-ruler-playhead"
                 style={{ left: `${playhead * pixelsPerFrame}px` }}
@@ -1321,7 +1188,7 @@ export function Timeline() {
                   void dropAsset(event, track);
                 }}
               >
-                {track.clips.map((clip) => (
+                {clipsInWindow(track.clips, clipWindow).map((clip) => (
                   <ClipBar
                     key={clip.id}
                     clip={clip}
@@ -1425,13 +1292,13 @@ export function Timeline() {
           >
             <Scissors size={13} />
             Split at playhead
-            <span className="k-context-menu__hint">⌘K</span>
+            <span className="k-context-menu__hint">⌘B</span>
           </button>
           <button
             type="button"
             role="menuitem"
             onClick={() => {
-              copySelection();
+              commands.copySelected();
               setMenu(null);
             }}
           >
@@ -1442,9 +1309,9 @@ export function Timeline() {
           <button
             type="button"
             role="menuitem"
-            disabled={clipboardRef.current.length === 0}
+            disabled={!commands.hasClipboard()}
             onClick={() => {
-              void pasteSelection();
+              void commands.pasteClipboard();
               setMenu(null);
             }}
           >
