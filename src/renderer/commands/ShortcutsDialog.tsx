@@ -32,6 +32,7 @@ export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
           { label: 'Undo', keys: [mod, 'Z'] },
           { label: 'Redo', keys: ['⇧', mod, 'Z'] },
           { label: 'Import footage', keys: [mod, 'I'] },
+          { label: 'Export video', keys: [mod, 'E'] },
         ],
       },
       {

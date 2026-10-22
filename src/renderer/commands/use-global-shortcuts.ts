@@ -4,6 +4,7 @@ import { useEditorCommands } from './editor-commands';
 export interface GlobalShortcutsOptions {
   readonly onOpenPalette: () => void;
   readonly onOpenShortcuts: () => void;
+  readonly onOpenExport?: () => void;
   readonly enabled?: boolean;
 }
 
@@ -24,6 +25,7 @@ function isButtonTarget(target: EventTarget | null): boolean {
 export function useGlobalShortcuts({
   onOpenPalette,
   onOpenShortcuts,
+  onOpenExport,
   enabled = true,
 }: GlobalShortcutsOptions): void {
   const commands = useEditorCommands();
@@ -93,6 +95,12 @@ export function useGlobalShortcuts({
           case 'i':
             event.preventDefault();
             void commands.importFootage();
+            return;
+          case 'e':
+            if (onOpenExport) {
+              event.preventDefault();
+              onOpenExport();
+            }
             return;
           case '=':
           case '+':
@@ -180,5 +188,5 @@ export function useGlobalShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [commands, enabled, onOpenPalette, onOpenShortcuts]);
+  }, [commands, enabled, onOpenExport, onOpenPalette, onOpenShortcuts]);
 }

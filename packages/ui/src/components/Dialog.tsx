@@ -10,6 +10,7 @@ export interface DialogProps {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
+  panelClassName?: string;
 }
 
 export function Dialog({
@@ -19,6 +20,7 @@ export function Dialog({
   description,
   children,
   footer,
+  panelClassName,
 }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -73,7 +75,14 @@ export function Dialog({
       aria-describedby={description ? descriptionId : undefined}
       onClick={handleBackdropClick}
     >
-      <div className="overflow-hidden rounded-lg border border-line-strong bg-surface-2 shadow-3">
+      <div
+        className={[
+          'overflow-hidden rounded-lg border border-line-strong bg-surface-2 shadow-3',
+          panelClassName,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
         <header className="flex items-start justify-between gap-4 px-[18px] pt-[18px]">
           <div>
             <h2

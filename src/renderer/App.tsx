@@ -9,6 +9,7 @@ import { useStudio } from './state/StudioProvider';
 import { Timeline } from './timeline/Timeline';
 import { Preview } from './preview/Preview';
 import { Inspector } from './inspector/Inspector';
+import { ExportDialog } from './export/ExportDialog';
 
 function sequenceLabel(
   width: number,
@@ -38,11 +39,17 @@ export default function App() {
   const refreshAssets = useStudio((state) => state.refreshAssets);
   const toasts = useStudio((state) => state.toasts);
   const dismissToast = useStudio((state) => state.dismissToast);
+  const exports = useStudio((state) => state.exports);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
+  const openExport = useCallback(() => {
+    setPaletteOpen(false);
+    setExportOpen(true);
+  }, []);
   const showShortcutsFromPalette = useCallback(() => {
     setPaletteOpen(false);
     setShortcutsOpen(true);
@@ -50,7 +57,8 @@ export default function App() {
   useGlobalShortcuts({
     onOpenPalette: openPalette,
     onOpenShortcuts: openShortcuts,
-    enabled: Boolean(snapshot) && !paletteOpen && !shortcutsOpen,
+    onOpenExport: openExport,
+    enabled: Boolean(snapshot) && !paletteOpen && !shortcutsOpen && !exportOpen,
   });
 
   if (!snapshot) {
@@ -70,6 +78,9 @@ export default function App() {
 
   const { project, assets, jobs } = snapshot;
   const { sequence } = project;
+  const exporting = exports.some(
+    (record) => record.status === 'rendering' || record.status === 'encoding',
+  );
 
   return (
     <>
@@ -101,13 +112,17 @@ export default function App() {
         }
         onOpenProject={() => void closeProject()}
         onShowShortcuts={openShortcuts}
+        onExport={openExport}
+        exporting={exporting}
       />
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         onShowShortcuts={showShortcutsFromPalette}
+        onExport={openExport}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
     </>
   );
 }

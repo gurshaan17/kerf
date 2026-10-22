@@ -4,6 +4,7 @@ import {
   AudioLines,
   Copy,
   CopyPlus,
+  FileVideo,
   Film,
   Flag,
   FolderOpen,
@@ -43,12 +44,14 @@ export interface CommandPaletteProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onShowShortcuts: () => void;
+  readonly onExport: () => void;
 }
 
 export function CommandPalette({
   open,
   onOpenChange,
   onShowShortcuts,
+  onExport,
 }: CommandPaletteProps) {
   const commands = useEditorCommands();
   const snapshot = useStudio((state) => state.snapshot);
@@ -276,6 +279,15 @@ export function CommandPalette({
         run: () => void commands.importFootage(),
       },
       {
+        id: 'file.export',
+        label: 'Export video',
+        keywords: 'render mp4 encode output download',
+        shortcut: '⌘E',
+        icon: <FileVideo size={14} />,
+        disabled: !hasSequence,
+        run: onExport,
+      },
+      {
         id: 'file.shortcuts',
         label: 'Keyboard shortcuts',
         keywords: 'help keys reference',
@@ -294,6 +306,7 @@ export function CommandPalette({
     ];
   }, [
     commands,
+    onExport,
     onShowShortcuts,
     open,
     playing,
