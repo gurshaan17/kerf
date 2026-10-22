@@ -3,6 +3,7 @@ import { FootageBin } from './FootageBin';
 import { ProjectBrowserScreen } from './ProjectBrowserScreen';
 import { useStudio } from './state/StudioProvider';
 import { Timeline } from './timeline/Timeline';
+import { Preview } from './preview/Preview';
 
 function sequenceLabel(
   width: number,
@@ -63,6 +64,7 @@ export default function App() {
       assetCount={assets.length}
       toasts={toasts}
       onDismissToast={dismissToast}
+      stage={<Preview />}
       timeline={<Timeline />}
       leftPanel={
         <FootageBin

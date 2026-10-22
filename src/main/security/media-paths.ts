@@ -276,6 +276,9 @@ export async function serveMediaRequest(
   const headers = new Headers({
     'Content-Type': target.mimeType,
     'Accept-Ranges': 'bytes',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Expose-Headers':
+      'Content-Length, Content-Range, Accept-Ranges',
     'Cache-Control': target.cacheControl,
   });
 
