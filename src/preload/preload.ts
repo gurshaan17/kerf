@@ -3,6 +3,11 @@ import type { IpcRendererEvent } from 'electron';
 import type { Asset, EditCommand } from '@kerf/model';
 import {
   KERF_IPC,
+  type AnalysisAssetStatus,
+  type AnalysisRunRequest,
+  type AnalysisRunResult,
+  type CompositionSaveRequest,
+  type CompositionSaveResult,
   type EditResult,
   type ExportOtioResult,
   type ExportRecord,
@@ -15,6 +20,13 @@ import {
   type ProjectHistoryState,
   type ProjectSnapshot,
   type ProjectSummary,
+  type ProviderAccount,
+  type ProviderSaveRequest,
+  type ProviderTestResult,
+  type SearchRequest,
+  type SearchResponse,
+  type WhisperModelInfo,
+  type WhisperModelInstall,
 } from '../shared/contracts';
 
 const invoke = <Result>(channel: string, ...args: unknown[]): Promise<Result> =>
@@ -72,6 +84,29 @@ const bridge: KerfBridge = {
       invoke<ExportRecord[]>(KERF_IPC.export.list, projectId),
     reveal: (id) => invoke<void>(KERF_IPC.export.reveal, id),
     otio: () => invoke<ExportOtioResult | null>(KERF_IPC.export.otio),
+  },
+  analysis: {
+    run: (request: AnalysisRunRequest) =>
+      invoke<AnalysisRunResult>(KERF_IPC.analysis.run, request),
+    status: () => invoke<AnalysisAssetStatus[]>(KERF_IPC.analysis.status),
+    search: (request: SearchRequest) =>
+      invoke<SearchResponse>(KERF_IPC.analysis.search, request),
+    providers: () => invoke<ProviderAccount[]>(KERF_IPC.analysis.providers),
+    saveProvider: (request: ProviderSaveRequest) =>
+      invoke<ProviderAccount>(KERF_IPC.analysis.saveProvider, request),
+    deleteProvider: (id) =>
+      invoke<boolean>(KERF_IPC.analysis.deleteProvider, id),
+    testProvider: (id) =>
+      invoke<ProviderTestResult>(KERF_IPC.analysis.testProvider, id),
+    models: () => invoke<WhisperModelInfo[]>(KERF_IPC.analysis.models),
+    downloadModel: (id) =>
+      invoke<WhisperModelInstall>(KERF_IPC.analysis.downloadModel, id),
+    deleteModel: (id) => invoke<boolean>(KERF_IPC.analysis.deleteModel, id),
+  },
+  motion: {
+    save: (request: CompositionSaveRequest) =>
+      invoke<CompositionSaveResult>(KERF_IPC.motion.save, request),
+    delete: (id) => invoke<ProjectSnapshot>(KERF_IPC.motion.delete, id),
   },
   events: {
     subscribe(listener: (event: KerfEvent) => void) {

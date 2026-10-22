@@ -137,6 +137,73 @@ ALTER TABLE jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX jobs_status_created_idx ON jobs(status, created_at);
 `;
 
+const ANALYSIS_AND_MOTION_SCHEMA = `
+CREATE TABLE compositions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  source TEXT NOT NULL,
+  width INTEGER NOT NULL CHECK (width > 0),
+  height INTEGER NOT NULL CHECK (height > 0),
+  duration_frames INTEGER NOT NULL CHECK (duration_frames > 0),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX compositions_project_id_idx ON compositions(project_id);
+
+CREATE TABLE provider_accounts (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  label TEXT NOT NULL,
+  base_url TEXT,
+  model TEXT,
+  key_ciphertext BLOB,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  vision_consent INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE app_settings (
+  key TEXT PRIMARY KEY,
+  value_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE embedding_vectors (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+  source_kind TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  vector_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX embedding_vectors_project_idx ON embedding_vectors(project_id);
+`;
+
+const SEARCH_SCHEMA = `
+CREATE VIRTUAL TABLE transcript_fts USING fts5(
+  text,
+  project_id UNINDEXED,
+  asset_id UNINDEXED,
+  transcript_id UNINDEXED,
+  start_frame UNINDEXED,
+  end_frame UNINDEXED,
+  tokenize = 'porter unicode61'
+);
+CREATE VIRTUAL TABLE scene_fts USING fts5(
+  text,
+  project_id UNINDEXED,
+  asset_id UNINDEXED,
+  scene_id UNINDEXED,
+  start_frame UNINDEXED,
+  end_frame UNINDEXED,
+  tokenize = 'porter unicode61'
+);
+`;
+
 export const DATABASE_MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -157,6 +224,19 @@ export const DATABASE_MIGRATIONS: readonly Migration[] = [
     name: 'persistent job queue',
     up(connection) {
       connection.exec(JOB_QUEUE_COLUMNS);
+    },
+  },
+  {
+    version: 4,
+    name: 'analysis, providers and motion',
+    up(connection) {
+      connection.exec(ANALYSIS_AND_MOTION_SCHEMA);
+      try {
+        connection.exec(SEARCH_SCHEMA);
+      } catch {
+        // FTS5 is optional. SearchService falls back to LIKE queries when
+        // these tables are absent.
+      }
     },
   },
 ];

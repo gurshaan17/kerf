@@ -2,6 +2,7 @@ import type {
   Actor,
   Asset,
   BeatMap,
+  Composition,
   EditCommand,
   EditCommandEnvelope,
   FrameRate,
@@ -38,6 +39,7 @@ export interface ProjectBundle {
   readonly scenes: Scene[];
   readonly beatMaps: BeatMap[];
   readonly referenceProfiles: ReferenceProfile[];
+  readonly compositions: Composition[];
 }
 
 export type JobStatus =
@@ -82,6 +84,10 @@ export interface ProjectSnapshot {
   readonly summary: ProjectSummary;
   readonly project: Project;
   readonly assets: Asset[];
+  readonly transcripts: Transcript[];
+  readonly scenes: Scene[];
+  readonly beatMaps: BeatMap[];
+  readonly compositions: Composition[];
   readonly jobs: JobSummary[];
   readonly history: ProjectHistoryState;
 }
@@ -100,7 +106,14 @@ export type ProjectEvent =
   | {
       readonly type: 'project.changed';
       readonly snapshot: ProjectSnapshot;
-      readonly reason: 'edit' | 'undo' | 'redo' | 'assets' | 'metadata';
+      readonly reason:
+        | 'edit'
+        | 'undo'
+        | 'redo'
+        | 'assets'
+        | 'metadata'
+        | 'analysis'
+        | 'compositions';
     }
   | {
       readonly type: 'project.closed';
@@ -110,6 +123,125 @@ export type ProjectEvent =
 export interface JobEvent {
   readonly type: 'jobs.changed';
   readonly job: JobSummary;
+}
+
+export type AnalysisKind =
+  | 'transcript'
+  | 'scenes'
+  | 'beats'
+  | 'vision'
+  | 'embeddings';
+
+export interface AnalysisRunRequest {
+  readonly assetId: string;
+  readonly kinds: readonly AnalysisKind[];
+}
+
+export interface AnalysisSkip {
+  readonly kind: AnalysisKind;
+  readonly reason: string;
+}
+
+export interface AnalysisRunResult {
+  readonly jobs: JobSummary[];
+  readonly skipped: AnalysisSkip[];
+}
+
+export interface AnalysisAssetStatus {
+  readonly assetId: string;
+  readonly transcript: boolean;
+  readonly sceneCount: number;
+  readonly descriptions: number;
+  readonly beatMap: boolean;
+  readonly embeddings: boolean;
+}
+
+export interface SearchRequest {
+  readonly query: string;
+  readonly limit?: number;
+}
+
+export type SearchMatchKind = 'transcript' | 'scene';
+
+export interface SearchResult {
+  readonly id: string;
+  readonly kind: SearchMatchKind;
+  readonly assetId: string;
+  readonly assetName: string;
+  readonly text: string;
+  readonly startFrame: number;
+  readonly endFrame: number;
+  readonly score: number;
+  readonly thumbnailPath: string | null;
+}
+
+export interface SearchResponse {
+  readonly results: SearchResult[];
+  readonly vectorSearch: boolean;
+}
+
+export type ProviderKind =
+  | 'openai'
+  | 'anthropic'
+  | 'google'
+  | 'xai'
+  | 'ollama'
+  | 'openai-compatible';
+
+export interface ProviderAccount {
+  readonly id: string;
+  readonly kind: ProviderKind;
+  readonly label: string;
+  readonly baseUrl: string | null;
+  readonly model: string | null;
+  readonly hasKey: boolean;
+  readonly enabled: boolean;
+  readonly visionConsent: boolean;
+}
+
+export interface ProviderSaveRequest {
+  readonly id?: string;
+  readonly kind: ProviderKind;
+  readonly label: string;
+  readonly baseUrl?: string | null;
+  readonly model?: string | null;
+  readonly apiKey?: string | null;
+  readonly clearKey?: boolean;
+  readonly enabled?: boolean;
+  readonly visionConsent?: boolean;
+}
+
+export interface ProviderTestResult {
+  readonly ok: boolean;
+  readonly message: string;
+}
+
+export interface WhisperModelInfo {
+  readonly id: string;
+  readonly name: string;
+  readonly fileName: string;
+  readonly sizeBytes: number;
+  readonly url: string;
+  readonly installed: boolean;
+  readonly downloadedBytes: number;
+}
+
+export interface WhisperModelInstall {
+  readonly job: JobSummary;
+}
+
+export interface CompositionSaveRequest {
+  readonly id?: string;
+  readonly name: string;
+  readonly source: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly durationFrames?: number;
+}
+
+export interface CompositionSaveResult {
+  readonly composition: Composition;
+  readonly snapshot: ProjectSnapshot;
 }
 
 export interface ExportPreset {
@@ -245,6 +377,18 @@ export const KERF_IPC = {
   analysis: {
     run: 'kerf:analysis:run',
     status: 'kerf:analysis:status',
+    search: 'kerf:analysis:search',
+    providers: 'kerf:analysis:providers',
+    saveProvider: 'kerf:analysis:save-provider',
+    deleteProvider: 'kerf:analysis:delete-provider',
+    testProvider: 'kerf:analysis:test-provider',
+    models: 'kerf:analysis:models',
+    downloadModel: 'kerf:analysis:download-model',
+    deleteModel: 'kerf:analysis:delete-model',
+  },
+  motion: {
+    save: 'kerf:motion:save',
+    delete: 'kerf:motion:delete',
   },
   mcp: {
     status: 'kerf:mcp:status',
@@ -305,6 +449,26 @@ export interface KerfBridge {
     readonly list: (projectId?: string) => Promise<ExportRecord[]>;
     readonly reveal: (id: string) => Promise<void>;
     readonly otio: () => Promise<ExportOtioResult | null>;
+  };
+  readonly analysis: {
+    readonly run: (request: AnalysisRunRequest) => Promise<AnalysisRunResult>;
+    readonly status: () => Promise<AnalysisAssetStatus[]>;
+    readonly search: (request: SearchRequest) => Promise<SearchResponse>;
+    readonly providers: () => Promise<ProviderAccount[]>;
+    readonly saveProvider: (
+      request: ProviderSaveRequest,
+    ) => Promise<ProviderAccount>;
+    readonly deleteProvider: (id: string) => Promise<boolean>;
+    readonly testProvider: (id: string) => Promise<ProviderTestResult>;
+    readonly models: () => Promise<WhisperModelInfo[]>;
+    readonly downloadModel: (id: string) => Promise<WhisperModelInstall>;
+    readonly deleteModel: (id: string) => Promise<boolean>;
+  };
+  readonly motion: {
+    readonly save: (
+      request: CompositionSaveRequest,
+    ) => Promise<CompositionSaveResult>;
+    readonly delete: (id: string) => Promise<ProjectSnapshot>;
   };
   readonly events: {
     readonly subscribe: (listener: (event: KerfEvent) => void) => () => void;

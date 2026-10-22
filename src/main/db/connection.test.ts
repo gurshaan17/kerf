@@ -102,6 +102,12 @@ describe('openDatabase', () => {
         'jobs',
         'exports',
         'reference_profiles',
+        'compositions',
+        'provider_accounts',
+        'app_settings',
+        'embedding_vectors',
+        'transcript_fts',
+        'scene_fts',
       ]) {
         expect(names.has(table)).toBe(true);
       }

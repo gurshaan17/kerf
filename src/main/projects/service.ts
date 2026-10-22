@@ -158,6 +158,21 @@ export class ProjectService {
     return snapshot;
   }
 
+  refresh(
+    reason: 'analysis' | 'compositions' | 'assets' | 'metadata' = 'analysis',
+  ): ProjectSnapshot {
+    const active = this.requireActive();
+    const bundle = this.repository.require(active.project.id);
+    this.active = {
+      ...active,
+      project: bundle.project,
+      assets: bundle.assets,
+    };
+    const snapshot = this.snapshot();
+    this.emit({ type: 'project.changed', snapshot, reason });
+    return snapshot;
+  }
+
   apply(commandInput: unknown, options: ApplyEditOptions = {}): EditResult {
     const active = this.requireActive();
     const command = editCommandSchema.parse(commandInput);
@@ -284,6 +299,10 @@ export class ProjectService {
       summary,
       project: active.project,
       assets: active.assets,
+      transcripts: this.repository.listTranscripts(active.project.id),
+      scenes: this.repository.listScenes(active.project.id),
+      beatMaps: this.repository.listBeatMaps(active.project.id),
+      compositions: this.repository.listCompositions(active.project.id),
       jobs: this.jobs(active.project.id),
       history: active.history.state,
     };

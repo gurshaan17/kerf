@@ -9,6 +9,7 @@ export const sceneSchema = z
     startFrame: z.number().int().nonnegative(),
     endFrame: z.number().int().nonnegative(),
     thumbnailPath: z.string().nullable().default(null),
+    description: z.string().nullable().default(null),
     score: z.number().min(0).max(1).default(0.5),
   })
   .refine((scene) => scene.endFrame > scene.startFrame, {

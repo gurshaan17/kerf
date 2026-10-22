@@ -40,6 +40,30 @@ const bridge: KerfBridge = {
     list: async () => [],
     cancel: async () => false,
   },
+  analysis: {
+    run: async () => ({ jobs: [], skipped: [] }),
+    status: async () => [],
+    search: async () => ({ results: [], vectorSearch: false }),
+    providers: async () => [],
+    saveProvider: async () => {
+      throw new Error('not used');
+    },
+    deleteProvider: async () => false,
+    testProvider: async () => ({ ok: false, message: 'not used' }),
+    models: async () => [],
+    downloadModel: async () => {
+      throw new Error('not used');
+    },
+    deleteModel: async () => false,
+  },
+  motion: {
+    save: async () => {
+      throw new Error('not used');
+    },
+    delete: async () => {
+      throw new Error('not used');
+    },
+  },
   export: {
     pickPath: async () => null,
     start: async () => {

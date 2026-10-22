@@ -2,6 +2,7 @@ export * from './assets';
 export * from './beats';
 export * from './clips';
 export * from './commands';
+export * from './compositions';
 export * from './effects';
 export * from './ids';
 export * from './keyframes';

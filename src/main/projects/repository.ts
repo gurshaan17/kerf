@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type {
   Asset,
   BeatMap,
+  Composition,
   CreateProjectInput,
   EditCommand,
   Project,
@@ -14,6 +15,7 @@ import type {
 import {
   assetSchema,
   beatMapSchema,
+  compositionSchema,
   createProject,
   projectSchema,
   referenceProfileSchema,
@@ -125,6 +127,11 @@ interface ChildRow {
   end_frame?: number | null;
   description?: string | null;
   confidence?: number | null;
+  source?: string | null;
+  width?: number | null;
+  height?: number | null;
+  duration_frames?: number | null;
+  updated_at?: number | null;
   bpm?: number | null;
   offset_frames?: number | null;
   beats_json?: string | null;
@@ -284,6 +291,7 @@ function sceneFromRow(row: ChildRow): Scene {
           ? row.end_frame
           : (row.start_frame ?? 0) + 1,
       thumbnailPath: null,
+      description: row.description?.trim() ? row.description : null,
       score: row.confidence ?? 0.5,
     })
   );
@@ -302,6 +310,20 @@ function beatMapFromRow(row: ChildRow): BeatMap {
       createdAt: row.created_at,
     })
   );
+}
+
+function compositionFromRow(row: ChildRow): Composition {
+  return compositionSchema.parse({
+    id: row.id,
+    projectId: row.project_id ?? '',
+    name: row.name ?? 'Composition',
+    source: row.source ?? '({ nodes: [] })',
+    width: row.width ?? 1920,
+    height: row.height ?? 1080,
+    durationFrames: row.duration_frames ?? 120,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at,
+  });
 }
 
 function referenceProfileFromRow(row: ChildRow): ReferenceProfile {
@@ -602,6 +624,24 @@ export class ProjectRepository {
     return transcript;
   }
 
+  deleteTranscriptsForAsset(assetId: string): number {
+    return this.database
+      .prepare('DELETE FROM transcripts WHERE asset_id = ?')
+      .run(assetId).changes;
+  }
+
+  deleteScenesForAsset(assetId: string): number {
+    return this.database
+      .prepare('DELETE FROM scenes WHERE asset_id = ?')
+      .run(assetId).changes;
+  }
+
+  deleteBeatMapsForAsset(assetId: string): number {
+    return this.database
+      .prepare('DELETE FROM beat_maps WHERE asset_id = ?')
+      .run(assetId).changes;
+  }
+
   listScenes(projectId: string): Scene[] {
     const rows = this.database
       .prepare(
@@ -636,7 +676,7 @@ export class ProjectRepository {
         asset_id: scene.assetId,
         start_frame: scene.startFrame,
         end_frame: scene.endFrame,
-        description: '',
+        description: scene.description ?? '',
         confidence: scene.score,
         payload_json: JSON.stringify(scene),
         created_at: this.now(),
@@ -681,6 +721,62 @@ export class ProjectRepository {
         created_at: beatMap.createdAt,
       });
     return beatMap;
+  }
+
+  listCompositions(projectId: string): Composition[] {
+    const rows = this.database
+      .prepare(
+        'SELECT * FROM compositions WHERE project_id = ? ORDER BY created_at ASC',
+      )
+      .all(projectId) as ChildRow[];
+    return rows.map(compositionFromRow);
+  }
+
+  findComposition(id: string): Composition | null {
+    const row = this.database
+      .prepare('SELECT * FROM compositions WHERE id = ?')
+      .get(id) as ChildRow | undefined;
+    return row ? compositionFromRow(row) : null;
+  }
+
+  saveComposition(composition: Composition): Composition {
+    this.database
+      .prepare(
+        `INSERT INTO compositions (
+          id, project_id, name, source, width, height, duration_frames,
+          created_at, updated_at
+        ) VALUES (
+          @id, @project_id, @name, @source, @width, @height, @duration_frames,
+          @created_at, @updated_at
+        )
+        ON CONFLICT(id) DO UPDATE SET
+          project_id = excluded.project_id,
+          name = excluded.name,
+          source = excluded.source,
+          width = excluded.width,
+          height = excluded.height,
+          duration_frames = excluded.duration_frames,
+          updated_at = excluded.updated_at`,
+      )
+      .run({
+        id: composition.id,
+        project_id: composition.projectId,
+        name: composition.name,
+        source: composition.source,
+        width: composition.width,
+        height: composition.height,
+        duration_frames: composition.durationFrames,
+        created_at: composition.createdAt,
+        updated_at: composition.updatedAt,
+      });
+    return composition;
+  }
+
+  deleteComposition(id: string): boolean {
+    return (
+      this.database.prepare('DELETE FROM compositions WHERE id = ?').run(id)
+        .changes > 0
+    );
   }
 
   listReferenceProfiles(projectId: string): ReferenceProfile[] {
@@ -848,6 +944,7 @@ export class ProjectRepository {
       transcripts: this.listTranscripts(project.id),
       scenes: this.listScenes(project.id),
       beatMaps: this.listBeatMaps(project.id),
+      compositions: this.listCompositions(project.id),
       referenceProfiles: this.listReferenceProfiles(project.id),
     };
   }

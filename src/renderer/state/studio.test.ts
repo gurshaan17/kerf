@@ -31,6 +31,10 @@ function makeSnapshot(): ProjectSnapshot {
     summary,
     project: withDuration,
     assets: [],
+    transcripts: [],
+    scenes: [],
+    beatMaps: [],
+    compositions: [],
     jobs: [],
     history: {
       canUndo: false,
@@ -80,6 +84,28 @@ function makeBridge(snapshot: ProjectSnapshot) {
     jobs: {
       list: vi.fn(async () => []),
       cancel: vi.fn(async () => true),
+    },
+    analysis: {
+      run: vi.fn(async () => ({ jobs: [], skipped: [] })),
+      status: vi.fn(async () => []),
+      search: vi.fn(async () => ({ results: [], vectorSearch: false })),
+      providers: vi.fn(async () => []),
+      saveProvider: vi.fn(async () => {
+        throw new Error('not used');
+      }),
+      deleteProvider: vi.fn(async () => true),
+      testProvider: vi.fn(async () => ({ ok: true, message: 'ok' })),
+      models: vi.fn(async () => []),
+      downloadModel: vi.fn(async () => {
+        throw new Error('not used');
+      }),
+      deleteModel: vi.fn(async () => true),
+    },
+    motion: {
+      save: vi.fn(async () => {
+        throw new Error('not used');
+      }),
+      delete: vi.fn(async () => snapshot),
     },
     export: {
       pickPath: vi.fn(async () => null),
