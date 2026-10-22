@@ -21,8 +21,14 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import type { Clip, FrameRate, Track } from '@kerf/model';
-import { formatDuration, fpsToNumber } from '@kerf/model';
-import { sequenceDurationFrames, tracksInOrder } from '@kerf/engine';
+import { formatDuration, fpsToNumber, secondsToFrames } from '@kerf/model';
+import {
+  findClip,
+  isClipCompatible,
+  sequenceDurationFrames,
+  snapStart,
+  tracksInOrder,
+} from '@kerf/engine';
 import { Button, IconButton, cn } from '@kerf/ui';
 import { useStudio } from '../state/StudioProvider';
 import {
@@ -33,6 +39,26 @@ import {
 } from './clip-commands';
 
 const HEADER_WIDTH = 112;
+const SNAP_PIXELS = 7;
+
+function clampNumber(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+type DragKind = 'move' | 'trim-in' | 'trim-out';
+
+interface DragState {
+  readonly kind: DragKind;
+  readonly clipId: string;
+  readonly originalTrackId: string;
+  readonly originalStart: number;
+  readonly originalDuration: number;
+  readonly startClientX: number;
+  readonly currentTrackId: string;
+  readonly currentStart: number;
+  readonly currentDuration: number;
+  readonly snapFrame: number | null;
+}
 
 function timecodeLabel(frame: number, rate: FrameRate): string {
   return formatDuration(frame, rate);
@@ -50,16 +76,23 @@ function ClipBar({
   clip,
   track,
   selected,
+  dragging,
   left,
   width,
   onSelect,
+  onBeginDrag,
 }: {
   readonly clip: Clip;
   readonly track: Track;
   readonly selected: boolean;
+  readonly dragging: boolean;
   readonly left: number;
   readonly width: number;
   readonly onSelect: (clip: Clip) => void;
+  readonly onBeginDrag: (
+    event: ReactPointerEvent<HTMLElement>,
+    kind: DragKind,
+  ) => void;
 }) {
   const assets = useStudio((state) => state.snapshot?.assets ?? []);
   const asset = assetForClip(clip, assets);
@@ -81,6 +114,7 @@ function ClipBar({
         'k-clip',
         `k-clip--${clip.type}`,
         selected && 'is-selected',
+        dragging && 'is-dragging',
         clip.locked && 'is-locked',
         track.locked && 'is-track-locked',
       )}
@@ -95,10 +129,7 @@ function ClipBar({
         backgroundSize: thumb ? 'cover' : waveform ? '100% 100%' : undefined,
       }}
       title={`${label} · ${clip.durationFrames} frames`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelect(clip);
-      }}
+      onPointerDown={(event) => onBeginDrag(event, 'move')}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
@@ -107,6 +138,22 @@ function ClipBar({
       }}
     >
       <span className="k-clip__label">{label}</span>
+      <span
+        className="k-clip__handle k-clip__handle--in"
+        aria-hidden="true"
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onBeginDrag(event, 'trim-in');
+        }}
+      />
+      <span
+        className="k-clip__handle k-clip__handle--out"
+        aria-hidden="true"
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onBeginDrag(event, 'trim-out');
+        }}
+      />
     </div>
   );
 }
@@ -195,6 +242,8 @@ export function Timeline() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(900);
   const [scrubbing, setScrubbing] = useState(false);
+  const dragRef = useRef<DragState | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -237,6 +286,302 @@ export function Timeline() {
 
   const selectedIds = selection.clipIds;
   const selectedSet = new Set(selectedIds);
+
+  useEffect(() => {
+    if (!sequence) {
+      return;
+    }
+
+    const cancelDrag = () => {
+      if (!dragRef.current) {
+        return;
+      }
+      dragRef.current = null;
+      setDrag(null);
+      document.body.style.userSelect = '';
+    };
+
+    const commitDrag = (current: DragState) => {
+      if (current.kind === 'move') {
+        if (
+          current.currentStart !== current.originalStart ||
+          current.currentTrackId !== current.originalTrackId
+        ) {
+          void apply(
+            {
+              type: 'clip.move',
+              clipId: current.clipId as Clip['id'],
+              trackId: current.currentTrackId as Track['id'],
+              startFrame: current.currentStart,
+            },
+            'Move clip',
+          );
+        }
+      } else if (current.kind === 'trim-in') {
+        const frames = current.currentStart - current.originalStart;
+        if (frames !== 0) {
+          void apply(
+            {
+              type: 'clip.trim',
+              clipId: current.clipId as Clip['id'],
+              edge: 'in',
+              frames,
+            },
+            'Trim clip in',
+          );
+        }
+      } else {
+        const frames = current.currentDuration - current.originalDuration;
+        if (frames !== 0) {
+          void apply(
+            {
+              type: 'clip.trim',
+              clipId: current.clipId as Clip['id'],
+              edge: 'out',
+              frames,
+            },
+            'Trim clip out',
+          );
+        }
+      }
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const current = dragRef.current;
+      if (!current) {
+        return;
+      }
+      event.preventDefault();
+      const location = findClip(sequence, current.clipId);
+      if (!location) {
+        cancelDrag();
+        return;
+      }
+      const clip = location.clip;
+      const asset = assetForClip(clip, snapshot?.assets ?? []);
+      const mediaClip = clip.type === 'video' || clip.type === 'audio';
+      const sourceStart = mediaClip ? clip.sourceInFrame : 0;
+      const sourceLimit =
+        asset && mediaClip
+          ? Math.max(
+              1,
+              secondsToFrames(
+                asset.durationSeconds,
+                asset.frameRate ?? rate,
+                'floor',
+              ),
+            )
+          : null;
+      const delta = Math.round(
+        (event.clientX - current.startClientX) / pixelsPerFrame,
+      );
+      const thresholdFrames = SNAP_PIXELS / pixelsPerFrame;
+      const snap = (
+        startFrame: number,
+        durationFrames: number,
+        trackId: string,
+        edge: 'in' | 'out' | 'both',
+      ) => {
+        if (!snapEnabled) {
+          return {
+            startFrame,
+            snapFrame: null as number | null,
+          };
+        }
+        const result = snapStart({
+          sequence,
+          startFrame,
+          durationFrames,
+          thresholdFrames,
+          includeClipEdges: true,
+          includeMarkers: true,
+          includePlayhead: true,
+          includeZero: true,
+          trackId,
+          ignoreClipId: clip.id,
+          playhead,
+        });
+        if (result.edge === null) {
+          return { startFrame, snapFrame: null };
+        }
+        if (edge !== 'both' && result.edge !== edge) {
+          return { startFrame, snapFrame: null };
+        }
+        return {
+          startFrame: result.startFrame,
+          snapFrame: result.candidate?.frame ?? null,
+        };
+      };
+
+      if (current.kind === 'move') {
+        let targetTrackId = current.originalTrackId;
+        const lane = (
+          document.elementFromPoint(
+            event.clientX,
+            event.clientY,
+          ) as HTMLElement | null
+        )?.closest<HTMLElement>('[data-track-id]');
+        const candidateTrack = lane
+          ? sequence.tracks.find((track) => track.id === lane.dataset.trackId)
+          : undefined;
+        if (
+          candidateTrack &&
+          !candidateTrack.locked &&
+          isClipCompatible(candidateTrack.kind, clip.type)
+        ) {
+          targetTrackId = candidateTrack.id;
+        }
+        const rawStart = Math.max(0, current.originalStart + delta);
+        const snapped = snap(
+          rawStart,
+          current.originalDuration,
+          targetTrackId,
+          'both',
+        );
+        const next: DragState = {
+          ...current,
+          currentStart: Math.max(0, snapped.startFrame),
+          currentDuration: current.originalDuration,
+          currentTrackId: targetTrackId,
+          snapFrame: snapped.snapFrame,
+        };
+        dragRef.current = next;
+        setDrag(next);
+        return;
+      }
+
+      if (current.kind === 'trim-in') {
+        const minimumFrames = Math.max(-current.originalStart, -sourceStart);
+        let frames = clampNumber(
+          delta,
+          minimumFrames,
+          current.originalDuration - 1,
+        );
+        let newStart = current.originalStart + frames;
+        let newDuration = current.originalDuration - frames;
+        const snapped = snap(
+          newStart,
+          newDuration,
+          current.originalTrackId,
+          'in',
+        );
+        if (snapped.snapFrame !== null) {
+          newStart = Math.max(
+            current.originalStart + minimumFrames,
+            snapped.startFrame,
+          );
+          frames = newStart - current.originalStart;
+          newDuration = current.originalDuration - frames;
+        }
+        const next: DragState = {
+          ...current,
+          currentStart: newStart,
+          currentDuration: newDuration,
+          currentTrackId: current.originalTrackId,
+          snapFrame: snapped.snapFrame,
+        };
+        dragRef.current = next;
+        setDrag(next);
+        return;
+      }
+
+      const maximumDuration =
+        sourceLimit !== null
+          ? Math.max(1, sourceLimit - sourceStart)
+          : Number.POSITIVE_INFINITY;
+      let newDuration = clampNumber(
+        current.originalDuration + delta,
+        1,
+        maximumDuration,
+      );
+      const snapped = snap(
+        current.originalStart,
+        newDuration,
+        current.originalTrackId,
+        'out',
+      );
+      if (snapped.snapFrame !== null) {
+        newDuration = clampNumber(
+          snapped.startFrame + newDuration - current.originalStart,
+          1,
+          maximumDuration,
+        );
+      }
+      const next: DragState = {
+        ...current,
+        currentStart: current.originalStart,
+        currentDuration: newDuration,
+        currentTrackId: current.originalTrackId,
+        snapFrame: snapped.snapFrame,
+      };
+      dragRef.current = next;
+      setDrag(next);
+    };
+
+    const onPointerUp = () => {
+      const current = dragRef.current;
+      if (!current) {
+        return;
+      }
+      dragRef.current = null;
+      setDrag(null);
+      document.body.style.userSelect = '';
+      commitDrag(current);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        cancelDrag();
+      }
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', cancelDrag);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', cancelDrag);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [apply, pixelsPerFrame, playhead, rate, sequence, snapEnabled, snapshot]);
+
+  const beginDrag = (
+    clip: Clip,
+    track: Track,
+    event: ReactPointerEvent<HTMLElement>,
+    kind: DragKind,
+  ) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.shiftKey) {
+      selectClip(clip.id, true);
+    } else if (!selectedSet.has(clip.id)) {
+      selectClip(clip.id);
+    }
+    if (track.locked || clip.locked) {
+      return;
+    }
+    const next: DragState = {
+      kind,
+      clipId: clip.id,
+      originalTrackId: track.id,
+      originalStart: clip.startFrame,
+      originalDuration: clip.durationFrames,
+      startClientX: event.clientX,
+      currentTrackId: track.id,
+      currentStart: clip.startFrame,
+      currentDuration: clip.durationFrames,
+      snapFrame: null,
+    };
+    dragRef.current = next;
+    setDrag(next);
+    document.body.style.userSelect = 'none';
+  };
 
   const scrub = (event: ReactPointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -467,11 +812,25 @@ export function Timeline() {
                     clip={clip}
                     track={track}
                     selected={selectedSet.has(clip.id)}
+                    dragging={drag?.clipId === clip.id}
                     left={clip.startFrame * pixelsPerFrame}
                     width={clip.durationFrames * pixelsPerFrame}
                     onSelect={(next) => selectClip(next.id)}
+                    onBeginDrag={(event, kind) =>
+                      beginDrag(clip, track, event, kind)
+                    }
                   />
                 ))}
+                {drag && drag.currentTrackId === track.id ? (
+                  <span
+                    className="k-clip-ghost"
+                    style={{
+                      left: `${drag.currentStart * pixelsPerFrame}px`,
+                      width: `${Math.max(3, drag.currentDuration * pixelsPerFrame)}px`,
+                    }}
+                    aria-hidden="true"
+                  />
+                ) : null}
                 <span
                   className="k-lane-playhead"
                   style={{ left: `${playhead * pixelsPerFrame}px` }}
@@ -480,6 +839,16 @@ export function Timeline() {
               </div>
             </div>
           ))}
+
+          {drag?.snapFrame != null ? (
+            <span
+              className="k-timeline__snap"
+              style={{
+                left: `${HEADER_WIDTH + drag.snapFrame * pixelsPerFrame}px`,
+              }}
+              aria-hidden="true"
+            />
+          ) : null}
 
           {tracks.every((track) => track.clips.length === 0) ? (
             <div className="k-timeline__empty">
