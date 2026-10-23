@@ -142,6 +142,15 @@ export interface ToolRendererBridge {
   ): Promise<ToolCompositionPreviewResult>;
 }
 
+export interface ToolCompositionSaveRequest {
+  readonly id?: string;
+  readonly name: string;
+  readonly source: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly durationFrames?: number;
+}
+
 export interface ToolReferenceProfileRequest {
   readonly assetId: string;
   readonly name?: string;
@@ -158,6 +167,7 @@ export interface ToolContext {
   search(request: ToolSearchRequest): ToolSearchResponse;
   renderer(): ToolRendererBridge | null;
   exports(): ToolExportAccess;
+  saveComposition?(request: ToolCompositionSaveRequest): Promise<Composition>;
   detectBeats?(assetId: string): Promise<BeatMap>;
   profileReference?(
     request: ToolReferenceProfileRequest,
