@@ -26,10 +26,19 @@ const DEFAULT_BASE_URL: Partial<Record<AgentProviderKind, string>> = {
   'openai-compatible': 'http://127.0.0.1:11434/v1',
 };
 
+export const LATEST_GOOGLE_MODEL = 'gemini-3.8-flash';
+
+const LEGACY_GOOGLE_MODELS = new Set([
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-001',
+  'gemini-2.0-flash-lite',
+  'gemini-2.0-flash-lite-001',
+]);
+
 const DEFAULT_CHAT_MODEL: Record<AgentProviderKind, string> = {
   openai: 'gpt-4o-mini',
   anthropic: 'claude-3-5-sonnet-latest',
-  google: 'gemini-2.0-flash',
+  google: LATEST_GOOGLE_MODEL,
   xai: 'grok-2-latest',
   ollama: 'llama3.2',
   'openai-compatible': 'llama3.2',
@@ -52,7 +61,28 @@ export function providerBaseUrl(config: AgentProviderConfig): string | null {
   return config.baseUrl?.trim() || DEFAULT_BASE_URL[config.kind] || null;
 }
 
+/**
+ * Google's SDK expects bare model IDs. Legacy defaults are upgraded in place
+ * so accounts created before the Gemini 3 rollout keep working without a
+ * manual settings change.
+ */
+export function normalizeGoogleModel(
+  model: string | null | undefined,
+): string | null {
+  const trimmed = model?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const bare = trimmed.startsWith('models/')
+    ? trimmed.slice('models/'.length)
+    : trimmed;
+  return LEGACY_GOOGLE_MODELS.has(bare) ? LATEST_GOOGLE_MODEL : bare;
+}
+
 export function providerModelName(config: AgentProviderConfig): string {
+  if (config.kind === 'google') {
+    return normalizeGoogleModel(config.model) || LATEST_GOOGLE_MODEL;
+  }
   return config.model?.trim() || DEFAULT_CHAT_MODEL[config.kind];
 }
 
@@ -73,7 +103,10 @@ export function createLanguageModel(
     case 'anthropic':
       return createAnthropic({ apiKey: apiKey ?? undefined, baseURL })(model);
     case 'google':
-      return createGoogle({ apiKey: apiKey ?? undefined, baseURL })(model);
+      return createGoogle({
+        apiKey: apiKey ?? undefined,
+        baseURL,
+      }).interactions(model);
     case 'xai':
       return createXai({ apiKey: apiKey ?? undefined, baseURL })(model);
     case 'ollama':

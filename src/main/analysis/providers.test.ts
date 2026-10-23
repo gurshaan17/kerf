@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { LATEST_GOOGLE_MODEL } from '@kerf/agent';
 import { openDatabase } from '../db';
 import type { DatabaseHandle } from '../db';
 import { ProviderStore } from './providers';
@@ -177,5 +178,39 @@ describe('ProviderStore', () => {
     expect(store.list()).toHaveLength(1);
     expect(store.delete(saved.id)).toBe(true);
     expect(store.list()).toEqual([]);
+  });
+
+  it('uses the latest Gemini model and upgrades legacy rows', () => {
+    const { database, store } = makeStore();
+    const saved = store.save({
+      kind: 'google',
+      label: 'Google Gemini',
+      apiKey: 'key',
+    });
+    expect(saved.model).toBe(LATEST_GOOGLE_MODEL);
+
+    const legacy = store.save({
+      id: saved.id,
+      kind: 'google',
+      label: 'Google Gemini',
+      model: 'gemini-2.0-flash',
+      chatModel: 'models/gemini-2.0-flash',
+    });
+    expect(legacy.model).toBe(LATEST_GOOGLE_MODEL);
+    expect(legacy.chatModel).toBe(LATEST_GOOGLE_MODEL);
+
+    const row = database.connection
+      .prepare('SELECT model, chat_model FROM provider_accounts WHERE id = ?')
+      .get(saved.id) as { model: string; chat_model: string };
+    expect(row.model).toBe(LATEST_GOOGLE_MODEL);
+    expect(row.chat_model).toBe(LATEST_GOOGLE_MODEL);
+
+    const custom = store.save({
+      id: saved.id,
+      kind: 'google',
+      label: 'Google Gemini',
+      model: 'gemini-3.1-pro-preview',
+    });
+    expect(custom.model).toBe('gemini-3.1-pro-preview');
   });
 });

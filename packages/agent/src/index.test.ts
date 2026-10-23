@@ -4,6 +4,8 @@ import {
   buildAgentSystemPrompt,
   createLanguageModel,
   KERF_AGENT_SYSTEM_PROMPT,
+  LATEST_GOOGLE_MODEL,
+  normalizeGoogleModel,
   providerBaseUrl,
   providerModelName,
 } from './index';
@@ -83,5 +85,30 @@ describe('agent provider adapters', () => {
         apiKey: null,
       }),
     ).toBe('llama3.2');
+  });
+
+  it('uses the latest Gemini model and upgrades legacy defaults', () => {
+    const google = (model: string | null) => ({
+      kind: 'google' as const,
+      label: 'Google Gemini',
+      baseUrl: null,
+      model,
+      apiKey: 'key',
+    });
+
+    expect(LATEST_GOOGLE_MODEL).toBe('gemini-3.8-flash');
+    expect(providerModelName(google(null))).toBe(LATEST_GOOGLE_MODEL);
+    expect(providerModelName(google('gemini-2.0-flash'))).toBe(
+      LATEST_GOOGLE_MODEL,
+    );
+    expect(providerModelName(google('models/gemini-2.0-flash'))).toBe(
+      LATEST_GOOGLE_MODEL,
+    );
+    expect(providerModelName(google('gemini-3.1-pro-preview'))).toBe(
+      'gemini-3.1-pro-preview',
+    );
+    expect(normalizeGoogleModel('models/gemini-3.8-flash')).toBe(
+      LATEST_GOOGLE_MODEL,
+    );
   });
 });

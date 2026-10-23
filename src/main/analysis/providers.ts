@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { generateText } from 'ai';
 import type { LanguageModel } from 'ai';
-import { createLanguageModel } from '@kerf/agent';
+import {
+  createLanguageModel,
+  LATEST_GOOGLE_MODEL,
+  normalizeGoogleModel,
+} from '@kerf/agent';
 import type { SqliteDatabase } from '../db';
 import type {
   ChatProviderSetting,
@@ -45,7 +49,7 @@ const DEFAULT_BASE_URL: Partial<Record<ProviderKind, string>> = {
 const DEFAULT_MODEL: Partial<Record<ProviderKind, string>> = {
   openai: 'gpt-4o-mini',
   anthropic: 'claude-3-5-sonnet-latest',
-  google: 'gemini-2.0-flash',
+  google: LATEST_GOOGLE_MODEL,
   xai: 'grok-2-vision-1212',
   ollama: 'llava',
   'openai-compatible': 'llava',
@@ -65,14 +69,26 @@ function providerKind(value: string): ProviderKind {
   }
 }
 
+function normalizeModel(
+  kind: ProviderKind,
+  model: string | null | undefined,
+): string | null {
+  const trimmed = model?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return kind === 'google' ? normalizeGoogleModel(trimmed) : trimmed;
+}
+
 function accountFromRow(row: ProviderRow): ProviderAccount {
+  const kind = providerKind(row.kind);
   return {
     id: row.id,
-    kind: providerKind(row.kind),
+    kind,
     label: row.label,
     baseUrl: row.base_url,
-    model: row.model,
-    chatModel: row.chat_model,
+    model: normalizeModel(kind, row.model),
+    chatModel: normalizeModel(kind, row.chat_model),
     hasKey: row.key_ciphertext !== null && row.key_ciphertext.length > 0,
     enabled: row.enabled !== 0,
     visionConsent: row.vision_consent !== 0,
@@ -144,14 +160,16 @@ export class ProviderStore {
         DEFAULT_BASE_URL[request.kind] ||
         null,
       model:
-        request.model?.trim() ||
+        normalizeModel(request.kind, request.model) ||
         existing?.model ||
         DEFAULT_MODEL[request.kind] ||
         null,
       chat_model:
         request.chatModel === null
           ? null
-          : request.chatModel?.trim() || existing?.chatModel || null,
+          : normalizeModel(request.kind, request.chatModel) ||
+            existing?.chatModel ||
+            null,
       key_ciphertext: keyCiphertext,
       enabled: request.enabled === false ? 0 : 1,
       vision_consent: request.visionConsent === true ? 1 : 0,
