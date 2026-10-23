@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -6,13 +6,23 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { KERF_AGENT_SYSTEM_PROMPT } from '@kerf/agent';
 import { toolRegistry } from '@kerf/tools';
+import type { McpActivity, McpActivityKind } from '../../shared/contracts';
 import type { ToolService } from '../tools/service';
 
 export interface McpServerHostOptions {
   readonly tools: Pick<ToolService, 'call'>;
+  readonly token: string;
   readonly host?: string;
   readonly port?: number;
   readonly version?: string;
+}
+
+const MAX_ACTIVITY = 20;
+
+function tokenMatches(expected: string, provided: string): boolean {
+  const left = createHash('sha256').update(expected).digest();
+  const right = createHash('sha256').update(provided).digest();
+  return timingSafeEqual(left, right);
 }
 
 interface Session {
@@ -53,6 +63,7 @@ function errorResult(message: string) {
 export function createKerfMcpServer(
   tools: Pick<ToolService, 'call'>,
   version = '0.1.0',
+  onTool?: (ok: boolean, message: string, tool: string) => void,
 ): McpServer {
   const server = new McpServer(
     { name: 'kerf', version },
@@ -82,11 +93,19 @@ MCP session rules:
         },
       },
       async (args: unknown) => {
+        const startedAt = Date.now();
         try {
           const value = await tools.call(definition.name, args, 'mcp');
+          onTool?.(
+            true,
+            `Completed in ${Date.now() - startedAt}ms`,
+            definition.name,
+          );
           return textResult(value);
         } catch (cause) {
-          return errorResult(`Kerf tool failed: ${errorMessage(cause)}`);
+          const message = errorMessage(cause);
+          onTool?.(false, message.slice(0, 300), definition.name);
+          return errorResult(`Kerf tool failed: ${message}`);
         }
       },
     );
@@ -102,11 +121,39 @@ MCP session rules:
 export class McpServerHost {
   private readonly options: McpServerHostOptions;
   private readonly sessions = new Map<string, Session>();
+  private readonly activities: McpActivity[] = [];
   private httpServer: ReturnType<typeof createServer> | null = null;
   private listeningPort: number | null = null;
+  private token: string;
 
   constructor(options: McpServerHostOptions) {
     this.options = options;
+    this.token = options.token;
+  }
+
+  setToken(token: string): void {
+    this.token = token;
+    this.record('auth', true, 'Bearer token rotated');
+  }
+
+  async revokeSessions(): Promise<void> {
+    const sessionIds = [...this.sessions.keys()];
+    for (const session of this.sessions.values()) {
+      await session.transport.close().catch(() => undefined);
+      await session.server.close().catch(() => undefined);
+    }
+    this.sessions.clear();
+    if (sessionIds.length > 0) {
+      this.record(
+        'session',
+        true,
+        `Revoked ${sessionIds.length} active ${sessionIds.length === 1 ? 'session' : 'sessions'}`,
+      );
+    }
+  }
+
+  recentActivity(): readonly McpActivity[] {
+    return [...this.activities];
   }
 
   get running(): boolean {
@@ -157,6 +204,7 @@ export class McpServerHost {
       address && typeof address === 'object'
         ? (address as AddressInfo).port
         : port;
+    this.record('server', true, `Listening on ${this.endpoint}`);
   }
 
   async stop(): Promise<void> {
@@ -175,6 +223,26 @@ export class McpServerHost {
     await new Promise<void>((resolve) => {
       server.close(() => resolve());
     });
+    this.record('server', true, 'Server stopped');
+  }
+
+  private record(
+    kind: McpActivityKind,
+    ok: boolean,
+    message: string,
+    tool?: string,
+  ): void {
+    this.activities.unshift({
+      id: `mcp_activity_${randomUUID()}`,
+      at: Date.now(),
+      kind,
+      ok,
+      message,
+      ...(tool ? { tool } : {}),
+    });
+    if (this.activities.length > MAX_ACTIVITY) {
+      this.activities.length = MAX_ACTIVITY;
+    }
   }
 
   private async handle(
@@ -189,6 +257,19 @@ export class McpServerHost {
       if (url.pathname !== MCP_PATH) {
         response.writeHead(404, { 'content-type': 'text/plain' });
         response.end('Not found');
+        return;
+      }
+
+      const rejected = this.accessError(request);
+      if (rejected) {
+        this.record('auth', false, rejected.message);
+        response.writeHead(rejected.status, {
+          'content-type': 'text/plain',
+          ...(rejected.status === 401
+            ? { 'www-authenticate': 'Bearer realm="kerf"' }
+            : {}),
+        });
+        response.end(rejected.message);
         return;
       }
 
@@ -214,11 +295,46 @@ export class McpServerHost {
     }
   }
 
+  private accessError(
+    request: IncomingMessage,
+  ): { readonly status: number; readonly message: string } | null {
+    const port = this.listeningPort;
+    const host = request.headers.host?.toLowerCase();
+    const allowedHosts = new Set([
+      `127.0.0.1:${port}`,
+      `localhost:${port}`,
+      `[::1]:${port}`,
+    ]);
+    if (!host || !allowedHosts.has(host)) {
+      return { status: 403, message: 'Host is not allowed.' };
+    }
+
+    const origin = request.headers.origin;
+    if (origin && origin !== 'null') {
+      const allowedOrigins = new Set([
+        `http://127.0.0.1:${port}`,
+        `http://localhost:${port}`,
+      ]);
+      if (!allowedOrigins.has(origin)) {
+        return { status: 403, message: 'Origin is not allowed.' };
+      }
+    }
+
+    const authorization = request.headers.authorization ?? '';
+    const match = /^Bearer\s+(.+)$/i.exec(authorization);
+    const provided = match?.[1]?.trim() ?? '';
+    if (!provided || !tokenMatches(this.token, provided)) {
+      return { status: 401, message: 'A valid Kerf bearer token is required.' };
+    }
+    return null;
+  }
+
   private async createSession(): Promise<Session> {
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sessionId) => {
         this.sessions.set(sessionId, session);
+        this.record('session', true, 'Client session opened');
       },
       onsessionclosed: (sessionId) => {
         this.sessions.delete(sessionId);
@@ -227,6 +343,7 @@ export class McpServerHost {
     const server = createKerfMcpServer(
       this.options.tools,
       this.options.version ?? '0.1.0',
+      (ok, message, tool) => this.record('tool', ok, message, tool),
     );
     // The callback above closes over this binding; it is assigned before the
     // client's initialize request is handled.

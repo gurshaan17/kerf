@@ -11,6 +11,7 @@ import { AnalysisService } from './analysis/service';
 import { AgentService } from './agent/service';
 import { RendererBridge } from './renderer-bridge';
 import { ToolService } from './tools/service';
+import { McpService } from './mcp/service';
 import type { KerfEvent } from '../shared/contracts';
 
 export interface KerfServices {
@@ -24,6 +25,7 @@ export interface KerfServices {
   readonly renderer: RendererBridge;
   readonly tools: ToolService;
   readonly agent: AgentService;
+  readonly mcp: McpService;
   dispose(): void;
 }
 
@@ -103,6 +105,11 @@ export function createKerfServices(
       tools,
       broadcast: options.broadcast ?? (() => undefined),
     });
+    const mcp = new McpService({
+      database: database.connection,
+      secrets: electronSecrets,
+      tools,
+    });
     return {
       database,
       repository,
@@ -114,8 +121,10 @@ export function createKerfServices(
       renderer,
       tools,
       agent,
+      mcp,
       dispose() {
         agent.abort();
+        mcp.dispose();
         renderer.dispose();
         exportService.dispose();
         projects.close();

@@ -67,6 +67,7 @@ if (!hasSingleInstanceLock) {
       broadcastEvent(event);
     });
     services.jobs.start();
+    void services.mcp.startIfEnabled();
 
     createMainWindow();
 

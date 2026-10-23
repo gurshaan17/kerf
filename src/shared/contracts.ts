@@ -367,6 +367,38 @@ export interface ChatProviderSetting {
   readonly provider: ProviderAccount | null;
 }
 
+export interface McpSettings {
+  readonly enabled: boolean;
+  readonly autoStart: boolean;
+  readonly port: number;
+}
+
+export interface McpSettingsUpdate {
+  readonly enabled?: boolean;
+  readonly autoStart?: boolean;
+  readonly port?: number;
+}
+
+export type McpActivityKind = 'server' | 'session' | 'tool' | 'auth';
+
+export interface McpActivity {
+  readonly id: string;
+  readonly at: number;
+  readonly kind: McpActivityKind;
+  readonly ok: boolean;
+  readonly message: string;
+  readonly tool?: string;
+}
+
+export interface McpStatus extends McpSettings {
+  readonly running: boolean;
+  readonly endpoint: string | null;
+  readonly token: string;
+  readonly sessions: number;
+  readonly activity: readonly McpActivity[];
+  readonly error: string | null;
+}
+
 export type ChatEvent =
   | {
       readonly type: 'chat.started';
