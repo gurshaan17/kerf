@@ -14,6 +14,7 @@ import { ExportDialog } from './export/ExportDialog';
 import { AnalysisSettingsDialog } from './analysis/AnalysisSettingsDialog';
 import { SearchDialog } from './search/SearchDialog';
 import { MotionDialog } from './motion/MotionDialog';
+import { ReferencesDialog } from './references/ReferencesDialog';
 import { createCompositionSandbox } from './motion/sandbox';
 import { RendererRequestHost } from './tools/RendererRequestHost';
 import type { AnalysisAssetStatus } from '../shared/contracts';
@@ -59,6 +60,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [motionOpen, setMotionOpen] = useState(false);
+  const [referencesOpen, setReferencesOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
   const openExport = useCallback(() => {
@@ -76,6 +78,10 @@ export default function App() {
   const openMotion = useCallback(() => {
     setPaletteOpen(false);
     setMotionOpen(true);
+  }, []);
+  const openReferences = useCallback(() => {
+    setPaletteOpen(false);
+    setReferencesOpen(true);
   }, []);
   const showShortcutsFromPalette = useCallback(() => {
     setPaletteOpen(false);
@@ -143,7 +149,8 @@ export default function App() {
       !exportOpen &&
       !searchOpen &&
       !analysisOpen &&
-      !motionOpen,
+      !motionOpen &&
+      !referencesOpen,
   });
 
   const analysis: AnalysisAssetStatus[] = useMemo(() => {
@@ -224,6 +231,7 @@ export default function App() {
             onOpenSearch={openSearch}
             onOpenAnalysis={openAnalysis}
             onOpenMotion={openMotion}
+            onOpenReferences={openReferences}
           />
         }
         chatPanel={
@@ -246,6 +254,7 @@ export default function App() {
         onOpenSearch={openSearch}
         onOpenAnalysis={openAnalysis}
         onOpenMotion={openMotion}
+        onOpenReferences={openReferences}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
@@ -255,6 +264,10 @@ export default function App() {
         onOpenChange={setAnalysisOpen}
       />
       <MotionDialog open={motionOpen} onOpenChange={setMotionOpen} />
+      <ReferencesDialog
+        open={referencesOpen}
+        onOpenChange={setReferencesOpen}
+      />
     </>
   );
 }

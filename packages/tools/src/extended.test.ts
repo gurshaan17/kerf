@@ -252,6 +252,8 @@ describe('reference tools', () => {
     expect(test.snapshot().project.sequence.reference?.name).toBe(
       'Editorial reference',
     );
+    expect(test.commands().at(-1)?.type).toBe('sequence.setReference');
+    expect(test.snapshot().project.sequence.tracks[0]?.clips).toHaveLength(1);
 
     const read = await call(test, 'readReference', {});
     expect(read.profile).toMatchObject({

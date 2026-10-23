@@ -99,6 +99,35 @@ const bridge: KerfBridge = {
       error: null,
     }),
   },
+  references: {
+    use: async () => {
+      throw new Error('not used');
+    },
+    clear: async () => {
+      throw new Error('not used');
+    },
+    applyLook: async () => ({
+      appliedClipCount: 0,
+      effectsAdded: 0,
+      pacing: {
+        averageShotLengthFrames: 0,
+        cutsPerMinute: 0,
+        sceneCount: 0,
+        targetShotLengthFrames: null,
+        suggestedCutFrames: [],
+      },
+    }),
+    applyPacing: async () => ({
+      added: 0,
+      pacing: {
+        averageShotLengthFrames: 0,
+        cutsPerMinute: 0,
+        sceneCount: 0,
+        targetShotLengthFrames: null,
+        suggestedCutFrames: [],
+      },
+    }),
+  },
   chat: {
     send: async () => {
       throw new Error('not used');

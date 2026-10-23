@@ -399,6 +399,38 @@ export interface McpStatus extends McpSettings {
   readonly error: string | null;
 }
 
+export interface ReferenceUseRequest {
+  readonly assetId: string;
+  readonly name?: string;
+}
+
+export interface ReferenceLookRequest {
+  readonly profileId?: string;
+  readonly clipIds?: string[];
+  readonly strength?: number;
+}
+
+export interface ReferencePacing {
+  readonly averageShotLengthFrames: number;
+  readonly cutsPerMinute: number;
+  readonly sceneCount: number;
+  readonly targetShotLengthFrames: number | null;
+  readonly suggestedCutFrames: number[];
+}
+
+export interface ReferenceLookResult {
+  readonly commandId?: string;
+  readonly appliedClipCount: number;
+  readonly effectsAdded: number;
+  readonly pacing: ReferencePacing;
+  readonly durationFrames?: number;
+}
+
+export interface ReferencePacingResult {
+  readonly added: number;
+  readonly pacing: ReferencePacing;
+}
+
 export type ChatEvent =
   | {
       readonly type: 'chat.started';
@@ -533,6 +565,12 @@ export const KERF_IPC = {
     update: 'kerf:mcp:update',
     rotateToken: 'kerf:mcp:rotate-token',
   },
+  references: {
+    use: 'kerf:references:use',
+    clear: 'kerf:references:clear',
+    applyLook: 'kerf:references:apply-look',
+    applyPacing: 'kerf:references:apply-pacing',
+  },
   chat: {
     send: 'kerf:chat:send',
     abort: 'kerf:chat:abort',
@@ -621,6 +659,14 @@ export interface KerfBridge {
     readonly status: () => Promise<McpStatus>;
     readonly update: (settings: McpSettingsUpdate) => Promise<McpStatus>;
     readonly rotateToken: () => Promise<McpStatus>;
+  };
+  readonly references: {
+    readonly use: (request: ReferenceUseRequest) => Promise<ProjectSnapshot>;
+    readonly clear: () => Promise<ProjectSnapshot>;
+    readonly applyLook: (
+      request: ReferenceLookRequest,
+    ) => Promise<ReferenceLookResult>;
+    readonly applyPacing: () => Promise<ReferencePacingResult>;
   };
   readonly chat: {
     readonly send: (request: ChatSendRequest) => Promise<ChatStartResult>;

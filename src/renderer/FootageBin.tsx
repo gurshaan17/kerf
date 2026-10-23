@@ -10,6 +10,7 @@ import {
   Clapperboard,
   Loader2,
   Music2,
+  Palette,
   Plus,
   RefreshCw,
   ScanLine,
@@ -41,6 +42,7 @@ export interface FootageBinProps {
   readonly onOpenSearch: () => void;
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
+  readonly onOpenReferences: () => void;
 }
 
 const STATUS_LABEL: Record<AssetStatus, string> = {
@@ -189,6 +191,7 @@ export function FootageBin({
   onOpenSearch,
   onOpenAnalysis,
   onOpenMotion,
+  onOpenReferences,
 }: FootageBinProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -257,6 +260,13 @@ export function FootageBin({
             size="sm"
             icon={<Search size={14} />}
             onClick={onOpenSearch}
+          />
+          <IconButton
+            label="References"
+            tooltip="References"
+            size="sm"
+            icon={<Palette size={14} />}
+            onClick={onOpenReferences}
           />
           <IconButton
             label="Compositions"

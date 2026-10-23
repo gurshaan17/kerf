@@ -23,6 +23,10 @@ import {
   type McpSettingsUpdate,
   type McpStatus,
   type ProjectHistoryState,
+  type ReferenceLookRequest,
+  type ReferenceLookResult,
+  type ReferencePacingResult,
+  type ReferenceUseRequest,
   type ProjectSnapshot,
   type ProjectSummary,
   type ProviderAccount,
@@ -121,6 +125,15 @@ const bridge: KerfBridge = {
     update: (settings: McpSettingsUpdate) =>
       invoke<McpStatus>(KERF_IPC.mcp.update, settings),
     rotateToken: () => invoke<McpStatus>(KERF_IPC.mcp.rotateToken),
+  },
+  references: {
+    use: (request: ReferenceUseRequest) =>
+      invoke<ProjectSnapshot>(KERF_IPC.references.use, request),
+    clear: () => invoke<ProjectSnapshot>(KERF_IPC.references.clear),
+    applyLook: (request: ReferenceLookRequest) =>
+      invoke<ReferenceLookResult>(KERF_IPC.references.applyLook, request),
+    applyPacing: () =>
+      invoke<ReferencePacingResult>(KERF_IPC.references.applyPacing),
   },
   chat: {
     send: (request: ChatSendRequest) =>

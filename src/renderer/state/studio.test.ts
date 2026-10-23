@@ -142,6 +142,31 @@ function makeBridge(snapshot: ProjectSnapshot) {
         error: null,
       })),
     },
+    references: {
+      use: vi.fn(async () => snapshot),
+      clear: vi.fn(async () => snapshot),
+      applyLook: vi.fn(async () => ({
+        appliedClipCount: 0,
+        effectsAdded: 0,
+        pacing: {
+          averageShotLengthFrames: 0,
+          cutsPerMinute: 0,
+          sceneCount: 0,
+          targetShotLengthFrames: null,
+          suggestedCutFrames: [],
+        },
+      })),
+      applyPacing: vi.fn(async () => ({
+        added: 0,
+        pacing: {
+          averageShotLengthFrames: 0,
+          cutsPerMinute: 0,
+          sceneCount: 0,
+          targetShotLengthFrames: null,
+          suggestedCutFrames: [],
+        },
+      })),
+    },
     chat: {
       send: vi.fn(async () => {
         throw new Error('not used');

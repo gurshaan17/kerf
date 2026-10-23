@@ -190,7 +190,7 @@ function lookEffects(profile: ReferenceProfile) {
   return effects;
 }
 
-function pacing(
+export function referencePacingTargets(
   profile: ReferenceProfile,
   sequence: Parameters<typeof sequenceDurationFrames>[0],
 ) {
@@ -244,7 +244,7 @@ export const copyReferenceLookTool = {
       return {
         appliedClipCount: 0,
         effectsAdded: 0,
-        pacing: pacing(profile, snapshot.project.sequence),
+        pacing: referencePacingTargets(profile, snapshot.project.sequence),
       };
     }
     const targetIds = input.clipIds ? new Set(input.clipIds) : null;
@@ -291,7 +291,7 @@ export const copyReferenceLookTool = {
       return {
         appliedClipCount: 0,
         effectsAdded: 0,
-        pacing: pacing(profile, snapshot.project.sequence),
+        pacing: referencePacingTargets(profile, snapshot.project.sequence),
       };
     }
     const result = context.applyBatch(commands, {
@@ -301,7 +301,7 @@ export const copyReferenceLookTool = {
       commandId: result.command.id,
       appliedClipCount,
       effectsAdded,
-      pacing: pacing(profile, snapshot.project.sequence),
+      pacing: referencePacingTargets(profile, snapshot.project.sequence),
       durationFrames: sequenceDurationFrames(result.snapshot.project.sequence),
     };
   },

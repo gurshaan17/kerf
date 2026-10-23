@@ -12,6 +12,7 @@ import {
   Keyboard,
   Magnet,
   MousePointer2,
+  Palette,
   Pause,
   Play,
   Plus,
@@ -51,6 +52,7 @@ export interface CommandPaletteProps {
   readonly onOpenSearch: () => void;
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
+  readonly onOpenReferences: () => void;
 }
 
 export function CommandPalette({
@@ -61,6 +63,7 @@ export function CommandPalette({
   onOpenSearch,
   onOpenAnalysis,
   onOpenMotion,
+  onOpenReferences,
 }: CommandPaletteProps) {
   const commands = useEditorCommands();
   const snapshot = useStudio((state) => state.snapshot);
@@ -302,6 +305,14 @@ export function CommandPalette({
         run: () => void commands.analyzeSelected(['scenes']),
       },
       {
+        id: 'reference.open',
+        label: 'References',
+        keywords: 'look grade palette rhythm pacing style transfer',
+        icon: <Palette size={14} />,
+        disabled: !hasSequence,
+        run: onOpenReferences,
+      },
+      {
         id: 'motion.open',
         label: 'Compositions',
         keywords: 'motion scene tree sandbox title lower third',
@@ -349,6 +360,7 @@ export function CommandPalette({
     onExport,
     onOpenAnalysis,
     onOpenMotion,
+    onOpenReferences,
     onOpenSearch,
     onShowShortcuts,
     open,

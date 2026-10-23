@@ -7,8 +7,10 @@ import {
   AUDIO_EXTENSIONS,
   IMAGE_EXTENSIONS,
   VIDEO_EXTENSIONS,
+  newId,
   type AssetKind,
 } from '@kerf/model';
+import { referencePacingTargets } from '@kerf/tools';
 import type { AnalysisService } from '../analysis/service';
 import type { AgentService } from '../agent/service';
 import type { ExportService } from '../export';
@@ -23,6 +25,9 @@ import type { ToolService } from '../tools/service';
 import {
   KERF_IPC,
   type KerfEvent,
+  type ReferenceLookRequest,
+  type ReferenceLookResult,
+  type ReferencePacingResult,
   type RendererEditorContext,
   type RendererResponse,
 } from '../../shared/contracts';
@@ -85,6 +90,19 @@ const mcpSettingsSchema = z
     enabled: z.boolean().optional(),
     autoStart: z.boolean().optional(),
     port: z.number().int().min(1_024).max(65_535).optional(),
+  })
+  .strict();
+const referenceUseSchema = z
+  .object({
+    assetId: z.string().min(1),
+    name: z.string().trim().min(1).max(120).optional(),
+  })
+  .strict();
+const referenceLookSchema = z
+  .object({
+    profileId: z.string().min(1).optional(),
+    clipIds: z.array(z.string().min(1)).min(1).max(1_000).optional(),
+    strength: z.number().min(0).max(1).optional(),
   })
   .strict();
 const rendererResponseSchema = z.object({
@@ -302,6 +320,70 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   ipcMain.handle(KERF_IPC.motion.delete, (_event, id: unknown) =>
     analysis.deleteComposition(projectIdSchema.parse(id)),
   );
+  ipcMain.handle(KERF_IPC.references.use, async (_event, request: unknown) => {
+    const parsed = referenceUseSchema.parse(request);
+    requireActiveProject(projects);
+    await tools.call('useReference', parsed, 'user');
+    return requireActiveProject(projects);
+  });
+  ipcMain.handle(KERF_IPC.references.clear, () => {
+    requireActiveProject(projects);
+    projects.apply(
+      { type: 'sequence.setReference', reference: null },
+      { actor: 'user', label: 'Clear reference' },
+    );
+    return requireActiveProject(projects);
+  });
+  ipcMain.handle(
+    KERF_IPC.references.applyLook,
+    async (_event, request: unknown) => {
+      const parsed = referenceLookSchema.parse(request) as ReferenceLookRequest;
+      requireActiveProject(projects);
+      return (await tools.call(
+        'copyReferenceLook',
+        { ...parsed, strength: parsed.strength ?? 1 },
+        'user',
+      )) as ReferenceLookResult;
+    },
+  );
+  ipcMain.handle(KERF_IPC.references.applyPacing, () => {
+    const active = requireActiveProject(projects);
+    const profile = active.project.sequence.reference;
+    if (!profile) {
+      throw new Error('Assign a reference before placing pacing markers.');
+    }
+    const pacing = referencePacingTargets(
+      profile,
+      active.project.sequence,
+    ) as ReferencePacingResult['pacing'];
+    const existingFrames = new Set(
+      active.project.sequence.markers.map((marker) => marker.frame),
+    );
+    const frames = pacing.suggestedCutFrames.filter(
+      (frame) => !existingFrames.has(frame),
+    );
+    if (frames.length === 0) {
+      return { added: 0, pacing } satisfies ReferencePacingResult;
+    }
+    projects.apply(
+      {
+        type: 'batch',
+        label: 'Place reference pacing',
+        commands: frames.map((frame) => ({
+          type: 'marker.add',
+          marker: {
+            id: newId('marker'),
+            frame,
+            label: 'Reference pacing',
+            kind: 'beat',
+            color: '#c9a46a',
+          },
+        })),
+      },
+      { actor: 'user', label: 'Place reference pacing' },
+    );
+    return { added: frames.length, pacing } satisfies ReferencePacingResult;
+  });
   ipcMain.handle(KERF_IPC.mcp.status, () => mcp.status());
   ipcMain.handle(KERF_IPC.mcp.update, (_event, settings: unknown) =>
     mcp.update(mcpSettingsSchema.parse(settings)),
@@ -468,6 +550,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       ...Object.values(KERF_IPC.analysis),
       ...Object.values(KERF_IPC.motion),
       ...Object.values(KERF_IPC.mcp),
+      ...Object.values(KERF_IPC.references),
       ...Object.values(KERF_IPC.chat),
       ...Object.values(KERF_IPC.renderer),
     ]) {
