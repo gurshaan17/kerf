@@ -1,5 +1,10 @@
-import type { Actor, BeatMap, Composition, EditCommand } from '@kerf/model';
-import { newId, referenceProfileSchema } from '@kerf/model';
+import type {
+  Actor,
+  BeatMap,
+  Composition,
+  EditCommand,
+  ReferenceProfile,
+} from '@kerf/model';
 import type {
   ToolContext,
   ToolEditResult,
@@ -48,6 +53,7 @@ export interface ToolRepositorySource {
 export interface ToolAnalysisSource {
   query(request: SearchRequest): SearchResponse;
   detectBeats?(assetId: string): Promise<BeatMap>;
+  profileReference?(assetId: string, name?: string): Promise<ReferenceProfile>;
 }
 
 export interface ToolExportSource {
@@ -284,34 +290,13 @@ export class ToolService {
   private async profileReference(request: {
     readonly assetId: string;
     readonly name?: string;
-  }) {
-    const snapshot = this.options.projects.current();
-    if (!snapshot) {
-      throw new Error('Open a project before using tools.');
+  }): Promise<ReferenceProfile> {
+    if (!this.options.analysis?.profileReference) {
+      throw new Error('Reference profiling is not available in this session.');
     }
-    const asset = snapshot.assets.find(
-      (candidate) => candidate.id === request.assetId,
-    );
-    if (!asset) {
-      throw new Error('That reference asset is not in the open project.');
-    }
-    const existing = this.options.repository
-      .listReferenceProfiles(snapshot.project.id)
-      .find((profile) => profile.sourceAssetId === asset.id);
-    const profile = referenceProfileSchema.parse({
-      id: existing?.id ?? newId('reference'),
-      name: request.name?.trim() || existing?.name || asset.name,
-      sourceAssetId: asset.id,
-      palette: existing?.palette ?? [],
-      mood: existing?.mood ?? [],
-      notes:
-        existing?.notes ||
-        'Reference profile created. Measured rhythm and colour arrive with the reference workspace.',
-      createdAt: existing?.createdAt ?? this.options.now?.() ?? Date.now(),
-    });
-    return this.options.repository.saveReferenceProfile(
-      snapshot.project.id,
-      profile,
+    return this.options.analysis.profileReference(
+      request.assetId,
+      request.name,
     );
   }
 }

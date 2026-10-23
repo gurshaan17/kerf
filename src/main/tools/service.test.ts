@@ -6,6 +6,7 @@ import {
   createCommandEnvelope,
   createProject,
   newId,
+  referenceProfileSchema,
   type EditCommand,
   type ReferenceProfile,
 } from '@kerf/model';
@@ -161,6 +162,32 @@ function makeService(snapshot: ProjectSnapshot = withTextClip(makeSnapshot())) {
       detectBeats: async () => {
         throw new Error('not used');
       },
+      profileReference: async (assetId, name) => {
+        const existing = profiles.find(
+          (profile) => profile.sourceAssetId === assetId,
+        );
+        const profile = referenceProfileSchema.parse({
+          id: existing?.id ?? newId('reference'),
+          name: name ?? existing?.name ?? 'Reference.mp4',
+          sourceAssetId: assetId,
+          palette: ['#202020', '#dcd4c0'],
+          sceneCount: 6,
+          averageShotLengthFrames: 24,
+          cutsPerMinute: 50,
+          meanLuma: 0.54,
+          meanSaturation: 0.42,
+          meanContrast: 0.31,
+          analyzedAt: 100,
+          createdAt: existing?.createdAt ?? 100,
+        });
+        const index = profiles.findIndex((entry) => entry.id === profile.id);
+        if (index >= 0) {
+          profiles[index] = profile;
+        } else {
+          profiles.push(profile);
+        }
+        return profile;
+      },
     },
     exports: {
       list: () => [exportRecord()],
@@ -242,16 +269,28 @@ describe('ToolService', () => {
     const { service, profiles } = makeService(snapshot);
     const first = (await service.call('profileReference', {
       assetId: asset.id,
-    })) as { profile: ReferenceProfile };
+    })) as {
+      profile: {
+        id: string;
+        name: string;
+        sourceAssetId: string;
+        analyzedAt: number | null;
+        metrics: { sceneCount: number; meanLuma: number | null };
+      };
+    };
     expect(first.profile.sourceAssetId).toBe(asset.id);
+    expect(first.profile.metrics.sceneCount).toBe(6);
+    expect(first.profile.metrics.meanLuma).toBeCloseTo(0.54);
+    expect(first.profile.analyzedAt).toBe(100);
     expect(profiles).toHaveLength(1);
 
     const second = (await service.call('profileReference', {
       assetId: asset.id,
       name: 'Editorial look',
-    })) as { profile: ReferenceProfile };
+    })) as typeof first;
     expect(second.profile.id).toBe(first.profile.id);
     expect(second.profile.name).toBe('Editorial look');
+    expect(second.profile.analyzedAt).toBe(100);
     expect(profiles).toHaveLength(1);
   });
 

@@ -42,6 +42,13 @@ export const referenceProfileSchema = z.object({
   palette: z.array(hexColorSchema).default([]),
   mood: z.array(z.string().min(1)).default([]),
   notes: z.string().default(''),
+  sceneCount: z.number().int().nonnegative().default(0),
+  averageShotLengthFrames: z.number().nonnegative().default(0),
+  cutsPerMinute: z.number().nonnegative().default(0),
+  meanLuma: z.number().min(0).max(1).nullable().default(null),
+  meanSaturation: z.number().min(0).max(1).nullable().default(null),
+  meanContrast: z.number().min(0).max(1).nullable().default(null),
+  analyzedAt: z.number().int().nonnegative().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
 });
 

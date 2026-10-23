@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { Asset, FrameRate, Scene } from '@kerf/model';
+import type { Asset, FrameRate, ReferenceProfile, Scene } from '@kerf/model';
 import { secondsToFrames } from '@kerf/model';
 import type { DatabaseHandle } from '../db';
 import { findExecutable } from '../media/ffmpeg';
@@ -9,6 +9,7 @@ import type { ProjectRepository, ProjectService } from '../projects';
 import type { SecretStore } from './providers';
 import { ProviderStore } from './providers';
 import { detectBeatMap } from './beats';
+import { profileReferenceAsset } from './reference';
 import { detectScenes } from './scenes';
 import { SearchService } from './search';
 import { transcribeAsset } from './transcribe';
@@ -39,7 +40,7 @@ import type {
   CompositionSaveResult,
   ProjectSnapshot,
 } from '../../shared/contracts';
-import { createComposition } from '@kerf/model';
+import { createComposition, newId, referenceProfileSchema } from '@kerf/model';
 
 const assetPayloadSchema = z.object({ assetId: z.string().min(1) });
 const modelPayloadSchema = z.object({ modelId: z.string().min(1) });
@@ -219,6 +220,43 @@ export class AnalysisService {
     this.repository.saveBeatMap(beatMap);
     this.refresh(projectId);
     return beatMap;
+  }
+
+  async profileReference(
+    assetId: string,
+    name?: string,
+  ): Promise<ReferenceProfile> {
+    const { projectId, asset, rate } = this.projectContext(assetId);
+    const durationFrames = this.durationFrames(asset, rate);
+    const existing = this.repository
+      .listReferenceProfiles(projectId)
+      .find((profile) => profile.sourceAssetId === asset.id);
+    const metrics = await profileReferenceAsset({
+      asset,
+      ffmpeg: this.ffmpegPath(),
+      rate,
+      durationFrames,
+    });
+    const now = this.now();
+    return this.repository.saveReferenceProfile(
+      projectId,
+      referenceProfileSchema.parse({
+        id: existing?.id ?? newId('reference'),
+        name: name?.trim() || existing?.name || asset.name,
+        sourceAssetId: asset.id,
+        palette: metrics.palette,
+        mood: existing?.mood ?? [],
+        notes: existing?.notes ?? '',
+        sceneCount: metrics.sceneCount,
+        averageShotLengthFrames: metrics.averageShotLengthFrames,
+        cutsPerMinute: metrics.cutsPerMinute,
+        meanLuma: metrics.meanLuma,
+        meanSaturation: metrics.meanSaturation,
+        meanContrast: metrics.meanContrast,
+        analyzedAt: now,
+        createdAt: existing?.createdAt ?? now,
+      }),
+    );
   }
 
   reindexActive(): void {

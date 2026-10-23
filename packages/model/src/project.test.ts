@@ -54,12 +54,22 @@ describe('project model', () => {
       name: 'Warm workshop',
       palette: ['#c9a46a', '#0b0c0d'],
       mood: ['quiet', 'tactile'],
+      sceneCount: 6,
+      averageShotLengthFrames: 24,
+      cutsPerMinute: 50,
+      meanLuma: 0.54,
+      meanSaturation: 0.42,
+      meanContrast: 0.31,
+      analyzedAt: 1,
       createdAt: 1,
     });
 
     expect(reference.sourceAssetId).toBeNull();
     expect(reference.palette).toHaveLength(2);
     expect(reference.notes).toBe('');
+    expect(reference.sceneCount).toBe(6);
+    expect(reference.meanLuma).toBe(0.54);
+    expect(reference.analyzedAt).toBe(1);
   });
 
   it('rejects invalid style colours', () => {

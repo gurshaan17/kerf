@@ -168,6 +168,13 @@ describe('ProjectRepository', () => {
       id: newId('reference'),
       name: 'Warm workshop',
       palette: ['#c9a46a'],
+      sceneCount: 6,
+      averageShotLengthFrames: 24,
+      cutsPerMinute: 50,
+      meanLuma: 0.54,
+      meanSaturation: 0.42,
+      meanContrast: 0.31,
+      analyzedAt: 1_400,
       createdAt: 1_400,
     });
     repository.saveReferenceProfile(projectId, profile);

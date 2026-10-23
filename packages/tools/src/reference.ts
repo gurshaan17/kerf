@@ -13,15 +13,6 @@ const assetIdSchema = idSchema('asset');
 const referenceIdSchema = idSchema('reference');
 const clipIdSchema = idSchema('clip');
 
-type MeasuredReference = ReferenceProfile & {
-  readonly sceneCount?: number;
-  readonly averageShotLengthFrames?: number;
-  readonly cutsPerMinute?: number;
-  readonly meanLuma?: number;
-  readonly meanSaturation?: number;
-  readonly meanContrast?: number;
-};
-
 function requireSnapshot(context: ToolContext) {
   const snapshot = context.snapshot();
   if (!snapshot) {
@@ -31,7 +22,6 @@ function requireSnapshot(context: ToolContext) {
 }
 
 function profileSummary(profile: ReferenceProfile) {
-  const measured = profile as MeasuredReference;
   return {
     id: profile.id,
     name: profile.name,
@@ -40,13 +30,14 @@ function profileSummary(profile: ReferenceProfile) {
     mood: profile.mood,
     notes: profile.notes,
     metrics: {
-      sceneCount: measured.sceneCount ?? null,
-      averageShotLengthFrames: measured.averageShotLengthFrames ?? null,
-      cutsPerMinute: measured.cutsPerMinute ?? null,
-      meanLuma: measured.meanLuma ?? null,
-      meanSaturation: measured.meanSaturation ?? null,
-      meanContrast: measured.meanContrast ?? null,
+      sceneCount: profile.sceneCount,
+      averageShotLengthFrames: profile.averageShotLengthFrames,
+      cutsPerMinute: profile.cutsPerMinute,
+      meanLuma: profile.meanLuma,
+      meanSaturation: profile.meanSaturation,
+      meanContrast: profile.meanContrast,
     },
+    analyzedAt: profile.analyzedAt,
     createdAt: profile.createdAt,
   };
 }
@@ -113,13 +104,14 @@ export const useReferenceTool = {
       (profile) => profile.sourceAssetId === asset.id,
     );
     const profile =
-      existing ??
-      (context.profileReference
-        ? await context.profileReference({
-            assetId: asset.id,
-            name: input.name,
-          })
-        : fallbackProfile(context, asset.id, input.name));
+      existing?.analyzedAt !== null && existing?.analyzedAt !== undefined
+        ? existing
+        : context.profileReference
+          ? await context.profileReference({
+              assetId: asset.id,
+              name: input.name,
+            })
+          : (existing ?? fallbackProfile(context, asset.id, input.name));
     const result = context.apply(
       { type: 'sequence.setReference', reference: profile },
       { label: `Use reference ${profile.name}` },
@@ -173,38 +165,36 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 function lookEffects(profile: ReferenceProfile) {
-  const measured = profile as MeasuredReference;
   const effects: Array<{
     type: 'brightness' | 'contrast' | 'saturate';
     amount: number;
   }> = [];
-  if (measured.meanLuma !== undefined) {
+  if (profile.meanLuma !== null) {
     effects.push({
       type: 'brightness',
-      amount: clamp(0.9 + measured.meanLuma * 0.2, 0.75, 1.35),
+      amount: clamp(0.9 + profile.meanLuma * 0.35, 0.75, 1.35),
     });
   }
-  if (measured.meanContrast !== undefined) {
+  if (profile.meanContrast !== null) {
     effects.push({
       type: 'contrast',
-      amount: clamp(0.9 + measured.meanContrast * 0.25, 0.7, 1.5),
+      amount: clamp(0.9 + profile.meanContrast * 0.4, 0.7, 1.5),
     });
   }
-  if (measured.meanSaturation !== undefined) {
+  if (profile.meanSaturation !== null) {
     effects.push({
       type: 'saturate',
-      amount: clamp(0.8 + measured.meanSaturation * 0.45, 0.6, 1.6),
+      amount: clamp(0.8 + profile.meanSaturation * 0.6, 0.6, 1.6),
     });
   }
   return effects;
 }
 
 function pacing(profile: ReferenceProfile) {
-  const measured = profile as MeasuredReference;
   return {
-    averageShotLengthFrames: measured.averageShotLengthFrames ?? null,
-    cutsPerMinute: measured.cutsPerMinute ?? null,
-    sceneCount: measured.sceneCount ?? null,
+    averageShotLengthFrames: profile.averageShotLengthFrames,
+    cutsPerMinute: profile.cutsPerMinute,
+    sceneCount: profile.sceneCount,
   };
 }
 
