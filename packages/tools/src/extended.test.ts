@@ -46,6 +46,7 @@ interface Harness {
   readonly context: ToolContext;
   snapshot(): ToolSnapshot;
   commands(): readonly EditCommand[];
+  inverse(): EditCommand | null;
   setReference(profile: ReferenceProfile): void;
 }
 
@@ -62,6 +63,7 @@ function harness(): Harness {
     compositions: [],
   };
   let applied: EditCommand[] = [];
+  let lastInverse: EditCommand | null = null;
   let reference: ReferenceProfile | null = null;
   let exportRecord: ToolExportRecord | null = null;
   const sourceDuration = () => 240;
@@ -82,6 +84,7 @@ function harness(): Harness {
       },
     };
     applied = [...applied, command];
+    lastInverse = result.inverse;
     return {
       snapshot,
       command: createCommandEnvelope({
@@ -89,7 +92,7 @@ function harness(): Harness {
         actor: options?.actor ?? 'agent',
         now: 2_000,
       }),
-      inverse: result.inverse,
+      inverse: lastInverse,
     };
   };
 
@@ -130,22 +133,21 @@ function harness(): Harness {
       return map;
     },
     profileReference: async (request) => {
-      reference = {
-        ...referenceProfileSchema.parse({
-          id: newId('reference'),
-          name: request.name ?? 'Reference',
-          sourceAssetId: request.assetId,
-          palette: ['#c9a46a', '#ece6dc'],
-          mood: ['measured'],
-          createdAt: 2_000,
-        }),
+      reference = referenceProfileSchema.parse({
+        id: newId('reference'),
+        name: request.name ?? 'Reference',
+        sourceAssetId: request.assetId,
+        palette: ['#c9a46a', '#ece6dc'],
+        mood: ['measured'],
         sceneCount: 8,
         averageShotLengthFrames: 30,
         cutsPerMinute: 48,
         meanLuma: 0.6,
         meanSaturation: 0.5,
         meanContrast: 0.55,
-      } as ReferenceProfile;
+        analyzedAt: 2_000,
+        createdAt: 2_000,
+      });
       snapshot = {
         ...snapshot,
         referenceProfiles: [reference],
@@ -194,6 +196,7 @@ function harness(): Harness {
     context,
     snapshot: () => snapshot,
     commands: () => applied,
+    inverse: () => lastInverse,
     setReference: (profile) => {
       reference = profile;
     },
@@ -257,9 +260,33 @@ describe('reference tools', () => {
     });
 
     const copied = await call(test, 'copyReferenceLook', { strength: 1 });
-    expect(copied).toMatchObject({ appliedClipCount: 1, effectsAdded: 3 });
+    expect(copied).toMatchObject({
+      appliedClipCount: 1,
+      effectsAdded: 3,
+      pacing: {
+        averageShotLengthFrames: 30,
+        cutsPerMinute: 48,
+        targetShotLengthFrames: 30,
+        suggestedCutFrames: [30, 60, 90, 120, 150, 180, 210],
+      },
+    });
     const clip = test.snapshot().project.sequence.tracks[0]?.clips[0];
     expect(clip?.effects).toHaveLength(3);
+    expect(clip?.effects.map((effect) => effect.type)).toEqual([
+      'brightness',
+      'contrast',
+      'saturate',
+    ]);
+    expect(clip?.effects[0]?.amount).toBeCloseTo(1.11, 2);
+    expect(clip?.effects[1]?.amount).toBeCloseTo(1.12, 2);
+    expect(clip?.effects[2]?.amount).toBeCloseTo(1.1, 2);
+
+    const inverse = test.inverse();
+    if (!inverse) {
+      throw new Error('expected an inverse for the grade');
+    }
+    const restored = applyCommand(test.snapshot().project.sequence, inverse);
+    expect(restored.sequence.tracks[0]?.clips[0]?.effects).toHaveLength(0);
   });
 });
 

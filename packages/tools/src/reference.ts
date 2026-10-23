@@ -190,11 +190,34 @@ function lookEffects(profile: ReferenceProfile) {
   return effects;
 }
 
-function pacing(profile: ReferenceProfile) {
+function pacing(
+  profile: ReferenceProfile,
+  sequence: Parameters<typeof sequenceDurationFrames>[0],
+) {
+  const durationFrames = sequenceDurationFrames(sequence);
+  const fps = sequence.frameRate.numerator / sequence.frameRate.denominator;
+  const targetShotLengthFrames =
+    profile.cutsPerMinute > 0
+      ? Math.max(1, Math.round((60 / profile.cutsPerMinute) * fps))
+      : 0;
+  const suggestedCutFrames =
+    targetShotLengthFrames > 0
+      ? Array.from(
+          {
+            length: Math.min(
+              200,
+              Math.floor((durationFrames - 1) / targetShotLengthFrames),
+            ),
+          },
+          (_, index) => (index + 1) * targetShotLengthFrames,
+        )
+      : [];
   return {
     averageShotLengthFrames: profile.averageShotLengthFrames,
     cutsPerMinute: profile.cutsPerMinute,
     sceneCount: profile.sceneCount,
+    targetShotLengthFrames: targetShotLengthFrames || null,
+    suggestedCutFrames,
   };
 }
 
@@ -221,7 +244,7 @@ export const copyReferenceLookTool = {
       return {
         appliedClipCount: 0,
         effectsAdded: 0,
-        pacing: pacing(profile),
+        pacing: pacing(profile, snapshot.project.sequence),
       };
     }
     const targetIds = input.clipIds ? new Set(input.clipIds) : null;
@@ -268,7 +291,7 @@ export const copyReferenceLookTool = {
       return {
         appliedClipCount: 0,
         effectsAdded: 0,
-        pacing: pacing(profile),
+        pacing: pacing(profile, snapshot.project.sequence),
       };
     }
     const result = context.applyBatch(commands, {
@@ -278,7 +301,7 @@ export const copyReferenceLookTool = {
       commandId: result.command.id,
       appliedClipCount,
       effectsAdded,
-      pacing: pacing(profile),
+      pacing: pacing(profile, snapshot.project.sequence),
       durationFrames: sequenceDurationFrames(result.snapshot.project.sequence),
     };
   },
