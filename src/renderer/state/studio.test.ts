@@ -107,6 +107,41 @@ function makeBridge(snapshot: ProjectSnapshot) {
       }),
       delete: vi.fn(async () => snapshot),
     },
+    mcp: {
+      status: vi.fn(async () => ({
+        enabled: false,
+        autoStart: true,
+        port: 3919,
+        running: false,
+        endpoint: null,
+        token: '',
+        sessions: 0,
+        activity: [],
+        error: null,
+      })),
+      update: vi.fn(async () => ({
+        enabled: false,
+        autoStart: true,
+        port: 3919,
+        running: false,
+        endpoint: null,
+        token: '',
+        sessions: 0,
+        activity: [],
+        error: null,
+      })),
+      rotateToken: vi.fn(async () => ({
+        enabled: false,
+        autoStart: true,
+        port: 3919,
+        running: false,
+        endpoint: null,
+        token: '',
+        sessions: 0,
+        activity: [],
+        error: null,
+      })),
+    },
     chat: {
       send: vi.fn(async () => {
         throw new Error('not used');

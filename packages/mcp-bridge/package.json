@@ -1,0 +1,16 @@
+{
+  "name": "@kerf/mcp-bridge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Stdio to loopback HTTP bridge for the Kerf MCP server.",
+  "bin": {
+    "kerf-mcp-bridge": "./src/index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1"
+  }
+}

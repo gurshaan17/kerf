@@ -530,6 +530,8 @@ export const KERF_IPC = {
   },
   mcp: {
     status: 'kerf:mcp:status',
+    update: 'kerf:mcp:update',
+    rotateToken: 'kerf:mcp:rotate-token',
   },
   chat: {
     send: 'kerf:chat:send',
@@ -614,6 +616,11 @@ export interface KerfBridge {
       request: CompositionSaveRequest,
     ) => Promise<CompositionSaveResult>;
     readonly delete: (id: string) => Promise<ProjectSnapshot>;
+  };
+  readonly mcp: {
+    readonly status: () => Promise<McpStatus>;
+    readonly update: (settings: McpSettingsUpdate) => Promise<McpStatus>;
+    readonly rotateToken: () => Promise<McpStatus>;
   };
   readonly chat: {
     readonly send: (request: ChatSendRequest) => Promise<ChatStartResult>;

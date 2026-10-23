@@ -14,6 +14,7 @@ import type { AgentService } from '../agent/service';
 import type { ExportService } from '../export';
 import { buildOtioTimeline } from '../export/otio';
 import type { JobQueue } from '../jobs';
+import type { McpService } from '../mcp/service';
 import type { MediaImportService } from '../media';
 import type { ProjectRepository } from '../projects';
 import type { ProjectService } from '../projects';
@@ -79,6 +80,13 @@ const modelIdSchema = z.string().min(1).max(40);
 const chatSendSchema = z.object({
   message: z.string().trim().min(1).max(8_000),
 });
+const mcpSettingsSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    autoStart: z.boolean().optional(),
+    port: z.number().int().min(1_024).max(65_535).optional(),
+  })
+  .strict();
 const rendererResponseSchema = z.object({
   id: z.string().min(1),
   ok: z.boolean(),
@@ -114,6 +122,7 @@ export interface ProjectIpcOptions {
   readonly agent: AgentService;
   readonly renderer: RendererBridge;
   readonly tools: ToolService;
+  readonly mcp: McpService;
   readonly broadcast: (event: KerfEvent) => void;
 }
 
@@ -149,6 +158,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     agent,
     renderer,
     tools,
+    mcp,
     broadcast,
   } = options;
 
@@ -292,6 +302,11 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   ipcMain.handle(KERF_IPC.motion.delete, (_event, id: unknown) =>
     analysis.deleteComposition(projectIdSchema.parse(id)),
   );
+  ipcMain.handle(KERF_IPC.mcp.status, () => mcp.status());
+  ipcMain.handle(KERF_IPC.mcp.update, (_event, settings: unknown) =>
+    mcp.update(mcpSettingsSchema.parse(settings)),
+  );
+  ipcMain.handle(KERF_IPC.mcp.rotateToken, () => mcp.rotateToken());
   ipcMain.handle(KERF_IPC.chat.send, (_event, request: unknown) =>
     agent.start(chatSendSchema.parse(request)),
   );
@@ -452,6 +467,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       ...Object.values(KERF_IPC.export),
       ...Object.values(KERF_IPC.analysis),
       ...Object.values(KERF_IPC.motion),
+      ...Object.values(KERF_IPC.mcp),
       ...Object.values(KERF_IPC.chat),
       ...Object.values(KERF_IPC.renderer),
     ]) {

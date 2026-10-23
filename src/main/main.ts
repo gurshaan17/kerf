@@ -58,6 +58,7 @@ if (!hasSingleInstanceLock) {
       agent: services.agent,
       renderer: services.renderer,
       tools: services.tools,
+      mcp: services.mcp,
       broadcast: broadcastEvent,
     });
     unsubscribeJobs = services.jobs.subscribe((job) => {

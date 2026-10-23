@@ -64,6 +64,41 @@ const bridge: KerfBridge = {
       throw new Error('not used');
     },
   },
+  mcp: {
+    status: async () => ({
+      enabled: false,
+      autoStart: true,
+      port: 3919,
+      running: false,
+      endpoint: null,
+      token: '',
+      sessions: 0,
+      activity: [],
+      error: null,
+    }),
+    update: async () => ({
+      enabled: false,
+      autoStart: true,
+      port: 3919,
+      running: false,
+      endpoint: null,
+      token: '',
+      sessions: 0,
+      activity: [],
+      error: null,
+    }),
+    rotateToken: async () => ({
+      enabled: false,
+      autoStart: true,
+      port: 3919,
+      running: false,
+      endpoint: null,
+      token: '',
+      sessions: 0,
+      activity: [],
+      error: null,
+    }),
+  },
   chat: {
     send: async () => {
       throw new Error('not used');

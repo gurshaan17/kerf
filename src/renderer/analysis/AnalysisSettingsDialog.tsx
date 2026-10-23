@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react';
 import {
   Check,
+  Copy,
   Download,
+  Eye,
+  EyeOff,
   KeyRound,
   Loader2,
+  PlugZap,
+  RefreshCw,
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
 import type {
   ChatProviderSetting,
+  McpSettingsUpdate,
+  McpStatus,
   ProviderAccount,
   ProviderKind,
   WhisperModelInfo,
@@ -59,16 +66,24 @@ export function AnalysisSettingsDialog({
   const [testing, setTesting] = useState(false);
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
+  const [mcp, setMcp] = useState<McpStatus | null>(null);
+  const [mcpPort, setMcpPort] = useState('3919');
+  const [showMcpToken, setShowMcpToken] = useState(false);
+  const [mcpBusy, setMcpBusy] = useState(false);
 
   const refresh = async () => {
-    const [nextProviders, nextModels, nextChatProvider] = await Promise.all([
-      window.kerf.analysis.providers(),
-      window.kerf.analysis.models(),
-      window.kerf.chat.provider(),
-    ]);
+    const [nextProviders, nextModels, nextChatProvider, nextMcp] =
+      await Promise.all([
+        window.kerf.analysis.providers(),
+        window.kerf.analysis.models(),
+        window.kerf.chat.provider(),
+        window.kerf.mcp.status(),
+      ]);
     setProviders(nextProviders);
     setModels(nextModels);
     setChatProvider(nextChatProvider);
+    setMcp(nextMcp);
+    setMcpPort(String(nextMcp.port));
   };
 
   useEffect(() => {
@@ -243,6 +258,111 @@ export function AnalysisSettingsDialog({
       });
     }
   };
+
+  const applyMcp = async (update: McpSettingsUpdate) => {
+    setMcpBusy(true);
+    try {
+      const next = await window.kerf.mcp.update(update);
+      setMcp(next);
+      setMcpPort(String(next.port));
+      if (next.error) {
+        pushToast({
+          title: 'MCP server could not start',
+          description: next.error,
+          tone: 'error',
+        });
+      }
+    } catch (cause) {
+      pushToast({
+        title: 'Could not update the MCP server',
+        description: cause instanceof Error ? cause.message : String(cause),
+        tone: 'error',
+      });
+    } finally {
+      setMcpBusy(false);
+    }
+  };
+
+  const applyMcpPort = () => {
+    const port = Number(mcpPort);
+    if (!Number.isInteger(port) || port < 1_024 || port > 65_535) {
+      pushToast({
+        title: 'Choose a port between 1024 and 65535',
+        description: 'Ports below 1024 need administrator rights.',
+        tone: 'error',
+      });
+      return;
+    }
+    void applyMcp({ port });
+  };
+
+  const rotateMcpToken = async () => {
+    setMcpBusy(true);
+    try {
+      const next = await window.kerf.mcp.rotateToken();
+      setMcp(next);
+      setShowMcpToken(true);
+      pushToast({
+        title: 'MCP token rotated',
+        description: 'Every connected client was disconnected.',
+        tone: 'success',
+      });
+    } catch (cause) {
+      pushToast({
+        title: 'Could not rotate the MCP token',
+        description: cause instanceof Error ? cause.message : String(cause),
+        tone: 'error',
+      });
+    } finally {
+      setMcpBusy(false);
+    }
+  };
+
+  const copyText = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      pushToast({
+        title: `${label} copied`,
+        description: 'Paste it into your MCP client.',
+        tone: 'success',
+      });
+    } catch (cause) {
+      pushToast({
+        title: 'Could not copy to the clipboard',
+        description: cause instanceof Error ? cause.message : String(cause),
+        tone: 'error',
+      });
+    }
+  };
+
+  const mcpEndpoint =
+    mcp?.endpoint ?? `http://127.0.0.1:${mcp?.port ?? 3919}/mcp`;
+  const mcpToken = mcp?.token || '<token>';
+  const claudeSnippet = `claude mcp add --transport http kerf ${mcpEndpoint} --header "Authorization: Bearer ${mcpToken}"`;
+  const httpSnippet = JSON.stringify(
+    {
+      mcpServers: {
+        kerf: {
+          url: mcpEndpoint,
+          headers: { Authorization: `Bearer ${mcpToken}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
+  const bridgeSnippet = JSON.stringify(
+    {
+      mcpServers: {
+        kerf: {
+          command: 'kerf-mcp-bridge',
+          args: ['--url', mcpEndpoint, '--token', mcpToken],
+        },
+      },
+    },
+    null,
+    2,
+  );
 
   return (
     <Dialog
@@ -545,6 +665,269 @@ export function AnalysisSettingsDialog({
                 </span>
               ) : null}
             </div>
+          </div>
+        </section>
+
+        <section className="grid gap-2">
+          <div>
+            <h3 className="text-[12px] font-semibold text-ink">MCP server</h3>
+            <p className="mt-0.5 text-[10px] leading-relaxed text-ink-faint">
+              Expose Kerf's tool catalog to Claude Code, Cursor or another MCP
+              client on this machine. The server binds only to 127.0.0.1 and
+              every request needs the bearer token below.
+            </p>
+          </div>
+
+          <div className="grid gap-2.5 rounded-sm border border-line bg-surface-0 p-3">
+            <label className="flex items-start gap-2 text-[10px] leading-relaxed text-ink-muted">
+              <input
+                type="checkbox"
+                checked={mcp?.enabled ?? false}
+                disabled={mcpBusy || !mcp}
+                onChange={(event) =>
+                  void applyMcp({ enabled: event.target.checked })
+                }
+                className="mt-0.5 accent-[var(--color-accent)]"
+              />
+              <span>
+                <span className="inline-flex items-center gap-1 font-medium text-ink">
+                  <PlugZap size={11} /> Run the MCP server
+                </span>
+                <span className="mt-0.5 block text-ink-faint">
+                  Starts a loopback HTTP listener. Disable it to close the
+                  listener and disconnect every client.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-[10px] leading-relaxed text-ink-muted">
+              <input
+                type="checkbox"
+                checked={mcp?.autoStart ?? true}
+                disabled={mcpBusy || !mcp || !mcp.enabled}
+                onChange={(event) =>
+                  void applyMcp({ autoStart: event.target.checked })
+                }
+                className="mt-0.5 accent-[var(--color-accent)]"
+              />
+              <span>
+                <span className="font-medium text-ink">Start with Kerf</span>
+                <span className="mt-0.5 block text-ink-faint">
+                  The listener starts when the editor opens. If the port is
+                  busy, Kerf reports the error here and keeps running.
+                </span>
+              </span>
+            </label>
+
+            <FieldRow>
+              <Field label="Port">
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={mcpPort}
+                    inputMode="numeric"
+                    disabled={mcpBusy || !mcp}
+                    onChange={(event) => setMcpPort(event.target.value)}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      mcpBusy || !mcp || mcpPort === String(mcp?.port ?? 3919)
+                    }
+                    onClick={applyMcpPort}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </Field>
+              <Field
+                label="Status"
+                hint={
+                  mcp?.running
+                    ? `${mcp.sessions} active ${mcp.sessions === 1 ? 'session' : 'sessions'}`
+                    : 'Listener is stopped'
+                }
+              >
+                <div className="flex h-8 items-center gap-2 rounded-sm border border-line bg-surface-1 px-2.5 font-mono text-[10px] text-ink-muted">
+                  <span
+                    className={`size-1.5 rounded-full ${
+                      mcp?.running ? 'bg-ok' : 'bg-ink-faint'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  {mcp?.running ? 'listening' : 'stopped'}
+                </div>
+              </Field>
+            </FieldRow>
+
+            {mcp?.error ? (
+              <p
+                role="alert"
+                className="rounded-sm border border-danger/40 bg-danger/10 px-2.5 py-2 text-[10px] text-danger"
+              >
+                {mcp.error}
+              </p>
+            ) : null}
+
+            <Field
+              label="Endpoint"
+              hint="Clients must connect to this exact loopback URL."
+            >
+              <div className="flex items-center gap-1.5">
+                <Input readOnly value={mcpEndpoint} className="font-mono" />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leadingIcon={<Copy size={11} />}
+                  onClick={() => void copyText('Endpoint', mcpEndpoint)}
+                >
+                  Copy
+                </Button>
+              </div>
+            </Field>
+
+            <Field
+              label="Bearer token"
+              hint="Stored encrypted with the operating system credential store. Rotating it disconnects every client."
+            >
+              <div className="flex items-center gap-1.5">
+                <Input
+                  readOnly
+                  type={showMcpToken ? 'text' : 'password'}
+                  value={mcp?.token ?? ''}
+                  className="font-mono"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label={showMcpToken ? 'Hide token' : 'Show token'}
+                  onClick={() => setShowMcpToken((visible) => !visible)}
+                >
+                  {showMcpToken ? <EyeOff size={11} /> : <Eye size={11} />}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leadingIcon={<Copy size={11} />}
+                  onClick={() => void copyText('Token', mcp?.token ?? '')}
+                >
+                  Copy
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={mcpBusy || !mcp}
+                  leadingIcon={
+                    mcpBusy ? (
+                      <Loader2 size={11} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={11} />
+                    )
+                  }
+                  onClick={() => void rotateMcpToken()}
+                >
+                  Rotate
+                </Button>
+              </div>
+            </Field>
+
+            <details className="rounded-sm border border-line bg-surface-1 px-2.5 py-2">
+              <summary className="cursor-pointer text-[10px] font-medium text-ink">
+                Claude Code (HTTP)
+              </summary>
+              <div className="mt-2 grid gap-1.5">
+                <pre className="overflow-x-auto rounded-sm bg-surface-0 p-2 font-mono text-[9px] leading-relaxed text-ink-muted">
+                  {claudeSnippet}
+                </pre>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leadingIcon={<Copy size={11} />}
+                  onClick={() =>
+                    void copyText('Claude Code command', claudeSnippet)
+                  }
+                >
+                  Copy command
+                </Button>
+              </div>
+            </details>
+            <details className="rounded-sm border border-line bg-surface-1 px-2.5 py-2">
+              <summary className="cursor-pointer text-[10px] font-medium text-ink">
+                Cursor or another HTTP client (JSON)
+              </summary>
+              <div className="mt-2 grid gap-1.5">
+                <pre className="overflow-x-auto rounded-sm bg-surface-0 p-2 font-mono text-[9px] leading-relaxed text-ink-muted">
+                  {httpSnippet}
+                </pre>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leadingIcon={<Copy size={11} />}
+                  onClick={() => void copyText('MCP config', httpSnippet)}
+                >
+                  Copy config
+                </Button>
+              </div>
+            </details>
+            <details className="rounded-sm border border-line bg-surface-1 px-2.5 py-2">
+              <summary className="cursor-pointer text-[10px] font-medium text-ink">
+                Stdio bridge (JSON)
+              </summary>
+              <div className="mt-2 grid gap-1.5">
+                <p className="text-[9px] leading-relaxed text-ink-faint">
+                  For clients that only speak stdio. Link the workspace bridge
+                  first with{' '}
+                  <code className="font-mono">
+                    pnpm --filter @kerf/mcp-bridge link --global
+                  </code>
+                  .
+                </p>
+                <pre className="overflow-x-auto rounded-sm bg-surface-0 p-2 font-mono text-[9px] leading-relaxed text-ink-muted">
+                  {bridgeSnippet}
+                </pre>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leadingIcon={<Copy size={11} />}
+                  onClick={() => void copyText('Bridge config', bridgeSnippet)}
+                >
+                  Copy config
+                </Button>
+              </div>
+            </details>
+          </div>
+
+          <div className="grid gap-1.5">
+            <h4 className="text-[10px] font-medium text-ink">
+              Recent activity
+            </h4>
+            {mcp && mcp.activity.length > 0 ? (
+              <div className="grid max-h-44 gap-1 overflow-auto rounded-sm border border-line bg-surface-0 p-1.5">
+                {mcp.activity.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-baseline gap-2 rounded-sm px-1.5 py-1 font-mono text-[9px]"
+                  >
+                    <span className={entry.ok ? 'text-ok' : 'text-danger'}>
+                      {entry.kind}
+                    </span>
+                    {entry.tool ? (
+                      <span className="text-ink-muted">{entry.tool}</span>
+                    ) : null}
+                    <span className="min-w-0 flex-1 truncate text-ink-faint">
+                      {entry.message}
+                    </span>
+                    <time className="shrink-0 text-ink-faint">
+                      {new Date(entry.at).toLocaleTimeString()}
+                    </time>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-sm border border-line bg-surface-0 px-3 py-3 text-[10px] text-ink-faint">
+                No MCP requests yet. Tool calls, sessions and rejected tokens
+                appear here, newest first.
+              </p>
+            )}
           </div>
         </section>
       </div>

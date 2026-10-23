@@ -20,6 +20,8 @@ import {
   type KerfBridge,
   type KerfEvent,
   type KerfEventEnvelope,
+  type McpSettingsUpdate,
+  type McpStatus,
   type ProjectHistoryState,
   type ProjectSnapshot,
   type ProjectSummary,
@@ -113,6 +115,12 @@ const bridge: KerfBridge = {
     save: (request: CompositionSaveRequest) =>
       invoke<CompositionSaveResult>(KERF_IPC.motion.save, request),
     delete: (id) => invoke<ProjectSnapshot>(KERF_IPC.motion.delete, id),
+  },
+  mcp: {
+    status: () => invoke<McpStatus>(KERF_IPC.mcp.status),
+    update: (settings: McpSettingsUpdate) =>
+      invoke<McpStatus>(KERF_IPC.mcp.update, settings),
+    rotateToken: () => invoke<McpStatus>(KERF_IPC.mcp.rotateToken),
   },
   chat: {
     send: (request: ChatSendRequest) =>
