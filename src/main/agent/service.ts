@@ -16,7 +16,7 @@ import type { ToolService } from '../tools/service';
 
 export interface AgentProviderSource {
   chatProvider(): ProviderAccount | null;
-  model(account: ProviderAccount): LanguageModel;
+  chatModel(account: ProviderAccount): LanguageModel;
 }
 
 export interface AgentProjectSource {
@@ -175,7 +175,7 @@ export class AgentService {
     try {
       return this.options.createModel
         ? this.options.createModel(account)
-        : this.options.providers.model(account);
+        : this.options.providers.chatModel(account);
     } catch (cause) {
       const hint = errorHint(cause);
       throw new Error(hint ?? errorMessage(cause));

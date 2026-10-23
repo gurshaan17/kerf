@@ -5,6 +5,8 @@ import type { SceneTree } from '@kerf/motion';
 import { sequenceDurationFrames } from '@kerf/engine';
 import type {
   AnalysisKind,
+  ChatProviderSetting,
+  ChatToolActivity,
   CompositionSaveRequest,
   CompositionSaveResult,
   EditResult,
@@ -34,6 +36,25 @@ export interface StudioSelection {
   readonly trackId: string | null;
 }
 
+export type ChatTurnStatus = 'streaming' | 'done' | 'aborted' | 'error';
+
+export interface ChatTurn {
+  readonly id: string;
+  readonly message: string;
+  readonly text: string;
+  readonly tools: readonly ChatToolActivity[];
+  readonly status: ChatTurnStatus;
+  readonly providerLabel: string;
+  readonly error: string | null;
+  readonly hint: string | null;
+  readonly durationMs: number | null;
+}
+
+export interface ChatError {
+  readonly message: string;
+  readonly hint: string | null;
+}
+
 export interface StudioState {
   readonly projects: ProjectSummary[];
   readonly snapshot: ProjectSnapshot | null;
@@ -49,6 +70,10 @@ export interface StudioState {
   readonly playing: boolean;
   readonly exports: ExportRecord[];
   readonly compositionTrees: Readonly<Record<string, SceneTree>>;
+  readonly chatTurns: readonly ChatTurn[];
+  readonly chatActiveTurnId: string | null;
+  readonly chatError: ChatError | null;
+  readonly chatProvider: ChatProviderSetting | null;
 
   hydrate: () => Promise<void>;
   handleEvent: (event: KerfEvent) => void;
@@ -87,6 +112,11 @@ export interface StudioState {
   pickExportPath: (presetId?: string) => Promise<string | null>;
   revealExport: (id: string) => void;
   exportOtio: () => Promise<string | null>;
+
+  sendChat: (message: string) => Promise<boolean>;
+  stopChat: () => Promise<void>;
+  refreshChatProvider: () => Promise<void>;
+  dismissChatError: () => void;
 
   apply: (command: EditCommand, label?: string) => Promise<EditResult | null>;
   undo: () => Promise<void>;
@@ -164,6 +194,27 @@ function outputName(path: string): string {
   return path.split(/[\\/]/).at(-1) ?? path;
 }
 
+function updateChatTurn(
+  turns: readonly ChatTurn[],
+  id: string,
+  update: (turn: ChatTurn) => ChatTurn,
+): ChatTurn[] {
+  return turns.map((turn) => (turn.id === id ? update(turn) : turn));
+}
+
+function mergeChatTool(
+  tools: readonly ChatToolActivity[],
+  tool: ChatToolActivity,
+): ChatToolActivity[] {
+  const existing = tools.findIndex((candidate) => candidate.id === tool.id);
+  if (existing === -1) {
+    return [...tools, tool];
+  }
+  return tools.map((candidate, index) =>
+    index === existing ? tool : candidate,
+  );
+}
+
 let toastCounter = 0;
 
 export function createStudioStore(bridge: KerfBridge) {
@@ -204,6 +255,8 @@ export function createStudioStore(bridge: KerfBridge) {
       const clipIds = options.clearSelection
         ? []
         : current.selection.clipIds.filter((id) => existing.has(id));
+      const projectChanged =
+        current.snapshot?.project.id !== snapshot?.project.id;
       set({
         snapshot,
         selection: {
@@ -214,6 +267,13 @@ export function createStudioStore(bridge: KerfBridge) {
               : current.selection.trackId,
         },
         playhead: snapshot ? clamp(current.playhead, 0, end) : 0,
+        ...(projectChanged
+          ? {
+              chatTurns: [],
+              chatActiveTurnId: null,
+              chatError: null,
+            }
+          : {}),
       });
     };
 
@@ -232,18 +292,23 @@ export function createStudioStore(bridge: KerfBridge) {
       playing: false,
       exports: [],
       compositionTrees: {},
+      chatTurns: [],
+      chatActiveTurnId: null,
+      chatError: null,
+      chatProvider: null,
 
       async hydrate() {
         set({ busy: true, error: null });
         try {
-          const [projects, snapshot] = await Promise.all([
+          const [projects, snapshot, chatProvider] = await Promise.all([
             bridge.projects.list(),
             bridge.projects.active(),
+            bridge.chat.provider().catch(() => null),
           ]);
           const exports = snapshot
             ? await bridge.export.list(snapshot.project.id)
             : [];
-          set({ projects, exports });
+          set({ projects, exports, chatProvider });
           setSnapshot(snapshot);
           set({ busy: false });
         } catch (cause) {
@@ -253,6 +318,115 @@ export function createStudioStore(bridge: KerfBridge) {
       },
 
       handleEvent(event) {
+        if (event.type === 'chat.started') {
+          set((state) => ({
+            chatTurns: [
+              ...state.chatTurns,
+              {
+                id: event.turnId,
+                message: event.message,
+                text: '',
+                tools: [],
+                status: 'streaming',
+                providerLabel: event.providerLabel,
+                error: null,
+                hint: null,
+                durationMs: null,
+              },
+            ],
+            chatActiveTurnId: event.turnId,
+            chatError: null,
+          }));
+          return;
+        }
+
+        if (event.type === 'chat.delta') {
+          set((state) => ({
+            chatTurns: updateChatTurn(
+              state.chatTurns,
+              event.turnId,
+              (turn) => ({
+                ...turn,
+                text: turn.text + event.text,
+              }),
+            ),
+          }));
+          return;
+        }
+
+        if (event.type === 'chat.tool') {
+          set((state) => ({
+            chatTurns: updateChatTurn(
+              state.chatTurns,
+              event.turnId,
+              (turn) => ({
+                ...turn,
+                tools: mergeChatTool(turn.tools, event.tool),
+              }),
+            ),
+          }));
+          return;
+        }
+
+        if (event.type === 'chat.done') {
+          set((state) => ({
+            chatTurns: updateChatTurn(
+              state.chatTurns,
+              event.turnId,
+              (turn) => ({
+                ...turn,
+                text: event.text,
+                status: 'done',
+                durationMs: event.durationMs,
+              }),
+            ),
+            chatActiveTurnId:
+              state.chatActiveTurnId === event.turnId
+                ? null
+                : state.chatActiveTurnId,
+          }));
+          return;
+        }
+
+        if (event.type === 'chat.aborted') {
+          set((state) => ({
+            chatTurns: updateChatTurn(
+              state.chatTurns,
+              event.turnId,
+              (turn) => ({
+                ...turn,
+                status: 'aborted',
+              }),
+            ),
+            chatActiveTurnId:
+              state.chatActiveTurnId === event.turnId
+                ? null
+                : state.chatActiveTurnId,
+          }));
+          return;
+        }
+
+        if (event.type === 'chat.error') {
+          set((state) => ({
+            chatTurns: updateChatTurn(
+              state.chatTurns,
+              event.turnId,
+              (turn) => ({
+                ...turn,
+                status: 'error',
+                error: event.error,
+                hint: event.hint,
+              }),
+            ),
+            chatActiveTurnId:
+              state.chatActiveTurnId === event.turnId
+                ? null
+                : state.chatActiveTurnId,
+            chatError: { message: event.error, hint: event.hint },
+          }));
+          return;
+        }
+
         if (event.type === 'project.closed') {
           if (get().snapshot?.project.id === event.projectId) {
             setSnapshot(null, { clearSelection: true });
@@ -666,6 +840,60 @@ export function createStudioStore(bridge: KerfBridge) {
           fail(cause, 'Could not export the OTIO timeline');
           return null;
         }
+      },
+
+      async sendChat(message) {
+        const trimmed = message.trim();
+        if (!trimmed) {
+          return false;
+        }
+        set({ chatError: null });
+        try {
+          const result = await bridge.chat.send({ message: trimmed });
+          set((state) =>
+            state.chatTurns.find(
+              (turn) =>
+                turn.id === result.turnId && turn.status === 'streaming',
+            )
+              ? { chatActiveTurnId: result.turnId }
+              : {},
+          );
+          return true;
+        } catch (cause) {
+          set({
+            chatError: {
+              message: errorMessage(cause),
+              hint: null,
+            },
+          });
+          return false;
+        }
+      },
+
+      async stopChat() {
+        try {
+          await bridge.chat.abort();
+        } catch (cause) {
+          set({
+            chatError: {
+              message: errorMessage(cause),
+              hint: null,
+            },
+          });
+        }
+      },
+
+      async refreshChatProvider() {
+        try {
+          const chatProvider = await bridge.chat.provider();
+          set({ chatProvider });
+        } catch {
+          set({ chatProvider: null });
+        }
+      },
+
+      dismissChatError() {
+        set({ chatError: null });
       },
 
       async apply(command, label) {

@@ -112,6 +112,8 @@ function makeBridge(snapshot: ProjectSnapshot) {
         throw new Error('not used');
       }),
       abort: vi.fn(async () => false),
+      provider: vi.fn(async () => ({ providerId: null, provider: null })),
+      setProvider: vi.fn(async () => ({ providerId: null, provider: null })),
     },
     renderer: {
       subscribe: vi.fn(() => () => undefined),
@@ -254,6 +256,119 @@ describe('studio store', () => {
     });
     expect(store.getState().exports[0]?.status).toBe('succeeded');
     expect(store.getState().toasts.at(-1)?.title).toBe('Export complete');
+  });
+
+  it('streams chat turns, tool cards and terminal status into the store', () => {
+    const snapshot = makeSnapshot();
+    const { bridge } = makeBridge(snapshot);
+    const store = createStudioStore(bridge);
+    store.setState({ snapshot });
+
+    store.getState().handleEvent({
+      type: 'chat.started',
+      turnId: 'turn_1',
+      sessionId: 'session_1',
+      message: 'Trim the intro',
+      providerLabel: 'Test model',
+    });
+    store.getState().handleEvent({
+      type: 'chat.delta',
+      turnId: 'turn_1',
+      text: 'I will ',
+    });
+    store.getState().handleEvent({
+      type: 'chat.delta',
+      turnId: 'turn_1',
+      text: 'trim it.',
+    });
+    store.getState().handleEvent({
+      type: 'chat.tool',
+      turnId: 'turn_1',
+      tool: {
+        id: 'call_1',
+        name: 'readTimeline',
+        status: 'running',
+        input: { includeMarkers: true },
+      },
+    });
+    store.getState().handleEvent({
+      type: 'chat.tool',
+      turnId: 'turn_1',
+      tool: {
+        id: 'call_1',
+        name: 'readTimeline',
+        status: 'succeeded',
+        input: { includeMarkers: true },
+        output: { tracks: [] },
+        durationMs: 12,
+      },
+    });
+    store.getState().handleEvent({
+      type: 'chat.done',
+      turnId: 'turn_1',
+      text: 'I will trim it.',
+      durationMs: 400,
+    });
+
+    const turn = store.getState().chatTurns[0];
+    expect(turn).toMatchObject({
+      id: 'turn_1',
+      message: 'Trim the intro',
+      text: 'I will trim it.',
+      status: 'done',
+      providerLabel: 'Test model',
+      durationMs: 400,
+    });
+    expect(turn?.tools).toHaveLength(1);
+    expect(turn?.tools[0]).toMatchObject({
+      id: 'call_1',
+      status: 'succeeded',
+      durationMs: 12,
+    });
+    expect(store.getState().chatActiveTurnId).toBeNull();
+  });
+
+  it('keeps a start failure visible in the chat panel', async () => {
+    const snapshot = makeSnapshot();
+    const { bridge } = makeBridge(snapshot);
+    bridge.chat.send.mockRejectedValueOnce(
+      new Error('No chat provider is configured.'),
+    );
+    const store = createStudioStore(bridge);
+
+    const ok = await store.getState().sendChat('Hello');
+
+    expect(ok).toBe(false);
+    expect(store.getState().chatError?.message).toMatch(/No chat provider/);
+    expect(store.getState().chatActiveTurnId).toBeNull();
+  });
+
+  it('clears the visible conversation when the project changes', () => {
+    const first = makeSnapshot();
+    const second = makeSnapshot();
+    const { bridge } = makeBridge(first);
+    const store = createStudioStore(bridge);
+    store.setState({
+      snapshot: first,
+      chatTurns: [
+        {
+          id: 'turn_1',
+          message: 'Hello',
+          text: 'Done',
+          tools: [],
+          status: 'done',
+          providerLabel: 'Test model',
+          error: null,
+          hint: null,
+          durationMs: 10,
+        },
+      ],
+    });
+
+    store.getState().handleEvent({ type: 'project.opened', snapshot: second });
+
+    expect(store.getState().chatTurns).toEqual([]);
+    expect(store.getState().chatActiveTurnId).toBeNull();
   });
 
   it('surfaces edit failures as a toast', async () => {

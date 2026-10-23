@@ -194,6 +194,7 @@ export interface ProviderAccount {
   readonly label: string;
   readonly baseUrl: string | null;
   readonly model: string | null;
+  readonly chatModel: string | null;
   readonly hasKey: boolean;
   readonly enabled: boolean;
   readonly visionConsent: boolean;
@@ -206,6 +207,7 @@ export interface ProviderSaveRequest {
   readonly label: string;
   readonly baseUrl?: string | null;
   readonly model?: string | null;
+  readonly chatModel?: string | null;
   readonly apiKey?: string | null;
   readonly clearKey?: boolean;
   readonly enabled?: boolean;
@@ -360,6 +362,11 @@ export interface ChatStartResult {
   };
 }
 
+export interface ChatProviderSetting {
+  readonly providerId: string | null;
+  readonly provider: ProviderAccount | null;
+}
+
 export type ChatEvent =
   | {
       readonly type: 'chat.started';
@@ -495,6 +502,8 @@ export const KERF_IPC = {
   chat: {
     send: 'kerf:chat:send',
     abort: 'kerf:chat:abort',
+    provider: 'kerf:chat:provider',
+    setProvider: 'kerf:chat:set-provider',
   },
   renderer: {
     request: 'kerf:renderer:request',
@@ -577,6 +586,10 @@ export interface KerfBridge {
   readonly chat: {
     readonly send: (request: ChatSendRequest) => Promise<ChatStartResult>;
     readonly abort: () => Promise<boolean>;
+    readonly provider: () => Promise<ChatProviderSetting>;
+    readonly setProvider: (
+      providerId: string | null,
+    ) => Promise<ChatProviderSetting>;
   };
   readonly renderer: {
     readonly subscribe: (

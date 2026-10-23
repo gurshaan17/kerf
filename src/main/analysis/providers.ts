@@ -4,6 +4,7 @@ import type { LanguageModel } from 'ai';
 import { createLanguageModel } from '@kerf/agent';
 import type { SqliteDatabase } from '../db';
 import type {
+  ChatProviderSetting,
   ProviderAccount,
   ProviderKind,
   ProviderSaveRequest,
@@ -16,6 +17,7 @@ interface ProviderRow {
   label: string;
   base_url: string | null;
   model: string | null;
+  chat_model: string | null;
   key_ciphertext: Buffer | null;
   enabled: number;
   vision_consent: number;
@@ -70,6 +72,7 @@ function accountFromRow(row: ProviderRow): ProviderAccount {
     label: row.label,
     baseUrl: row.base_url,
     model: row.model,
+    chatModel: row.chat_model,
     hasKey: row.key_ciphertext !== null && row.key_ciphertext.length > 0,
     enabled: row.enabled !== 0,
     visionConsent: row.vision_consent !== 0,
@@ -80,12 +83,13 @@ function accountFromRow(row: ProviderRow): ProviderAccount {
 function providerModel(
   account: ProviderAccount,
   apiKey: string | null,
+  model: string | null = account.model,
 ): LanguageModel {
   return createLanguageModel({
     kind: account.kind,
     label: account.label,
     baseUrl: account.baseUrl,
-    model: account.model,
+    model,
     apiKey,
   });
 }
@@ -144,6 +148,10 @@ export class ProviderStore {
         existing?.model ||
         DEFAULT_MODEL[request.kind] ||
         null,
+      chat_model:
+        request.chatModel === null
+          ? null
+          : request.chatModel?.trim() || existing?.chatModel || null,
       key_ciphertext: keyCiphertext,
       enabled: request.enabled === false ? 0 : 1,
       vision_consent: request.visionConsent === true ? 1 : 0,
@@ -161,10 +169,10 @@ export class ProviderStore {
     this.database
       .prepare(
         `INSERT INTO provider_accounts (
-          id, kind, label, base_url, model, key_ciphertext, enabled,
+          id, kind, label, base_url, model, chat_model, key_ciphertext, enabled,
           vision_consent, chat_consent, created_at, updated_at
         ) VALUES (
-          @id, @kind, @label, @base_url, @model, @key_ciphertext, @enabled,
+          @id, @kind, @label, @base_url, @model, @chat_model, @key_ciphertext, @enabled,
           @vision_consent, @chat_consent, @created_at, @updated_at
         )
         ON CONFLICT(id) DO UPDATE SET
@@ -172,6 +180,7 @@ export class ProviderStore {
           label = excluded.label,
           base_url = excluded.base_url,
           model = excluded.model,
+          chat_model = excluded.chat_model,
           key_ciphertext = excluded.key_ciphertext,
           enabled = excluded.enabled,
           vision_consent = excluded.vision_consent,
@@ -183,10 +192,18 @@ export class ProviderStore {
     if (!saved) {
       throw new Error('The provider account could not be saved.');
     }
+    if (!saved.chatConsent && this.chatProviderId() === saved.id) {
+      this.setChatProvider(null);
+    } else if (saved.chatConsent && !this.chatProviderId()) {
+      this.setChatProvider(saved.id);
+    }
     return saved;
   }
 
   delete(id: string): boolean {
+    if (this.chatProviderId() === id) {
+      this.setChatProvider(null);
+    }
     return (
       this.database
         .prepare('DELETE FROM provider_accounts WHERE id = ?')
@@ -211,7 +228,59 @@ export class ProviderStore {
     );
   }
 
+  chatProviderId(): string | null {
+    const row = this.database
+      .prepare('SELECT value_json FROM app_settings WHERE key = ?')
+      .get('chat.providerId') as { value_json: string } | undefined;
+    if (!row) {
+      return null;
+    }
+    try {
+      const value = JSON.parse(row.value_json) as unknown;
+      return typeof value === 'string' ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  setChatProvider(id: string | null): ChatProviderSetting {
+    if (id) {
+      const account = this.find(id);
+      if (!account || !account.enabled || !account.chatConsent) {
+        throw new Error(
+          'Choose an enabled provider that is allowed to use chat.',
+        );
+      }
+      this.database
+        .prepare(
+          `INSERT INTO app_settings (key, value_json, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(key) DO UPDATE SET
+             value_json = excluded.value_json,
+             updated_at = excluded.updated_at`,
+        )
+        .run('chat.providerId', JSON.stringify(id), this.now());
+    } else {
+      this.database
+        .prepare('DELETE FROM app_settings WHERE key = ?')
+        .run('chat.providerId');
+    }
+    return this.chatProviderSetting();
+  }
+
+  chatProviderSetting(): ChatProviderSetting {
+    const provider = this.chatProvider();
+    return { providerId: provider?.id ?? null, provider };
+  }
+
   chatProvider(): ProviderAccount | null {
+    const preferred = this.chatProviderId();
+    if (preferred) {
+      const account = this.find(preferred);
+      if (account?.enabled && account.chatConsent) {
+        return account;
+      }
+    }
     return (
       this.list().find((account) => account.enabled && account.chatConsent) ??
       null
@@ -220,6 +289,14 @@ export class ProviderStore {
 
   model(account: ProviderAccount): LanguageModel {
     return providerModel(account, this.apiKey(account.id));
+  }
+
+  chatModel(account: ProviderAccount): LanguageModel {
+    return providerModel(
+      account,
+      this.apiKey(account.id),
+      account.chatModel ?? account.model,
+    );
   }
 
   async test(id: string): Promise<ProviderTestResult> {

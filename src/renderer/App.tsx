@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StudioShell } from '@kerf/ui';
+import { ChatPanel } from './chat/ChatPanel';
 import { CommandPalette } from './commands/CommandPalette';
 import { ShortcutsDialog } from './commands/ShortcutsDialog';
 import { useGlobalShortcuts } from './commands/use-global-shortcuts';
@@ -225,7 +226,14 @@ export default function App() {
             onOpenMotion={openMotion}
           />
         }
+        chatPanel={
+          <ChatPanel
+            settingsOpen={analysisOpen}
+            onOpenSettings={openAnalysis}
+          />
+        }
         onOpenProject={() => void closeProject()}
+        onOpenSettings={openAnalysis}
         onShowShortcuts={openShortcuts}
         onExport={openExport}
         exporting={exporting}

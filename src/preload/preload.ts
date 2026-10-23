@@ -6,6 +6,7 @@ import {
   type AnalysisAssetStatus,
   type AnalysisRunRequest,
   type AnalysisRunResult,
+  type ChatProviderSetting,
   type ChatSendRequest,
   type ChatStartResult,
   type CompositionSaveRequest,
@@ -117,6 +118,9 @@ const bridge: KerfBridge = {
     send: (request: ChatSendRequest) =>
       invoke<ChatStartResult>(KERF_IPC.chat.send, request),
     abort: () => invoke<boolean>(KERF_IPC.chat.abort),
+    provider: () => invoke<ChatProviderSetting>(KERF_IPC.chat.provider),
+    setProvider: (providerId: string | null) =>
+      invoke<ChatProviderSetting>(KERF_IPC.chat.setProvider, providerId),
   },
   renderer: {
     subscribe(listener: (request: RendererRequest) => void) {

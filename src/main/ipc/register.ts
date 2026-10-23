@@ -68,6 +68,7 @@ const providerSaveSchema = z.object({
   label: z.string().trim().min(1).max(80),
   baseUrl: z.string().trim().max(500).nullable().optional(),
   model: z.string().trim().max(200).nullable().optional(),
+  chatModel: z.string().trim().max(200).nullable().optional(),
   apiKey: z.string().max(1_000).nullable().optional(),
   clearKey: z.boolean().optional(),
   enabled: z.boolean().optional(),
@@ -295,6 +296,14 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     agent.start(chatSendSchema.parse(request)),
   );
   ipcMain.handle(KERF_IPC.chat.abort, () => agent.abort());
+  ipcMain.handle(KERF_IPC.chat.provider, () =>
+    analysis.providers.chatProviderSetting(),
+  );
+  ipcMain.handle(KERF_IPC.chat.setProvider, (_event, id: unknown) =>
+    analysis.providers.setChatProvider(
+      id === null ? null : projectIdSchema.parse(id),
+    ),
+  );
   ipcMain.handle(KERF_IPC.renderer.response, (_event, response: unknown) => {
     const parsed = rendererResponseSchema.parse(response) as RendererResponse;
     renderer.respond(

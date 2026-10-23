@@ -187,6 +187,10 @@ const CHAT_CONSENT_SCHEMA = `
 ALTER TABLE provider_accounts ADD COLUMN chat_consent INTEGER NOT NULL DEFAULT 0;
 `;
 
+const CHAT_MODEL_SCHEMA = `
+ALTER TABLE provider_accounts ADD COLUMN chat_model TEXT;
+`;
+
 const SEARCH_SCHEMA = `
 CREATE VIRTUAL TABLE transcript_fts USING fts5(
   text,
@@ -248,6 +252,13 @@ export const DATABASE_MIGRATIONS: readonly Migration[] = [
     name: 'agent chat consent',
     up(connection) {
       connection.exec(CHAT_CONSENT_SCHEMA);
+    },
+  },
+  {
+    version: 6,
+    name: 'provider chat model',
+    up(connection) {
+      connection.exec(CHAT_MODEL_SCHEMA);
     },
   },
 ];

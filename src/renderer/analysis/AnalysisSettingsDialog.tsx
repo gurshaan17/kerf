@@ -8,6 +8,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import type {
+  ChatProviderSetting,
   ProviderAccount,
   ProviderKind,
   WhisperModelInfo,
@@ -43,24 +44,31 @@ export function AnalysisSettingsDialog({
   const pushToast = useStudio((state) => state.pushToast);
   const [providers, setProviders] = useState<ProviderAccount[]>([]);
   const [models, setModels] = useState<WhisperModelInfo[]>([]);
+  const [chatProvider, setChatProvider] = useState<ChatProviderSetting | null>(
+    null,
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [kind, setKind] = useState<ProviderKind>('openai');
   const [label, setLabel] = useState('OpenAI');
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
+  const [chatModel, setChatModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [consent, setConsent] = useState(false);
+  const [chatConsent, setChatConsent] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
 
   const refresh = async () => {
-    const [nextProviders, nextModels] = await Promise.all([
+    const [nextProviders, nextModels, nextChatProvider] = await Promise.all([
       window.kerf.analysis.providers(),
       window.kerf.analysis.models(),
+      window.kerf.chat.provider(),
     ]);
     setProviders(nextProviders);
     setModels(nextModels);
+    setChatProvider(nextChatProvider);
   };
 
   useEffect(() => {
@@ -105,8 +113,10 @@ export function AnalysisSettingsDialog({
     setLabel(provider.label);
     setBaseUrl(provider.baseUrl ?? '');
     setModel(provider.model ?? '');
+    setChatModel(provider.chatModel ?? '');
     setApiKey('');
     setConsent(provider.visionConsent);
+    setChatConsent(provider.chatConsent);
     setTestMessage(null);
   };
 
@@ -116,8 +126,10 @@ export function AnalysisSettingsDialog({
     setLabel('OpenAI');
     setBaseUrl('');
     setModel('');
+    setChatModel('');
     setApiKey('');
     setConsent(false);
+    setChatConsent(false);
     setTestMessage(null);
   };
 
@@ -129,8 +141,10 @@ export function AnalysisSettingsDialog({
         label: label.trim() || kind,
         baseUrl: baseUrl.trim() || null,
         model: model.trim() || null,
+        chatModel: chatModel.trim() || null,
         apiKey: apiKey.trim() || null,
         visionConsent: consent,
+        chatConsent,
       });
       setEditingId(saved.id);
       setApiKey('');
@@ -159,6 +173,25 @@ export function AnalysisSettingsDialog({
     } catch (cause) {
       pushToast({
         title: 'Could not remove the provider',
+        description: cause instanceof Error ? cause.message : String(cause),
+        tone: 'error',
+      });
+    }
+  };
+
+  const setDefaultChatProvider = async (id: string) => {
+    try {
+      const next = await window.kerf.chat.setProvider(id || null);
+      setChatProvider(next);
+      await refresh();
+      pushToast({
+        title: 'Chat provider updated',
+        description: next.provider?.label ?? 'Automatic selection',
+        tone: 'success',
+      });
+    } catch (cause) {
+      pushToast({
+        title: 'Could not set the chat provider',
         description: cause instanceof Error ? cause.message : String(cause),
         tone: 'error',
       });
@@ -215,8 +248,8 @@ export function AnalysisSettingsDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Analysis settings"
-      description="Whisper models stay on this machine. Cloud vision is opt-in and receives only the keyframe you choose to describe."
+      title="AI settings"
+      description="Whisper models stay on this machine. Chat and cloud vision are opt-in per provider, and Kerf never falls back to another provider."
       panelClassName="max-w-[720px]"
       footer={
         <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
@@ -292,7 +325,7 @@ export function AnalysisSettingsDialog({
           <div className="flex items-baseline justify-between gap-2">
             <div>
               <h3 className="text-[12px] font-semibold text-ink">
-                Vision providers
+                Vision and chat providers
               </h3>
               <p className="mt-0.5 text-[10px] leading-relaxed text-ink-faint">
                 Keys are encrypted with the operating system credential store
@@ -304,6 +337,29 @@ export function AnalysisSettingsDialog({
               New
             </Button>
           </div>
+
+          <Field
+            label="Chat provider"
+            hint="The assistant uses one provider at a time. Only providers with chat allowed are listed."
+          >
+            <Select
+              value={chatProvider?.providerId ?? ''}
+              onChange={(event) =>
+                void setDefaultChatProvider(event.target.value)
+              }
+              options={[
+                { value: '', label: 'Automatic (first allowed provider)' },
+                ...providers
+                  .filter(
+                    (provider) => provider.enabled && provider.chatConsent,
+                  )
+                  .map((provider) => ({
+                    value: provider.id,
+                    label: `${provider.label} · ${provider.chatModel ?? provider.model ?? 'default model'}`,
+                  })),
+              ]}
+            />
+          </Field>
 
           {providers.length > 0 ? (
             <div className="grid gap-1.5">
@@ -322,6 +378,11 @@ export function AnalysisSettingsDialog({
                       {provider.visionConsent ? (
                         <span className="ml-2 inline-flex items-center gap-1 font-mono text-[8px] text-ok uppercase">
                           <Check size={9} /> vision
+                        </span>
+                      ) : null}
+                      {provider.chatConsent ? (
+                        <span className="ml-2 inline-flex items-center gap-1 font-mono text-[8px] text-accent uppercase">
+                          <Check size={9} /> chat
                         </span>
                       ) : null}
                     </p>
@@ -394,6 +455,17 @@ export function AnalysisSettingsDialog({
               </Field>
             </FieldRow>
             <Field
+              label="Chat model"
+              hint="Used only by the assistant. When blank, Kerf falls back to the vision model."
+              optional
+            >
+              <Input
+                value={chatModel}
+                onChange={(event) => setChatModel(event.target.value)}
+                placeholder="Use the vision model or provider default"
+              />
+            </Field>
+            <Field
               label="API key"
               hint="Leave blank to keep the existing key. Ollama does not need one."
               optional
@@ -429,6 +501,24 @@ export function AnalysisSettingsDialog({
                 <span className="mt-0.5 block text-ink-faint">
                   Only the selected provider receives the keyframe and prompt.
                   Kerf does not proxy, log or fall back to another provider.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 rounded-sm border border-line bg-surface-1 px-2.5 py-2 text-[10px] leading-relaxed text-ink-muted">
+              <input
+                type="checkbox"
+                checked={chatConsent}
+                onChange={(event) => setChatConsent(event.target.checked)}
+                className="mt-0.5 accent-[var(--color-accent)]"
+              />
+              <span>
+                <span className="inline-flex items-center gap-1 font-medium text-ink">
+                  <ShieldCheck size={11} /> Allow this provider to power chat
+                </span>
+                <span className="mt-0.5 block text-ink-faint">
+                  Your prompts, tool results and the parts of the timeline the
+                  assistant reads go to this provider. Cloud chat stays off
+                  until you grant this consent explicitly.
                 </span>
               </span>
             </label>

@@ -121,6 +121,38 @@ describe('ProviderStore', () => {
     expect(store.chatProvider()?.label).toBe('Local renamed');
   });
 
+  it('remembers a default chat provider and keeps chat models separate', () => {
+    const { store } = makeStore();
+    const first = store.save({
+      kind: 'openai',
+      label: 'OpenAI',
+      apiKey: 'key',
+      model: 'vision-model',
+      chatConsent: true,
+    });
+    const second = store.save({
+      kind: 'ollama',
+      label: 'Local chat',
+      model: 'llava',
+      chatModel: 'llama3.2',
+      chatConsent: true,
+    });
+
+    expect(store.chatProviderId()).toBe(first.id);
+    expect(store.setChatProvider(second.id).providerId).toBe(second.id);
+    expect(store.chatProvider()?.id).toBe(second.id);
+    expect(store.chatProviderSetting().provider?.chatModel).toBe('llama3.2');
+
+    store.save({
+      id: second.id,
+      kind: 'ollama',
+      label: 'Local chat',
+      chatConsent: false,
+    });
+    expect(store.chatProviderId()).toBeNull();
+    expect(store.chatProvider()?.id).toBe(first.id);
+  });
+
   it('throws a clean credential error when a cloud model has no key', () => {
     const { store } = makeStore();
     const saved = store.save({ kind: 'anthropic', label: 'Anthropic' });

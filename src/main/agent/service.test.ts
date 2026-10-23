@@ -52,6 +52,7 @@ function provider(): ProviderAccount {
     label: 'Test local model',
     baseUrl: null,
     model: 'test-model',
+    chatModel: 'test-model',
     hasKey: false,
     enabled: true,
     visionConsent: false,
@@ -136,7 +137,7 @@ function runner(
     projects: { current: snapshot },
     providers: {
       chatProvider: provider,
-      model: () => fakeModel([toolChunks(), textChunks('Done')]),
+      chatModel: () => fakeModel([toolChunks(), textChunks('Done')]),
     },
     tools: tools as ToolService,
     broadcast: (event) => {
@@ -187,7 +188,7 @@ describe('AgentService', () => {
       projects: { current: snapshot },
       providers: {
         chatProvider: () => null,
-        model: () => fakeModel([textChunks('Never')]),
+        chatModel: () => fakeModel([textChunks('Never')]),
       },
       tools: { call: vi.fn() } as unknown as ToolService,
       broadcast: () => undefined,
@@ -249,7 +250,7 @@ describe('AgentService', () => {
       projects: { current: snapshot },
       providers: {
         chatProvider: provider,
-        model: () => fakeModel([textChunks('Partial reply')]),
+        chatModel: () => fakeModel([textChunks('Partial reply')]),
       },
       tools: { call: vi.fn() } as unknown as ToolService,
       broadcast: (event) => {

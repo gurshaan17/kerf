@@ -69,6 +69,8 @@ const bridge: KerfBridge = {
       throw new Error('not used');
     },
     abort: async () => false,
+    provider: async () => ({ providerId: null, provider: null }),
+    setProvider: async () => ({ providerId: null, provider: null }),
   },
   renderer: {
     subscribe: () => () => undefined,

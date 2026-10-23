@@ -44,6 +44,7 @@ export interface StudioShellProps {
   sequenceLabel?: string;
   assetCount?: number;
   leftPanel?: ReactNode;
+  chatPanel?: ReactNode;
   stage?: ReactNode;
   timeline?: ReactNode;
   inspector?: ReactNode;
@@ -52,6 +53,7 @@ export interface StudioShellProps {
   onDismissToast?: (id: string) => void;
   onExport?: () => void;
   onOpenProject?: () => void;
+  onOpenSettings?: () => void;
   onShowShortcuts?: () => void;
 }
 
@@ -389,6 +391,7 @@ export function StudioShell({
   sequenceLabel = '1920 × 1080 · 24 fps',
   assetCount = 0,
   leftPanel,
+  chatPanel,
   stage,
   timeline,
   inspector,
@@ -397,6 +400,7 @@ export function StudioShell({
   onDismissToast,
   onExport,
   onOpenProject,
+  onOpenSettings,
   onShowShortcuts,
 }: StudioShellProps) {
   const [rail, setRail] = useState('media');
@@ -407,6 +411,8 @@ export function StudioShell({
   const isMac =
     typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
   const showLibrary = Boolean(leftPanel) && rail === 'media';
+  const showChat = Boolean(chatPanel) && rail === 'chat';
+  const showLeftPanel = showLibrary || showChat;
 
   const railItems = [
     { id: 'media', label: 'Media', icon: <Library size={18} /> },
@@ -481,7 +487,10 @@ export function StudioShell({
       </header>
 
       <div
-        className={cx('k-shell__body', showLibrary && 'k-shell__body--library')}
+        className={cx(
+          'k-shell__body',
+          showLeftPanel && 'k-shell__body--library',
+        )}
       >
         <nav className="k-shell__rail" aria-label="Workspace">
           <div className="k-shell__rail-group">
@@ -501,12 +510,18 @@ export function StudioShell({
             label="Settings"
             tooltip="Settings"
             icon={<Settings size={18} />}
+            onClick={onOpenSettings}
           />
         </nav>
 
         {showLibrary ? (
           <aside className="k-shell__library" aria-label="Footage bin">
             {leftPanel}
+          </aside>
+        ) : null}
+        {showChat ? (
+          <aside className="k-shell__library" aria-label="Assistant">
+            {chatPanel}
           </aside>
         ) : null}
 
