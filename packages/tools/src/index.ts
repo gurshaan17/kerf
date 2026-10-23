@@ -1,2 +1,12 @@
-/** Public surface for the @kerf/tools package. */
-export {};
+import { READ_TOOLS } from './read';
+import { ToolRegistry } from './registry';
+import type { AnyToolDefinition } from './registry';
+
+export * from './read';
+export * from './registry';
+export * from './types';
+
+export const TOOL_DEFINITIONS =
+  READ_TOOLS as unknown as readonly AnyToolDefinition[];
+
+export const toolRegistry = new ToolRegistry(TOOL_DEFINITIONS);
