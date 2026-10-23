@@ -1,11 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGoogle } from '@ai-sdk/google';
-import { createOpenAI } from '@ai-sdk/openai';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { createXai } from '@ai-sdk/xai';
 import { generateText } from 'ai';
 import type { LanguageModel } from 'ai';
+import { createLanguageModel } from '@kerf/agent';
 import type { SqliteDatabase } from '../db';
 import type {
   ProviderAccount,
@@ -23,6 +19,7 @@ interface ProviderRow {
   key_ciphertext: Buffer | null;
   enabled: number;
   vision_consent: number;
+  chat_consent: number;
   created_at: number;
   updated_at: number;
 }
@@ -76,6 +73,7 @@ function accountFromRow(row: ProviderRow): ProviderAccount {
     hasKey: row.key_ciphertext !== null && row.key_ciphertext.length > 0,
     enabled: row.enabled !== 0,
     visionConsent: row.vision_consent !== 0,
+    chatConsent: row.chat_consent !== 0,
   };
 }
 
@@ -83,30 +81,13 @@ function providerModel(
   account: ProviderAccount,
   apiKey: string | null,
 ): LanguageModel {
-  const baseURL = account.baseUrl ?? DEFAULT_BASE_URL[account.kind];
-  const model = account.model ?? DEFAULT_MODEL[account.kind];
-  if (!model) {
-    throw new Error(`Choose a model for ${account.label}.`);
-  }
-  switch (account.kind) {
-    case 'openai':
-      return createOpenAI({ apiKey: apiKey ?? undefined, baseURL })(model);
-    case 'anthropic':
-      return createAnthropic({ apiKey: apiKey ?? undefined, baseURL })(model);
-    case 'google':
-      return createGoogle({ apiKey: apiKey ?? undefined, baseURL })(model);
-    case 'xai':
-      return createXai({ apiKey: apiKey ?? undefined, baseURL })(model);
-    case 'ollama':
-    case 'openai-compatible': {
-      const provider = createOpenAICompatible({
-        name: account.kind,
-        baseURL: baseURL ?? 'http://127.0.0.1:11434/v1',
-        apiKey: apiKey ?? 'local',
-      });
-      return provider.chatModel(model);
-    }
-  }
+  return createLanguageModel({
+    kind: account.kind,
+    label: account.label,
+    baseUrl: account.baseUrl,
+    model: account.model,
+    apiKey,
+  });
 }
 
 export class ProviderStore {
@@ -166,6 +147,14 @@ export class ProviderStore {
       key_ciphertext: keyCiphertext,
       enabled: request.enabled === false ? 0 : 1,
       vision_consent: request.visionConsent === true ? 1 : 0,
+      chat_consent:
+        request.chatConsent === undefined
+          ? existing?.chatConsent
+            ? 1
+            : 0
+          : request.chatConsent
+            ? 1
+            : 0,
       created_at: now,
       updated_at: now,
     };
@@ -173,10 +162,10 @@ export class ProviderStore {
       .prepare(
         `INSERT INTO provider_accounts (
           id, kind, label, base_url, model, key_ciphertext, enabled,
-          vision_consent, created_at, updated_at
+          vision_consent, chat_consent, created_at, updated_at
         ) VALUES (
           @id, @kind, @label, @base_url, @model, @key_ciphertext, @enabled,
-          @vision_consent, @created_at, @updated_at
+          @vision_consent, @chat_consent, @created_at, @updated_at
         )
         ON CONFLICT(id) DO UPDATE SET
           kind = excluded.kind,
@@ -186,6 +175,7 @@ export class ProviderStore {
           key_ciphertext = excluded.key_ciphertext,
           enabled = excluded.enabled,
           vision_consent = excluded.vision_consent,
+          chat_consent = excluded.chat_consent,
           updated_at = excluded.updated_at`,
       )
       .run(values);
@@ -217,6 +207,13 @@ export class ProviderStore {
   visionProvider(): ProviderAccount | null {
     return (
       this.list().find((account) => account.enabled && account.visionConsent) ??
+      null
+    );
+  }
+
+  chatProvider(): ProviderAccount | null {
+    return (
+      this.list().find((account) => account.enabled && account.chatConsent) ??
       null
     );
   }

@@ -183,6 +183,10 @@ CREATE TABLE embedding_vectors (
 CREATE INDEX embedding_vectors_project_idx ON embedding_vectors(project_id);
 `;
 
+const CHAT_CONSENT_SCHEMA = `
+ALTER TABLE provider_accounts ADD COLUMN chat_consent INTEGER NOT NULL DEFAULT 0;
+`;
+
 const SEARCH_SCHEMA = `
 CREATE VIRTUAL TABLE transcript_fts USING fts5(
   text,
@@ -237,6 +241,13 @@ export const DATABASE_MIGRATIONS: readonly Migration[] = [
         // FTS5 is optional. SearchService falls back to LIKE queries when
         // these tables are absent.
       }
+    },
+  },
+  {
+    version: 5,
+    name: 'agent chat consent',
+    up(connection) {
+      connection.exec(CHAT_CONSENT_SCHEMA);
     },
   },
 ];

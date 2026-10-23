@@ -45,6 +45,7 @@ describe('ProviderStore', () => {
 
     expect(saved.hasKey).toBe(true);
     expect(saved.visionConsent).toBe(true);
+    expect(saved.chatConsent).toBe(false);
     expect(JSON.stringify(saved)).not.toContain('sk-secret-value');
     expect(store.apiKey(saved.id)).toBe('sk-secret-value');
 
@@ -83,15 +84,47 @@ describe('ProviderStore', () => {
     expect(store.apiKey(saved.id)).toBeNull();
   });
 
-  it('requires consent before a provider is used for vision', () => {
+  it('requires consent before a provider is used for vision or chat', () => {
     const { store } = makeStore();
     store.save({
       kind: 'openai',
       label: 'No consent',
       apiKey: 'key',
       visionConsent: false,
+      chatConsent: false,
     });
     expect(store.visionProvider()).toBeNull();
+    expect(store.chatProvider()).toBeNull();
+
+    const consented = store.save({
+      kind: 'openai',
+      label: 'Chat consent',
+      apiKey: 'key',
+      chatConsent: true,
+    });
+    expect(store.chatProvider()?.id).toBe(consented.id);
+  });
+
+  it('keeps chat consent on an update that only changes the label', () => {
+    const { store } = makeStore();
+    const saved = store.save({
+      kind: 'ollama',
+      label: 'Local',
+      chatConsent: true,
+    });
+    const updated = store.save({
+      id: saved.id,
+      kind: 'ollama',
+      label: 'Local renamed',
+    });
+    expect(updated.chatConsent).toBe(true);
+    expect(store.chatProvider()?.label).toBe('Local renamed');
+  });
+
+  it('throws a clean credential error when a cloud model has no key', () => {
+    const { store } = makeStore();
+    const saved = store.save({ kind: 'anthropic', label: 'Anthropic' });
+    expect(() => store.model(saved)).toThrow(/Add an API key for Anthropic/);
   });
 
   it('reports a missing key instead of making a request', async () => {

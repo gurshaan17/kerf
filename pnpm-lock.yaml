@@ -112,7 +112,26 @@ importers:
         specifier: ^5.0.5
         version: 5.0.5(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@26.6.5)(jiti@2.7.0))
 
-  packages/agent: {}
+  packages/agent:
+    dependencies:
+      '@ai-sdk/anthropic':
+        specifier: ^4.0.85
+        version: 4.0.85(zod@4.6.7)
+      '@ai-sdk/google':
+        specifier: ^4.0.102
+        version: 4.0.102(zod@4.6.7)
+      '@ai-sdk/openai':
+        specifier: ^4.0.99
+        version: 4.0.99(zod@4.6.7)
+      '@ai-sdk/openai-compatible':
+        specifier: ^3.0.75
+        version: 3.0.75(zod@4.6.7)
+      '@ai-sdk/xai':
+        specifier: ^5.0.27
+        version: 5.0.27(zod@4.6.7)
+      ai:
+        specifier: ^7.0.148
+        version: 7.0.148(zod@4.6.7)
 
   packages/canvas:
     dependencies:
@@ -149,15 +168,18 @@ importers:
 
   packages/tools:
     dependencies:
-      '@kerf/canvas':
-        specifier: workspace:*
-        version: link:../canvas
       '@kerf/engine':
         specifier: workspace:*
         version: link:../engine
       '@kerf/model':
         specifier: workspace:*
         version: link:../model
+      '@kerf/motion':
+        specifier: workspace:*
+        version: link:../motion
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   packages/ui:
     dependencies:

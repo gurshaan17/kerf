@@ -1,2 +1,3 @@
 /** Public surface for the @kerf/agent package. */
-export {};
+export * from './prompt';
+export * from './providers';

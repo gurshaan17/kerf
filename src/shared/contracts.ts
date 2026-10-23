@@ -197,6 +197,7 @@ export interface ProviderAccount {
   readonly hasKey: boolean;
   readonly enabled: boolean;
   readonly visionConsent: boolean;
+  readonly chatConsent: boolean;
 }
 
 export interface ProviderSaveRequest {
@@ -209,6 +210,7 @@ export interface ProviderSaveRequest {
   readonly clearKey?: boolean;
   readonly enabled?: boolean;
   readonly visionConsent?: boolean;
+  readonly chatConsent?: boolean;
 }
 
 export interface ProviderTestResult {
