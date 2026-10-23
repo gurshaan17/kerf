@@ -12,6 +12,7 @@ export interface IconButtonProps extends Omit<
   size?: 'sm' | 'md';
   active?: boolean;
   tooltip?: string;
+  tooltipSide?: 'top' | 'bottom' | 'left' | 'right';
 }
 
 const baseClasses =
@@ -30,6 +31,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       size = 'md',
       active = false,
       tooltip,
+      tooltipSide,
       className,
       type = 'button',
       ...rest
@@ -49,6 +51,12 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       </button>
     );
 
-    return tooltip ? <Tooltip label={tooltip}>{button}</Tooltip> : button;
+    return tooltip ? (
+      <Tooltip label={tooltip} side={tooltipSide}>
+        {button}
+      </Tooltip>
+    ) : (
+      button
+    );
   },
 );

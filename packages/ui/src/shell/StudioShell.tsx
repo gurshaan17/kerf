@@ -446,6 +446,7 @@ export function StudioShell({
           <IconButton
             label="Keyboard shortcuts"
             tooltip="Keyboard shortcuts"
+            tooltipSide="bottom"
             size="sm"
             icon={<Keyboard size={15} />}
             onClick={() => {

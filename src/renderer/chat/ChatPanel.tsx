@@ -164,6 +164,7 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
         <IconButton
           label="AI settings"
           tooltip="AI settings"
+          tooltipSide="bottom"
           size="sm"
           icon={<Settings size={14} />}
           onClick={onOpenSettings}

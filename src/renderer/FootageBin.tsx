@@ -257,6 +257,7 @@ export function FootageBin({
           <IconButton
             label="Search transcripts and scenes"
             tooltip="Search transcripts and scenes"
+            tooltipSide="bottom"
             size="sm"
             icon={<Search size={14} />}
             onClick={onOpenSearch}
@@ -264,6 +265,7 @@ export function FootageBin({
           <IconButton
             label="References"
             tooltip="References"
+            tooltipSide="bottom"
             size="sm"
             icon={<Palette size={14} />}
             onClick={onOpenReferences}
@@ -271,6 +273,7 @@ export function FootageBin({
           <IconButton
             label="Compositions"
             tooltip="Compositions"
+            tooltipSide="bottom"
             size="sm"
             icon={<Clapperboard size={14} />}
             onClick={onOpenMotion}
@@ -278,6 +281,7 @@ export function FootageBin({
           <IconButton
             label="Analysis settings"
             tooltip="Analysis settings"
+            tooltipSide="bottom"
             size="sm"
             icon={<Settings2 size={14} />}
             onClick={onOpenAnalysis}
@@ -285,6 +289,7 @@ export function FootageBin({
           <IconButton
             label="Check source availability"
             tooltip="Check source availability"
+            tooltipSide="bottom"
             size="sm"
             icon={<RefreshCw size={14} />}
             disabled={busy}
