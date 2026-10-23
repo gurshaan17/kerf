@@ -333,7 +333,104 @@ export interface ExportOtioResult {
   readonly path: string;
 }
 
-export type KerfEvent = ProjectEvent | JobEvent | ExportEvent;
+export type ChatToolStatus = 'running' | 'succeeded' | 'failed';
+
+export interface ChatToolActivity {
+  readonly id: string;
+  readonly name: string;
+  readonly status: ChatToolStatus;
+  readonly input: unknown;
+  readonly output?: unknown;
+  readonly error?: string;
+  readonly durationMs?: number;
+}
+
+export interface ChatSendRequest {
+  readonly message: string;
+}
+
+export interface ChatStartResult {
+  readonly turnId: string;
+  readonly sessionId: string;
+  readonly provider: {
+    readonly id: string;
+    readonly label: string;
+    readonly kind: ProviderKind;
+    readonly model: string | null;
+  };
+}
+
+export type ChatEvent =
+  | {
+      readonly type: 'chat.started';
+      readonly turnId: string;
+      readonly sessionId: string;
+      readonly message: string;
+      readonly providerLabel: string;
+    }
+  | {
+      readonly type: 'chat.delta';
+      readonly turnId: string;
+      readonly text: string;
+    }
+  | {
+      readonly type: 'chat.tool';
+      readonly turnId: string;
+      readonly tool: ChatToolActivity;
+    }
+  | {
+      readonly type: 'chat.done';
+      readonly turnId: string;
+      readonly text: string;
+      readonly durationMs: number;
+    }
+  | {
+      readonly type: 'chat.aborted';
+      readonly turnId: string;
+    }
+  | {
+      readonly type: 'chat.error';
+      readonly turnId: string;
+      readonly error: string;
+      readonly hint: string | null;
+    };
+
+export interface RendererRequest {
+  readonly id: string;
+  readonly kind: 'render-frame' | 'preview-composition' | 'render-export';
+  readonly payload: unknown;
+}
+
+export type RendererResponse =
+  | {
+      readonly id: string;
+      readonly ok: true;
+      readonly result: unknown;
+    }
+  | {
+      readonly id: string;
+      readonly ok: false;
+      readonly error: string;
+    };
+
+export interface RendererFrameResult {
+  readonly bytes: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface RendererPreviewResult {
+  readonly sceneTree: unknown | null;
+  readonly error: string | null;
+}
+
+export interface RendererEditorContext {
+  readonly playheadFrame: number;
+  readonly selectedClipIds: readonly string[];
+  readonly selectedAssetId: string | null;
+}
+
+export type KerfEvent = ProjectEvent | JobEvent | ExportEvent | ChatEvent;
 
 export const KERF_IPC = {
   app: {
@@ -398,6 +495,11 @@ export const KERF_IPC = {
   chat: {
     send: 'kerf:chat:send',
     abort: 'kerf:chat:abort',
+  },
+  renderer: {
+    request: 'kerf:renderer:request',
+    response: 'kerf:renderer:response',
+    editor: 'kerf:renderer:editor',
   },
   event: 'kerf:event',
 } as const;
@@ -471,6 +573,19 @@ export interface KerfBridge {
       request: CompositionSaveRequest,
     ) => Promise<CompositionSaveResult>;
     readonly delete: (id: string) => Promise<ProjectSnapshot>;
+  };
+  readonly chat: {
+    readonly send: (request: ChatSendRequest) => Promise<ChatStartResult>;
+    readonly abort: () => Promise<boolean>;
+  };
+  readonly renderer: {
+    readonly subscribe: (
+      listener: (request: RendererRequest) => void,
+    ) => () => void;
+    readonly respond: (response: RendererResponse) => Promise<void>;
+    readonly setEditorContext: (
+      context: RendererEditorContext,
+    ) => Promise<void>;
   };
   readonly events: {
     readonly subscribe: (listener: (event: KerfEvent) => void) => () => void;

@@ -10,13 +10,21 @@ import {
   type AssetKind,
 } from '@kerf/model';
 import type { AnalysisService } from '../analysis/service';
+import type { AgentService } from '../agent/service';
 import type { ExportService } from '../export';
 import { buildOtioTimeline } from '../export/otio';
 import type { JobQueue } from '../jobs';
 import type { MediaImportService } from '../media';
 import type { ProjectRepository } from '../projects';
 import type { ProjectService } from '../projects';
-import { KERF_IPC, type KerfEvent } from '../../shared/contracts';
+import type { RendererBridge } from '../renderer-bridge';
+import type { ToolService } from '../tools/service';
+import {
+  KERF_IPC,
+  type KerfEvent,
+  type RendererEditorContext,
+  type RendererResponse,
+} from '../../shared/contracts';
 import { suggestedExportName } from '../../shared/export-plan';
 
 const projectIdSchema = z.string().min(1);
@@ -64,8 +72,23 @@ const providerSaveSchema = z.object({
   clearKey: z.boolean().optional(),
   enabled: z.boolean().optional(),
   visionConsent: z.boolean().optional(),
+  chatConsent: z.boolean().optional(),
 });
 const modelIdSchema = z.string().min(1).max(40);
+const chatSendSchema = z.object({
+  message: z.string().trim().min(1).max(8_000),
+});
+const rendererResponseSchema = z.object({
+  id: z.string().min(1),
+  ok: z.boolean(),
+  result: z.unknown().optional(),
+  error: z.string().optional(),
+});
+const rendererEditorSchema = z.object({
+  playheadFrame: z.number().int().nonnegative(),
+  selectedClipIds: z.array(z.string().min(1)).max(1_000),
+  selectedAssetId: z.string().min(1).nullable(),
+});
 const compositionSaveSchema = z.object({
   id: z.string().min(1).optional(),
   name: z.string().trim().min(1).max(120),
@@ -87,6 +110,9 @@ export interface ProjectIpcOptions {
   readonly imports: MediaImportService;
   readonly exports: ExportService;
   readonly analysis: AnalysisService;
+  readonly agent: AgentService;
+  readonly renderer: RendererBridge;
+  readonly tools: ToolService;
   readonly broadcast: (event: KerfEvent) => void;
 }
 
@@ -112,8 +138,18 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
-  const { projects, repository, jobs, imports, exports, analysis, broadcast } =
-    options;
+  const {
+    projects,
+    repository,
+    jobs,
+    imports,
+    exports,
+    analysis,
+    agent,
+    renderer,
+    tools,
+    broadcast,
+  } = options;
 
   ipcMain.handle(KERF_IPC.projects.list, () => projects.list());
   ipcMain.handle(KERF_IPC.projects.active, () => projects.current());
@@ -255,6 +291,27 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   ipcMain.handle(KERF_IPC.motion.delete, (_event, id: unknown) =>
     analysis.deleteComposition(projectIdSchema.parse(id)),
   );
+  ipcMain.handle(KERF_IPC.chat.send, (_event, request: unknown) =>
+    agent.start(chatSendSchema.parse(request)),
+  );
+  ipcMain.handle(KERF_IPC.chat.abort, () => agent.abort());
+  ipcMain.handle(KERF_IPC.renderer.response, (_event, response: unknown) => {
+    const parsed = rendererResponseSchema.parse(response) as RendererResponse;
+    renderer.respond(
+      parsed.ok
+        ? { id: parsed.id, ok: true, result: parsed.result }
+        : {
+            id: parsed.id,
+            ok: false,
+            error: parsed.error ?? 'The renderer request failed.',
+          },
+    );
+  });
+  ipcMain.handle(KERF_IPC.renderer.editor, (_event, context: unknown) => {
+    const parsed: RendererEditorContext = rendererEditorSchema.parse(context);
+    renderer.setEditorContext(parsed);
+    tools.setEditorContext(parsed);
+  });
 
   ipcMain.handle(KERF_IPC.edits.apply, (_event, command: unknown) =>
     projects.apply(command),
@@ -386,6 +443,8 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       ...Object.values(KERF_IPC.export),
       ...Object.values(KERF_IPC.analysis),
       ...Object.values(KERF_IPC.motion),
+      ...Object.values(KERF_IPC.chat),
+      ...Object.values(KERF_IPC.renderer),
     ]) {
       ipcMain.removeHandler(channel);
     }

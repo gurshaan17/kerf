@@ -6,6 +6,8 @@ import {
   type AnalysisAssetStatus,
   type AnalysisRunRequest,
   type AnalysisRunResult,
+  type ChatSendRequest,
+  type ChatStartResult,
   type CompositionSaveRequest,
   type CompositionSaveResult,
   type EditResult,
@@ -23,6 +25,9 @@ import {
   type ProviderAccount,
   type ProviderSaveRequest,
   type ProviderTestResult,
+  type RendererEditorContext,
+  type RendererRequest,
+  type RendererResponse,
   type SearchRequest,
   type SearchResponse,
   type WhisperModelInfo,
@@ -107,6 +112,26 @@ const bridge: KerfBridge = {
     save: (request: CompositionSaveRequest) =>
       invoke<CompositionSaveResult>(KERF_IPC.motion.save, request),
     delete: (id) => invoke<ProjectSnapshot>(KERF_IPC.motion.delete, id),
+  },
+  chat: {
+    send: (request: ChatSendRequest) =>
+      invoke<ChatStartResult>(KERF_IPC.chat.send, request),
+    abort: () => invoke<boolean>(KERF_IPC.chat.abort),
+  },
+  renderer: {
+    subscribe(listener: (request: RendererRequest) => void) {
+      const handler = (_event: IpcRendererEvent, request: RendererRequest) => {
+        listener(request);
+      };
+      ipcRenderer.on(KERF_IPC.renderer.request, handler);
+      return () => {
+        ipcRenderer.removeListener(KERF_IPC.renderer.request, handler);
+      };
+    },
+    respond: (response: RendererResponse) =>
+      invoke<void>(KERF_IPC.renderer.response, response),
+    setEditorContext: (context: RendererEditorContext) =>
+      invoke<void>(KERF_IPC.renderer.editor, context),
   },
   events: {
     subscribe(listener: (event: KerfEvent) => void) {

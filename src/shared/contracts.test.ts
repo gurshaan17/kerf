@@ -64,6 +64,17 @@ const bridge: KerfBridge = {
       throw new Error('not used');
     },
   },
+  chat: {
+    send: async () => {
+      throw new Error('not used');
+    },
+    abort: async () => false,
+  },
+  renderer: {
+    subscribe: () => () => undefined,
+    respond: async () => {},
+    setEditorContext: async () => {},
+  },
   export: {
     pickPath: async () => null,
     start: async () => {

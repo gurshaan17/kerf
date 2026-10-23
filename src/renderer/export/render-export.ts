@@ -17,6 +17,20 @@ export class ExportCancelledError extends Error {
   }
 }
 
+export interface RenderSingleFrameOptions {
+  readonly frame: number;
+  readonly sequence: Sequence;
+  readonly assets: readonly Asset[];
+  readonly compositionTrees?: ReadonlyMap<string, SceneTree>;
+  readonly maxWidth?: number;
+}
+
+export interface RenderedSingleFrame {
+  readonly bytes: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface RenderExportOptions {
   readonly result: ExportStartResult;
   readonly sequence: Sequence;
@@ -152,6 +166,70 @@ export async function renderExportFrames({
       await writeFrame(frame - result.startFrame, data);
       onProgress?.(frame - result.startFrame + 1, result.frameCount);
     }
+  } finally {
+    pool.dispose();
+  }
+}
+
+/**
+ * Renders one frame at sequence resolution, then downsamples only for the
+ * returned PNG. Rendering at full size first keeps captions and overlays in the
+ * same proportion as the preview and export.
+ */
+export async function renderSingleFrame({
+  frame,
+  sequence,
+  assets,
+  compositionTrees,
+  maxWidth,
+}: RenderSingleFrameOptions): Promise<RenderedSingleFrame> {
+  const canvas = document.createElement('canvas');
+  canvas.width = sequence.width;
+  canvas.height = sequence.height;
+  const context = canvas.getContext('2d', { alpha: false });
+  if (!context) {
+    throw new Error('The renderer could not create a still-frame canvas.');
+  }
+
+  const pool = new MediaPool(assets);
+  try {
+    const ids = visualAssetIds(sequence, frame, frame + 1);
+    await waitForMedia(pool, ids, () => false);
+    await seekFrameMedia(sequence, frame, pool, () => false);
+    renderFrame(context, sequence, frame, { pool, compositionTrees });
+
+    const output = canvas;
+    const width = Math.max(
+      1,
+      Math.round(Math.min(sequence.width, maxWidth ?? sequence.width)),
+    );
+    const height = Math.max(
+      1,
+      Math.round((width / sequence.width) * sequence.height),
+    );
+    if (width !== canvas.width) {
+      const scaled = document.createElement('canvas');
+      scaled.width = width;
+      scaled.height = height;
+      const scaledContext = scaled.getContext('2d', { alpha: false });
+      if (!scaledContext) {
+        throw new Error('The renderer could not create a scaled still frame.');
+      }
+      scaledContext.drawImage(canvas, 0, 0, width, height);
+      const blob = await canvasToPng(scaled);
+      return {
+        bytes: new Uint8Array(await blob.arrayBuffer()),
+        width,
+        height,
+      };
+    }
+
+    const blob = await canvasToPng(output);
+    return {
+      bytes: new Uint8Array(await blob.arrayBuffer()),
+      width: output.width,
+      height: output.height,
+    };
   } finally {
     pool.dispose();
   }

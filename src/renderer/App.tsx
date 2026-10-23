@@ -14,6 +14,7 @@ import { AnalysisSettingsDialog } from './analysis/AnalysisSettingsDialog';
 import { SearchDialog } from './search/SearchDialog';
 import { MotionDialog } from './motion/MotionDialog';
 import { createCompositionSandbox } from './motion/sandbox';
+import { RendererRequestHost } from './tools/RendererRequestHost';
 import type { AnalysisAssetStatus } from '../shared/contracts';
 
 function sequenceLabel(
@@ -192,6 +193,7 @@ export default function App() {
 
   return (
     <>
+      <RendererRequestHost />
       <StudioShell
         projectName={project.name}
         sequenceLabel={sequenceLabel(

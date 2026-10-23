@@ -206,6 +206,21 @@ export class AnalysisService {
     return this.searchService.search(snapshot.project.id, request);
   }
 
+  async detectBeats(assetId: string): Promise<import('@kerf/model').BeatMap> {
+    const { projectId, asset, rate } = this.projectContext(assetId);
+    const beatMap = await detectBeatMap({
+      asset,
+      ffmpeg: this.ffmpegPath(),
+      rate,
+      durationFrames: this.durationFrames(asset, rate),
+      now: this.now,
+    });
+    this.repository.deleteBeatMapsForAsset(asset.id);
+    this.repository.saveBeatMap(beatMap);
+    this.refresh(projectId);
+    return beatMap;
+  }
+
   reindexActive(): void {
     const snapshot = this.projects.current();
     if (snapshot) {

@@ -107,6 +107,17 @@ function makeBridge(snapshot: ProjectSnapshot) {
       }),
       delete: vi.fn(async () => snapshot),
     },
+    chat: {
+      send: vi.fn(async () => {
+        throw new Error('not used');
+      }),
+      abort: vi.fn(async () => false),
+    },
+    renderer: {
+      subscribe: vi.fn(() => () => undefined),
+      respond: vi.fn(async () => undefined),
+      setEditorContext: vi.fn(async () => undefined),
+    },
     export: {
       pickPath: vi.fn(async () => null),
       start: vi.fn(async () => {

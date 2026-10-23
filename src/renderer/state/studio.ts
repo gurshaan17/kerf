@@ -311,6 +311,10 @@ export function createStudioStore(bridge: KerfBridge) {
           return;
         }
 
+        if (!('snapshot' in event)) {
+          return;
+        }
+
         setSnapshot(event.snapshot);
         void get()
           .refreshProjects()

@@ -46,7 +46,7 @@ if (!hasSingleInstanceLock) {
 
   void app.whenReady().then(() => {
     installContentSecurityPolicy();
-    services = createKerfServices();
+    services = createKerfServices({ broadcast: broadcastEvent });
     installMediaProtocol(services.repository);
     unregisterIpc = registerProjectIpc({
       projects: services.projects,
@@ -55,6 +55,9 @@ if (!hasSingleInstanceLock) {
       imports: services.imports,
       exports: services.exports,
       analysis: services.analysis,
+      agent: services.agent,
+      renderer: services.renderer,
+      tools: services.tools,
       broadcast: broadcastEvent,
     });
     unsubscribeJobs = services.jobs.subscribe((job) => {
