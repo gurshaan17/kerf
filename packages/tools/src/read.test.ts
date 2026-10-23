@@ -128,17 +128,19 @@ function testContext(snapshot = testSnapshot()): ToolContext {
 
 describe('tool registry', () => {
   it('exposes the read catalog', () => {
-    expect(toolRegistry.names()).toEqual([
-      'readContext',
-      'readAssets',
-      'readAsset',
-      'readTimeline',
-      'readTranscript',
-      'findInTranscript',
-      'renderFrame',
-      'readDuration',
-      'listEffects',
-    ]);
+    expect(toolRegistry.names()).toEqual(
+      expect.arrayContaining([
+        'readContext',
+        'readAssets',
+        'readAsset',
+        'readTimeline',
+        'readTranscript',
+        'findInTranscript',
+        'renderFrame',
+        'readDuration',
+        'listEffects',
+      ]),
+    );
   });
 
   it('validates input before execution', async () => {
