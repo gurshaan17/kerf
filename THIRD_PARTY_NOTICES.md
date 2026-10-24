@@ -65,6 +65,15 @@ in `packages/ui/src/fonts`:
 
 Only the Latin subsets are bundled.
 
+## Audit
+
+The resolved dependency set was reviewed with `pnpm licenses list --long` before
+the first source release. It contains MIT, ISC, Apache-2.0, BSD-2-Clause,
+BSD-3-Clause, BlueOak-1.0.0, MPL-2.0, and dual-licensed packages. There are no
+GPL, AGPL, SSPL, or unknown licences. MPL-2.0 appears only in `lightningcss`, a
+transitive build-time dependency of Tailwind CSS; Kerf does not distribute it as
+application source.
+
 ## External tools
 
 Kerf invokes tools installed on the user's machine. It does not distribute
