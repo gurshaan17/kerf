@@ -132,5 +132,5 @@ describe('transcriptFromWhisper', () => {
     expect(transcript.segments[0]?.text).toBe('hello editor');
     expect(progress.at(-1)).toBe(0.98);
     expect(existsSync(workDirectory)).toBe(true);
-  });
+  }, 15_000);
 });

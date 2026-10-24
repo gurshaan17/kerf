@@ -29,3 +29,43 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm audit:names
+
+  e2e:
+    needs: verify
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install whisper.cpp and ffmpeg
+        run: brew install whisper-cpp ffmpeg
+
+      - name: Cache the tiny Whisper model
+        uses: actions/cache@v4
+        with:
+          path: .cache/e2e/ggml-tiny.bin
+          key: whisper-ggml-tiny-v1
+
+      - name: Run Electron end-to-end tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            test-results
+            playwright-report
+          if-no-files-found: ignore

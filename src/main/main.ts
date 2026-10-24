@@ -1,5 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import started from 'electron-squirrel-startup';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { broadcastEvent, registerProjectIpc } from './ipc';
 import {
   installContentSecurityPolicy,
@@ -11,6 +13,13 @@ import { createKerfServices } from './services';
 import type { KerfServices } from './services';
 import { createMainWindow } from './windows';
 import { installProcessStreamGuards } from './process-streams';
+
+const configuredUserData = process.env.KERF_USER_DATA?.trim();
+if (configuredUserData) {
+  const userData = resolve(configuredUserData);
+  mkdirSync(userData, { recursive: true });
+  app.setPath('userData', userData);
+}
 
 installProcessStreamGuards();
 
@@ -47,6 +56,10 @@ if (!hasSingleInstanceLock) {
   void app.whenReady().then(() => {
     installContentSecurityPolicy();
     services = createKerfServices({ broadcast: broadcastEvent });
+    if (process.env.KERF_E2E === '1') {
+      (globalThis as { __kerfServices?: KerfServices }).__kerfServices =
+        services;
+    }
     installMediaProtocol(services.repository);
     unregisterIpc = registerProjectIpc({
       projects: services.projects,
@@ -88,6 +101,9 @@ if (!hasSingleInstanceLock) {
     unsubscribeExports = null;
     services?.dispose();
     services = null;
+    if (process.env.KERF_E2E === '1') {
+      delete (globalThis as { __kerfServices?: KerfServices }).__kerfServices;
+    }
   });
 
   app.on('window-all-closed', () => {
