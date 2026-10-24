@@ -55,6 +55,7 @@ export interface StudioShellProps {
   onOpenProject?: () => void;
   onOpenSettings?: () => void;
   onShowShortcuts?: () => void;
+  onOpenAbout?: () => void;
 }
 
 type TrackKind = 'video' | 'audio';
@@ -402,6 +403,7 @@ export function StudioShell({
   onOpenProject,
   onOpenSettings,
   onShowShortcuts,
+  onOpenAbout,
 }: StudioShellProps) {
   const [rail, setRail] = useState('media');
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -550,7 +552,18 @@ export function StudioShell({
         </span>
         <span>{assetCount} assets</span>
         <span className="k-shell__status-spacer" />
-        <span>Kerf 0.1.0</span>
+        {onOpenAbout ? (
+          <button
+            type="button"
+            className="rounded-xs px-0.5 text-ink-muted hover:text-ink"
+            aria-label="About Kerf"
+            onClick={onOpenAbout}
+          >
+            Kerf 0.1.0
+          </button>
+        ) : (
+          <span>Kerf 0.1.0</span>
+        )}
         <span className="k-shell__status-sep" aria-hidden="true">
           ·
         </span>

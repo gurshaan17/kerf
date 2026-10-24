@@ -15,6 +15,7 @@ import { AnalysisSettingsDialog } from './analysis/AnalysisSettingsDialog';
 import { SearchDialog } from './search/SearchDialog';
 import { MotionDialog } from './motion/MotionDialog';
 import { ReferencesDialog } from './references/ReferencesDialog';
+import { AboutDialog } from './AboutDialog';
 import { createCompositionSandbox } from './motion/sandbox';
 import { RendererRequestHost } from './tools/RendererRequestHost';
 import type { AnalysisAssetStatus } from '../shared/contracts';
@@ -61,6 +62,7 @@ export default function App() {
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [motionOpen, setMotionOpen] = useState(false);
   const [referencesOpen, setReferencesOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
   const openExport = useCallback(() => {
@@ -82,6 +84,10 @@ export default function App() {
   const openReferences = useCallback(() => {
     setPaletteOpen(false);
     setReferencesOpen(true);
+  }, []);
+  const openAbout = useCallback(() => {
+    setPaletteOpen(false);
+    setAboutOpen(true);
   }, []);
   const showShortcutsFromPalette = useCallback(() => {
     setPaletteOpen(false);
@@ -150,7 +156,8 @@ export default function App() {
       !searchOpen &&
       !analysisOpen &&
       !motionOpen &&
-      !referencesOpen,
+      !referencesOpen &&
+      !aboutOpen,
   });
 
   const analysis: AnalysisAssetStatus[] = useMemo(() => {
@@ -182,16 +189,20 @@ export default function App() {
 
   if (!snapshot) {
     return (
-      <ProjectBrowserScreen
-        projects={projects}
-        busy={busy}
-        error={error}
-        onCreate={createProject}
-        onOpen={openProject}
-        onRename={renameProject}
-        onDelete={deleteProject}
-        onReveal={revealProject}
-      />
+      <>
+        <ProjectBrowserScreen
+          projects={projects}
+          busy={busy}
+          error={error}
+          onCreate={createProject}
+          onOpen={openProject}
+          onRename={renameProject}
+          onDelete={deleteProject}
+          onReveal={revealProject}
+          onOpenAbout={openAbout}
+        />
+        <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
+      </>
     );
   }
 
@@ -234,6 +245,7 @@ export default function App() {
             onOpenAnalysis={openAnalysis}
             onOpenMotion={openMotion}
             onOpenReferences={openReferences}
+            onOpenExport={openExport}
           />
         }
         chatPanel={
@@ -246,6 +258,7 @@ export default function App() {
         onOpenSettings={openAnalysis}
         onShowShortcuts={openShortcuts}
         onExport={openExport}
+        onOpenAbout={openAbout}
         exporting={exporting}
       />
       <CommandPalette
@@ -257,6 +270,7 @@ export default function App() {
         onOpenAnalysis={openAnalysis}
         onOpenMotion={openMotion}
         onOpenReferences={openReferences}
+        onOpenAbout={openAbout}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
@@ -270,6 +284,7 @@ export default function App() {
         open={referencesOpen}
         onOpenChange={setReferencesOpen}
       />
+      <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
     </>
   );
 }

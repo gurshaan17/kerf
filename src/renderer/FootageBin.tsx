@@ -24,6 +24,7 @@ import type { Asset, AssetStatus } from '@kerf/model';
 import { Button, IconButton, Input, Panel, cn } from '@kerf/ui';
 import type { AnalysisAssetStatus, JobSummary } from '../shared/contracts';
 import { ASSET_DRAG_MIME } from './drag';
+import { GettingStarted } from './GettingStarted';
 
 export interface FootageBinProps {
   readonly assets: Asset[];
@@ -43,6 +44,7 @@ export interface FootageBinProps {
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
   readonly onOpenReferences: () => void;
+  readonly onOpenExport: () => void;
 }
 
 const STATUS_LABEL: Record<AssetStatus, string> = {
@@ -194,6 +196,7 @@ export function FootageBin({
   onOpenAnalysis,
   onOpenMotion,
   onOpenReferences,
+  onOpenExport,
 }: FootageBinProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -377,6 +380,13 @@ export function FootageBin({
           <p>{error}</p>
         </div>
       ) : null}
+
+      <GettingStarted
+        assets={assets}
+        analysis={analysis}
+        onImport={onImport}
+        onOpenExport={onOpenExport}
+      />
 
       <div className="min-h-0 flex-1 overflow-auto">
         {assets.length === 0 ? (

@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import '@kerf/ui';
 import App from './App';
+import { ErrorBoundary } from './ErrorBoundary';
 import { StudioProvider } from './state/StudioProvider';
 
 const bootStartedAt = performance.now();
@@ -14,9 +15,11 @@ if (!container) {
 
 createRoot(container).render(
   <React.StrictMode>
-    <StudioProvider bridge={window.kerf}>
-      <App />
-    </StudioProvider>
+    <ErrorBoundary>
+      <StudioProvider bridge={window.kerf}>
+        <App />
+      </StudioProvider>
+    </ErrorBoundary>
   </React.StrictMode>,
 );
 

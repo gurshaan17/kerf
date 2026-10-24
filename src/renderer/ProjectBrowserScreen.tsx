@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Clock3, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react';
-import { KerfMark } from '@kerf/ui';
+import { KerfMark, Skeleton } from '@kerf/ui';
 import { Button } from '@kerf/ui';
 import { Dialog } from '@kerf/ui';
 import { Field, Input } from '@kerf/ui';
@@ -16,6 +16,7 @@ export interface ProjectBrowserScreenProps {
   readonly onRename: (id: string, name: string) => Promise<void>;
   readonly onDelete: (id: string) => Promise<void>;
   readonly onReveal: (id: string) => void;
+  readonly onOpenAbout: () => void;
 }
 
 const relativeTime = new Intl.RelativeTimeFormat(undefined, {
@@ -52,6 +53,7 @@ export function ProjectBrowserScreen({
   onRename,
   onDelete,
   onReveal,
+  onOpenAbout,
 }: ProjectBrowserScreenProps) {
   const [name, setName] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -150,7 +152,27 @@ export function ProjectBrowserScreen({
             </p>
           ) : null}
 
-          {projects.length === 0 ? (
+          {busy && projects.length === 0 ? (
+            <div
+              className="space-y-4 px-4 py-5"
+              role="status"
+              aria-label="Loading projects"
+              aria-busy="true"
+            >
+              {[0, 1, 2].map((index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between gap-4"
+                >
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-3.5 w-2/5" />
+                    <Skeleton className="h-2.5 w-3/5" />
+                  </div>
+                  <Skeleton className="h-7 w-16" />
+                </div>
+              ))}
+            </div>
+          ) : projects.length === 0 ? (
             <div className="grid justify-items-center px-6 py-14 text-center">
               <span className="grid size-16 place-items-center rounded-lg border border-line bg-surface-0 text-accent">
                 <KerfMark size={38} />
@@ -236,9 +258,19 @@ export function ProjectBrowserScreen({
           )}
         </section>
 
-        <p className="mt-8 text-center font-mono text-[9px] tracking-[0.02em] text-ink-faint">
-          Projects live in your Videos folder · Assets never leave this machine
-        </p>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center font-mono text-[9px] tracking-[0.02em] text-ink-faint">
+          <span>Projects live in your Videos folder</span>
+          <span aria-hidden="true">·</span>
+          <span>Assets never leave this machine</span>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            className="rounded-xs underline-offset-2 hover:text-ink hover:underline"
+            onClick={onOpenAbout}
+          >
+            About Kerf
+          </button>
+        </div>
       </div>
 
       <Dialog

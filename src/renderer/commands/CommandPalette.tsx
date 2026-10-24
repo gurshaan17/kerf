@@ -9,6 +9,7 @@ import {
   Film,
   Flag,
   FolderOpen,
+  Info,
   Keyboard,
   Magnet,
   MousePointer2,
@@ -53,6 +54,7 @@ export interface CommandPaletteProps {
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
   readonly onOpenReferences: () => void;
+  readonly onOpenAbout: () => void;
 }
 
 export function CommandPalette({
@@ -64,6 +66,7 @@ export function CommandPalette({
   onOpenAnalysis,
   onOpenMotion,
   onOpenReferences,
+  onOpenAbout,
 }: CommandPaletteProps) {
   const commands = useEditorCommands();
   const snapshot = useStudio((state) => state.snapshot);
@@ -347,6 +350,13 @@ export function CommandPalette({
         run: onShowShortcuts,
       },
       {
+        id: 'help.about',
+        label: 'About Kerf',
+        keywords: 'version licences local first electron',
+        icon: <Info size={14} />,
+        run: onOpenAbout,
+      },
+      {
         id: 'file.projects',
         label: 'Back to projects',
         keywords: 'close leave browser',
@@ -358,6 +368,7 @@ export function CommandPalette({
   }, [
     commands,
     onExport,
+    onOpenAbout,
     onOpenAnalysis,
     onOpenMotion,
     onOpenReferences,

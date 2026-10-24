@@ -33,6 +33,8 @@ export { Panel } from './components/Panel';
 export type { PanelProps } from './components/Panel';
 export { Select } from './components/Select';
 export type { SelectOption, SelectProps } from './components/Select';
+export { Skeleton } from './components/Skeleton';
+export type { SkeletonProps } from './components/Skeleton';
 export { SplitPane } from './components/SplitPane';
 export type { SplitPaneProps } from './components/SplitPane';
 export { Tabs } from './components/Tabs';

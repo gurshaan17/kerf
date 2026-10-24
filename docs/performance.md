@@ -8,12 +8,12 @@ numbers.
 
 ## Targets
 
-| Area | Target | Result on the reference machine |
-| --- | --- | --- |
-| Startup | Main window ready in under 2 seconds | 0.5–0.9 s |
-| Ingest | Import a short clip and reach `Ready` in under 2 seconds | 0.9 s |
-| Preview seek | A timeline click updates the preview in under 50 ms | 16 ms |
-| Export render | 1080p at 24 fps or better | 47–51 fps |
+| Area          | Target                                                   | Result on the reference machine |
+| ------------- | -------------------------------------------------------- | ------------------------------- |
+| Startup       | Main window ready in under 2 seconds                     | 0.5–0.9 s                       |
+| Ingest        | Import a short clip and reach `Ready` in under 2 seconds | 0.9 s                           |
+| Preview seek  | A timeline click updates the preview in under 50 ms      | 16 ms                           |
+| Export render | 1080p at 24 fps or better                                | 47–51 fps                       |
 
 The reference machine is an Apple M2 with 8 GB of memory running macOS 27.0.1.
 The fixture is a 4.4 second 640 × 360 H.264 clip with AAC audio. The export is a
