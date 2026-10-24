@@ -322,10 +322,7 @@ export class ProjectService {
         if (!asset) {
           return undefined;
         }
-        return secondsToFrames(
-          asset.durationSeconds,
-          asset.frameRate ?? sequence.frameRate,
-        );
+        return secondsToFrames(asset.durationSeconds, sequence.frameRate);
       },
     };
   }

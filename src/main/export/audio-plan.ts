@@ -15,10 +15,6 @@ export interface ExportAudioClip {
   readonly fadeOutSeconds: number;
 }
 
-function mediaRate(asset: Asset | undefined, sequence: Sequence): number {
-  return fpsToNumber(asset?.frameRate ?? sequence.frameRate);
-}
-
 /**
  * Flattens every audible media clip in the export window into deterministic
  * ffmpeg inputs. Video clips contribute their source audio unless the track is
@@ -53,11 +49,10 @@ export function buildExportAudioPlan(
         continue;
       }
 
-      const rate = mediaRate(asset, sequence);
-      const sourceA = Math.max(0, sourceFrameAt(clip, clipStart) / rate);
+      const sourceA = Math.max(0, sourceFrameAt(clip, clipStart) / sequenceFps);
       const sourceB = Math.min(
         Math.max(0, asset.durationSeconds || Number.POSITIVE_INFINITY),
-        Math.max(0, sourceFrameAt(clip, clipEnd) / rate),
+        Math.max(0, sourceFrameAt(clip, clipEnd) / sequenceFps),
       );
       const sourceStart = Math.min(sourceA, sourceB);
       const sourceDuration = Math.abs(sourceB - sourceA);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FRAME_RATES,
   assetSchema,
   clipSchema,
   createAsset,
@@ -61,6 +62,38 @@ describe('export audio plan', () => {
       volume: 0.5,
       fadeInSeconds: 0,
       fadeOutSeconds: 6 / 24,
+    });
+  });
+
+  it('maps a 30 fps source onto a 24 fps sequence in seconds', () => {
+    const asset = mediaAsset({
+      durationSeconds: 10,
+      frameRate: FRAME_RATES.web30,
+    });
+    const track = createTrack({ kind: 'video', order: 0 });
+    const clip = clipSchema.parse({
+      id: newId('clip'),
+      trackId: track.id,
+      startFrame: 0,
+      durationFrames: 240,
+      type: 'video',
+      assetId: asset.id,
+      sourceInFrame: 0,
+    });
+    const sequence = createSequence({
+      name: 'Mixed rate',
+      frameRate: FRAME_RATES.film,
+      tracks: [trackSchema.parse({ ...track, clips: [clip] })],
+    });
+
+    const plan = buildExportAudioPlan(sequence, [asset], 0, 240);
+    expect(plan).toHaveLength(1);
+    expect(plan[0]).toMatchObject({
+      sourceStartSeconds: 0,
+      sourceDurationSeconds: 10,
+      timelineDurationSeconds: 10,
+      speed: 1,
+      reversed: false,
     });
   });
 

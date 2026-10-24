@@ -551,14 +551,7 @@ export function Timeline() {
       const sourceStart = mediaClip ? clip.sourceInFrame : 0;
       const sourceLimit =
         asset && mediaClip
-          ? Math.max(
-              1,
-              secondsToFrames(
-                asset.durationSeconds,
-                asset.frameRate ?? rate,
-                'floor',
-              ),
-            )
+          ? Math.max(1, secondsToFrames(asset.durationSeconds, rate, 'floor'))
           : null;
       const delta = Math.round(
         (event.clientX - current.startClientX) / pixelsPerFrame,

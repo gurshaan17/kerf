@@ -110,6 +110,42 @@ describe('canvas compositor helpers', () => {
     expect(mediaSourceSeconds(clip, 124, asset, sequence)).toBeCloseTo(2);
   });
 
+  it('maps a 30 fps source onto a 24 fps sequence in seconds', () => {
+    const project = createProject({ name: 'Mixed rate', now: 1 });
+    const track = createTrack({ kind: 'video', order: 0 });
+    const asset = {
+      ...createAsset({
+        projectId: project.id,
+        name: 'Take 30.mp4',
+        sourcePath: '/media/take-30.mp4',
+        kind: 'video',
+        now: 1,
+      }),
+      durationSeconds: 10,
+      frameRate: FRAME_RATES.web30,
+    };
+    const clip = clipSchema.parse({
+      id: newId('clip'),
+      type: 'video',
+      trackId: track.id,
+      assetId: asset.id,
+      startFrame: 100,
+      durationFrames: 240,
+      sourceInFrame: 0,
+      speed: 1,
+    });
+    const sequence = createSequence({
+      name: 'Mixed rate',
+      frameRate: FRAME_RATES.film,
+      tracks: [{ ...track, clips: [clip] }],
+    });
+
+    expect(mediaSourceSeconds(clip, 100, asset, sequence)).toBeCloseTo(0);
+    expect(mediaSourceSeconds(clip, 124, asset, sequence)).toBeCloseTo(1);
+    expect(mediaSourceSeconds(clip, 148, asset, sequence)).toBeCloseTo(2);
+    expect(mediaSourceSeconds(clip, 340, asset, sequence)).toBeCloseTo(10);
+  });
+
   it('reports missing video media without throwing', () => {
     const { sequence, asset } = makeSequence();
     const context = fakeContext();

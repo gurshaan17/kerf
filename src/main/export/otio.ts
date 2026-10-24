@@ -25,25 +25,13 @@ function clipRange(clip: Clip): OtioObject {
   return timeRange(0, clip.durationFrames, 1);
 }
 
-function sourceRange(
-  clip: Clip,
-  asset: Asset | undefined,
-  sequence: Sequence,
-): OtioObject | null {
+function sourceRange(clip: Clip, sequence: Sequence): OtioObject | null {
   if (clip.type !== 'video' && clip.type !== 'audio') {
     return null;
   }
   const sequenceFps = fpsToNumber(sequence.frameRate);
-  const assetFps = fpsToNumber(asset?.frameRate ?? sequence.frameRate);
-  const sourceSeconds = Math.max(
-    0,
-    sourceFrameAt(clip, clip.startFrame) / assetFps,
-  );
-  return timeRange(
-    sourceSeconds * sequenceFps,
-    clip.durationFrames,
-    sequenceFps,
-  );
+  const sourceFrames = Math.max(0, sourceFrameAt(clip, clip.startFrame));
+  return timeRange(sourceFrames, clip.durationFrames, sequenceFps);
 }
 
 function mediaReference(
@@ -82,7 +70,7 @@ function otioClip(
   return {
     OTIO_SCHEMA: 'Clip.1',
     name: clip.label || `${clip.type} ${clip.id.slice(-4)}`,
-    source_range: sourceRange(clip, asset, sequence) ?? clipRange(clip),
+    source_range: sourceRange(clip, sequence) ?? clipRange(clip),
     media_reference: mediaReference(asset, sequence),
     metadata: {
       kerf: {

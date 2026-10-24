@@ -21,11 +21,21 @@ import { IconButton, cn } from '@kerf/ui';
 import { useStudio, useStudioStoreApi } from '../state/StudioProvider';
 import { selectSelectedClip } from '../state/selectors';
 
+const HARD_SEEK_SECONDS = 0.75;
+const DRIFT_GAIN = 0.5;
+const MAX_RATE_OFFSET = 0.05;
+
+function clampPlaybackRate(rate: number): number {
+  return Math.max(0.0625, Math.min(16, rate));
+}
+
 function syncVideos(
   sequence: Sequence,
   frame: number,
   pool: MediaPool,
   allowAudio: boolean,
+  syncedClips: Map<string, string>,
+  force = false,
 ): void {
   const active = new Set<string>();
   for (const track of visualTracksInOrder(sequence)) {
@@ -40,11 +50,34 @@ function syncVideos(
     active.add(clip.assetId);
     const asset = pool.asset(clip.assetId);
     const seconds = mediaSourceSeconds(clip, frame, asset, sequence);
-    if (Math.abs(video.currentTime - seconds) > 0.18) {
-      video.currentTime = seconds;
-    }
+    const clipChanged = syncedClips.get(clip.assetId) !== clip.id;
+    syncedClips.set(clip.assetId, clip.id);
+
     video.volume = Math.max(0, Math.min(1, clip.volume));
     video.muted = !allowAudio || clip.volume <= 0;
+    video.preservesPitch = true;
+
+    if (video.seeking && !force && !clipChanged) {
+      // Let the in-flight seek settle before changing the rate again.
+    } else if (
+      force ||
+      clipChanged ||
+      Math.abs(video.currentTime - seconds) > HARD_SEEK_SECONDS
+    ) {
+      video.playbackRate = clampPlaybackRate(clip.speed);
+      if (Math.abs(video.currentTime - seconds) > 0.001) {
+        video.currentTime = seconds;
+      }
+    } else {
+      // Nudge the element towards the timeline instead of jumping backwards.
+      const drift = video.currentTime - seconds;
+      const correction = Math.max(
+        -MAX_RATE_OFFSET,
+        Math.min(MAX_RATE_OFFSET, -drift * DRIFT_GAIN),
+      );
+      video.playbackRate = clampPlaybackRate(clip.speed * (1 + correction));
+    }
+
     if (video.paused) {
       void video.play().catch(() => {
         video.muted = true;
@@ -72,6 +105,8 @@ function seekVideos(sequence: Sequence, frame: number, pool: MediaPool): void {
     if (!video) {
       continue;
     }
+    video.playbackRate = clampPlaybackRate(clip.speed);
+    video.preservesPitch = true;
     const seconds = mediaSourceSeconds(
       clip,
       frame,
@@ -120,6 +155,7 @@ export function Preview() {
     [compositionTrees],
   );
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const syncedClipsRef = useRef(new Map<string, string>());
 
   const assets = snapshot?.assets ?? [];
   const assetsRef = useRef(assets);
@@ -176,6 +212,7 @@ export function Preview() {
     }
     seekVideos(sequence, playhead, pool);
     pauseVideos(sequence, pool);
+    syncedClipsRef.current.clear();
   }, [playhead, playing, pool, sequence]);
 
   useEffect(() => {
@@ -191,6 +228,7 @@ export function Preview() {
     const startedAt = performance.now();
     const fps = fpsToNumber(sequence.frameRate);
     let frameHandle = 0;
+    let lastRounded = -1;
     const tick = () => {
       const current = store.getState();
       if (!current.playing) {
@@ -204,15 +242,20 @@ export function Preview() {
         pauseVideos(sequence, pool);
         return;
       }
-      current.setPlayhead(rounded);
-      syncVideos(sequence, rounded, pool, true);
+      if (rounded !== lastRounded) {
+        lastRounded = rounded;
+        current.setPlayhead(rounded);
+      }
+      syncVideos(sequence, rounded, pool, true, syncedClipsRef.current);
       frameHandle = requestAnimationFrame(tick);
     };
-    syncVideos(sequence, startFrame, pool, true);
+    syncedClipsRef.current.clear();
+    syncVideos(sequence, startFrame, pool, true, syncedClipsRef.current, true);
     frameHandle = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(frameHandle);
       pauseVideos(sequence, pool);
+      syncedClipsRef.current.clear();
     };
   }, [duration, playing, pool, sequence, store]);
 

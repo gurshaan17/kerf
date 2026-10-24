@@ -44,10 +44,9 @@ function requireSnapshot(context: ToolContext) {
 }
 
 function sourceDurationFrames(asset: Asset, rate: FrameRate): number {
-  return Math.max(
-    1,
-    secondsToFrames(asset.durationSeconds, asset.frameRate ?? rate, 'floor'),
-  );
+  // Source frames share the sequence frame unit so clip timing stays linear
+  // when the asset and sequence frame rates differ.
+  return Math.max(1, secondsToFrames(asset.durationSeconds, rate, 'floor'));
 }
 
 function clipDurationFrames(asset: Asset, rate: FrameRate): number {

@@ -81,6 +81,17 @@ describe('timeline clip commands', () => {
     });
   });
 
+  it('uses the sequence frame rate for clip duration', () => {
+    const sequence = createSequence({
+      name: 'Mixed rate',
+      frameRate: FRAME_RATES.web30,
+    });
+    const video = { ...videoAsset(10), frameRate: FRAME_RATES.film };
+
+    expect(clipDurationFrames(video, sequence.frameRate)).toBe(300);
+    expect(clipDurationFrames(video, FRAME_RATES.film)).toBe(240);
+  });
+
   it('uses a five second hold for stills', () => {
     const sequence = createSequence({ name: 'Test' });
     const image = imageAsset();

@@ -22,10 +22,9 @@ function isMediaAsset(asset: Asset): boolean {
 }
 
 function sourceDurationFrames(asset: Asset, rate: FrameRate): number {
-  return Math.max(
-    1,
-    secondsToFrames(asset.durationSeconds, asset.frameRate ?? rate, 'floor'),
-  );
+  // Source frames share the sequence frame unit so clip timing stays linear
+  // when the asset and sequence frame rates differ.
+  return Math.max(1, secondsToFrames(asset.durationSeconds, rate, 'floor'));
 }
 
 export function clipDurationFrames(asset: Asset, rate: FrameRate): number {
@@ -40,9 +39,8 @@ export function clipDurationFrames(asset: Asset, rate: FrameRate): number {
     1,
     secondsToFrames(asset.durationSeconds, rate, 'floor'),
   );
-  // The engine measures media clips in source frames, so keep the initial
-  // duration inside the source even when the project and asset frame rates
-  // differ.
+  // Keep the initial duration inside the source even when the asset duration
+  // was rounded up from a slightly shorter container.
   return Math.min(timelineFrames, sourceDurationFrames(asset, rate));
 }
 

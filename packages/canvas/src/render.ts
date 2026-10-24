@@ -69,6 +69,12 @@ export function clipAtFrame(
   );
 }
 
+/**
+ * Clip source frames are measured in sequence frames, not asset frames. That
+ * keeps `sourceFrameAt` linear in timeline time even when the source and
+ * sequence frame rates differ. Convert with the sequence rate so a 30 fps
+ * source on a 24 fps timeline still advances one second per second.
+ */
 export function mediaSourceSeconds(
   clip: Clip,
   frame: number,
@@ -78,9 +84,11 @@ export function mediaSourceSeconds(
   if (clip.type !== 'video' && clip.type !== 'audio') {
     return 0;
   }
-  const rate = asset?.frameRate ?? sequence.frameRate;
-  const fps = fpsToNumber(rate);
-  return Math.max(0, sourceFrameAt(clip, frame) / fps);
+  const fps = fpsToNumber(sequence.frameRate);
+  const seconds = Math.max(0, sourceFrameAt(clip, frame) / fps);
+  return asset && asset.durationSeconds > 0
+    ? Math.min(seconds, asset.durationSeconds)
+    : seconds;
 }
 
 function mediaReady(
