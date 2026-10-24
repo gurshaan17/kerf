@@ -28,11 +28,15 @@ export function createMainWindow(): BrowserWindow {
     mainWindow.show();
   });
 
+  const perf = process.env.KERF_PERF === '1';
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    void mainWindow.loadURL(
+      `${MAIN_WINDOW_VITE_DEV_SERVER_URL}${perf ? '?perf=1' : ''}`,
+    );
   } else {
     void mainWindow.loadFile(
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+      perf ? { query: { perf: '1' } } : undefined,
     );
   }
 

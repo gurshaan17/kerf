@@ -16,6 +16,7 @@ import {
 import type { ResolvedExportPreset } from '../../shared/export-plan';
 import type {
   ExportEvent,
+  ExportFrame,
   ExportRecord,
   ExportStartRequest,
   ExportStartResult,
@@ -23,6 +24,8 @@ import type {
 import { buildExportAudioPlan } from './audio-plan';
 import { buildExportArgs } from './args';
 import type { ExportEncodePlan } from './args';
+
+const MAX_EXPORT_FRAME_BATCH = 16;
 
 export interface ExportEncodeOptions {
   readonly signal: AbortSignal;
@@ -241,24 +244,50 @@ export class ExportService {
   }
 
   async writeFrame(id: string, index: number, data: Uint8Array): Promise<void> {
+    await this.writeFrames(id, [{ index, data }]);
+  }
+
+  async writeFrames(id: string, frames: readonly ExportFrame[]): Promise<void> {
     const session = this.requireSession(id);
     if (session.cancelled) {
       throw new Error('The export was cancelled.');
     }
-    if (!Number.isInteger(index) || index < 0 || index >= session.frameCount) {
-      throw new Error('The frame index is outside this export.');
+    if (frames.length === 0) {
+      return;
     }
-    if (index !== session.framesWritten) {
-      throw new Error('Export frames must arrive in order.');
+    if (frames.length > MAX_EXPORT_FRAME_BATCH) {
+      throw new Error(
+        `Export frames must arrive in batches of ${MAX_EXPORT_FRAME_BATCH} or fewer.`,
+      );
     }
 
-    const path = join(
-      session.tempDirectory,
-      'frames',
-      `frame_${String(index + 1).padStart(5, '0')}.png`,
+    const firstIndex = session.framesWritten;
+    for (const [offset, frame] of frames.entries()) {
+      const index = frame.index;
+      if (
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= session.frameCount
+      ) {
+        throw new Error('The frame index is outside this export.');
+      }
+      if (index !== firstIndex + offset) {
+        throw new Error('Export frames must arrive in order.');
+      }
+      if (!(frame.data instanceof Uint8Array)) {
+        throw new Error('The exported frame data was not a byte buffer.');
+      }
+    }
+
+    await Promise.all(
+      frames.map((frame) =>
+        writeFile(
+          this.framePath(session, frame.index),
+          Buffer.from(frame.data),
+        ),
+      ),
     );
-    await writeFile(path, Buffer.from(data));
-    session.framesWritten += 1;
+    session.framesWritten += frames.length;
     this.update(session, {
       progress: (session.framesWritten / session.frameCount) * 0.8,
     });
@@ -399,6 +428,14 @@ export class ExportService {
       throw new Error('Open a project before exporting.');
     }
     return active;
+  }
+
+  private framePath(session: ExportSession, index: number): string {
+    return join(
+      session.tempDirectory,
+      'frames',
+      `frame_${String(index + 1).padStart(5, '0')}.png`,
+    );
   }
 
   private requireSession(id: string): ExportSession {

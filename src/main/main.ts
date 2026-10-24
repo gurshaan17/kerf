@@ -14,6 +14,16 @@ import type { KerfServices } from './services';
 import { createMainWindow } from './windows';
 import { installProcessStreamGuards } from './process-streams';
 
+const bootStartedAt = performance.now();
+const perfState: { bootStartedAt: number; windowReadyAt: number | null } = {
+  bootStartedAt,
+  windowReadyAt: null,
+};
+(
+  globalThis as {
+    __kerfPerf?: { bootStartedAt: number; windowReadyAt: number | null };
+  }
+).__kerfPerf = perfState;
 const configuredUserData = process.env.KERF_USER_DATA?.trim();
 if (configuredUserData) {
   const userData = resolve(configuredUserData);
@@ -56,11 +66,12 @@ if (!hasSingleInstanceLock) {
   void app.whenReady().then(() => {
     installContentSecurityPolicy();
     services = createKerfServices({ broadcast: broadcastEvent });
+    const startedServices = services;
     if (process.env.KERF_E2E === '1') {
       (globalThis as { __kerfServices?: KerfServices }).__kerfServices =
-        services;
+        startedServices;
     }
-    installMediaProtocol(services.repository);
+    installMediaProtocol(startedServices.repository);
     unregisterIpc = registerProjectIpc({
       projects: services.projects,
       repository: services.repository,
@@ -80,10 +91,24 @@ if (!hasSingleInstanceLock) {
     unsubscribeExports = services.exports.subscribe((event) => {
       broadcastEvent(event);
     });
-    services.jobs.start();
-    void services.mcp.startIfEnabled();
+    const mainWindow = createMainWindow();
+    mainWindow.once('ready-to-show', () => {
+      perfState.windowReadyAt = performance.now();
+      if (process.env.KERF_PERF === '1') {
+        console.info(
+          `[perf] main window ready in ${Math.round(
+            performance.now() - bootStartedAt,
+          )}ms`,
+        );
+      }
+    });
 
-    createMainWindow();
+    // The window can paint before background queues and the MCP listener are
+    // live. Jobs enqueued in the meantime are picked up when the queue starts.
+    setImmediate(() => {
+      startedServices.jobs.start();
+      void startedServices.mcp.startIfEnabled();
+    });
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

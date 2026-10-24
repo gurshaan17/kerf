@@ -31,7 +31,14 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import type { Clip, FrameRate, Marker, Track, TrackKind } from '@kerf/model';
+import type {
+  Asset,
+  Clip,
+  FrameRate,
+  Marker,
+  Track,
+  TrackKind,
+} from '@kerf/model';
 import { formatDuration, fpsToNumber, secondsToFrames } from '@kerf/model';
 import {
   findClip,
@@ -49,6 +56,7 @@ import { clipsInWindow, visibleFrameWindow } from './windowing';
 
 const HEADER_WIDTH = 112;
 const SNAP_PIXELS = 7;
+const EMPTY_ASSETS: readonly Asset[] = Object.freeze([]);
 
 function clampNumber(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
@@ -363,7 +371,13 @@ function MarkerMenu({
 }
 
 export function Timeline() {
-  const snapshot = useStudio((state) => state.snapshot);
+  const sequence = useStudio(
+    (state) => state.snapshot?.project.sequence ?? null,
+  );
+  const projectAssets = useStudio(
+    (state) => state.snapshot?.assets ?? EMPTY_ASSETS,
+  );
+  const history = useStudio((state) => state.snapshot?.history);
   const selection = useStudio((state) => state.selection);
   const playhead = useStudio((state) => state.playhead);
   const pixelsPerFrame = useStudio((state) => state.pixelsPerFrame);
@@ -416,7 +430,6 @@ export function Timeline() {
     };
   }, []);
 
-  const sequence = snapshot?.project.sequence;
   const tracks = useMemo(
     () => (sequence ? tracksInOrder(sequence) : []),
     [sequence],
@@ -533,7 +546,7 @@ export function Timeline() {
         return;
       }
       const clip = location.clip;
-      const asset = assetForClip(clip, snapshot?.assets ?? []);
+      const asset = assetForClip(clip, projectAssets);
       const mediaClip = clip.type === 'video' || clip.type === 'audio';
       const sourceStart = mediaClip ? clip.sourceInFrame : 0;
       const sourceLimit =
@@ -720,7 +733,15 @@ export function Timeline() {
       window.removeEventListener('pointercancel', cancelDrag);
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [apply, pixelsPerFrame, playhead, rate, sequence, snapEnabled, snapshot]);
+  }, [
+    apply,
+    pixelsPerFrame,
+    playhead,
+    projectAssets,
+    rate,
+    sequence,
+    snapEnabled,
+  ]);
 
   useEffect(() => {
     if (!menu) {
@@ -830,9 +851,7 @@ export function Timeline() {
       return;
     }
     const assetId = event.dataTransfer.getData(ASSET_DRAG_MIME);
-    const asset = snapshot?.assets.find(
-      (candidate) => candidate.id === assetId,
-    );
+    const asset = projectAssets.find((candidate) => candidate.id === assetId);
     if (!asset || asset.status !== 'ready') {
       return;
     }
@@ -979,7 +998,7 @@ export function Timeline() {
             size="sm"
             tooltip="Undo (⌘Z)"
             icon={<Undo2 size={13} />}
-            disabled={!snapshot?.history.canUndo}
+            disabled={!history?.canUndo}
             onClick={() => void undo()}
           />
           <IconButton
@@ -987,7 +1006,7 @@ export function Timeline() {
             size="sm"
             tooltip="Redo (⇧⌘Z)"
             icon={<Redo2 size={13} />}
-            disabled={!snapshot?.history.canRedo}
+            disabled={!history?.canRedo}
             onClick={() => void redo()}
           />
           <span className="k-timeline__divider" aria-hidden="true" />

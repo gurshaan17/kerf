@@ -10,6 +10,7 @@ import type {
   CompositionSaveRequest,
   CompositionSaveResult,
   EditResult,
+  ExportFrame,
   ExportRecord,
   ExportStartRequest,
   ExportStartResult,
@@ -102,10 +103,9 @@ export interface StudioState {
   startExport: (
     request: ExportStartRequest,
   ) => Promise<ExportStartResult | null>;
-  writeExportFrame: (
+  writeExportFrames: (
     id: string,
-    index: number,
-    data: Uint8Array,
+    frames: readonly ExportFrame[],
   ) => Promise<void>;
   finishExport: (id: string) => Promise<ExportRecord | null>;
   cancelExport: (id: string) => Promise<void>;
@@ -784,8 +784,8 @@ export function createStudioStore(bridge: KerfBridge) {
         }
       },
 
-      async writeExportFrame(id, index, data) {
-        await bridge.export.writeFrame(id, index, data);
+      async writeExportFrames(id, frames) {
+        await bridge.export.writeFrames(id, frames);
       },
 
       async finishExport(id) {

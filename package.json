@@ -38,6 +38,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "pnpm build:app && playwright test",
+    "perf": "KERF_PERF=1 pnpm build:app && KERF_PERF=1 playwright test test/e2e/edit-journey.spec.ts --reporter=list",
     "test:coverage": "vitest run --coverage",
     "audit:names": "node scripts/audit-names.mjs",
     "clean": "rm -rf out .vite"

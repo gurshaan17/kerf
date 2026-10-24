@@ -8,7 +8,9 @@ import {
 } from '@kerf/canvas';
 import { visualTracksInOrder } from '@kerf/engine';
 import type { SceneTree } from '@kerf/motion';
-import type { ExportStartResult } from '../../shared/contracts';
+import type { ExportFrame, ExportStartResult } from '../../shared/contracts';
+
+const EXPORT_FRAME_BATCH_SIZE = 8;
 
 export class ExportCancelledError extends Error {
   constructor() {
@@ -36,9 +38,10 @@ export interface RenderExportOptions {
   readonly sequence: Sequence;
   readonly assets: readonly Asset[];
   readonly compositionTrees?: ReadonlyMap<string, SceneTree>;
-  readonly writeFrame: (index: number, data: Uint8Array) => Promise<void>;
+  readonly writeFrames: (frames: readonly ExportFrame[]) => Promise<void>;
   readonly onProgress?: (rendered: number, total: number) => void;
   readonly isCancelled?: () => boolean;
+  readonly batchSize?: number;
 }
 
 function visualAssetIds(
@@ -130,18 +133,19 @@ function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 /**
- * Renders the same compositor used by the preview into PNG frames. Frame data
- * crosses to the main process one frame at a time so large exports do not have
- * to live in memory.
+ * Renders the same compositor used by the preview into PNG frames. Frames cross
+ * to the main process in small batches: enough to amortise IPC, but bounded so
+ * large exports do not have to live in memory.
  */
 export async function renderExportFrames({
   result,
   sequence,
   assets,
   compositionTrees,
-  writeFrame,
+  writeFrames,
   onProgress,
   isCancelled = () => false,
+  batchSize = EXPORT_FRAME_BATCH_SIZE,
 }: RenderExportOptions): Promise<void> {
   const canvas = document.createElement('canvas');
   canvas.width = result.width;
@@ -152,9 +156,23 @@ export async function renderExportFrames({
   }
 
   const pool = new MediaPool(assets);
+  const limit = Math.max(1, Math.min(16, Math.floor(batchSize)));
   try {
     const ids = visualAssetIds(sequence, result.startFrame, result.endFrame);
     await waitForMedia(pool, ids, isCancelled);
+    let batch: ExportFrame[] = [];
+    let rendered = 0;
+    const flush = async () => {
+      if (batch.length === 0) {
+        return;
+      }
+      // Await the main process before rendering more frames. This keeps the
+      // in-flight PNG bytes bounded while still amortising the IPC cost.
+      await writeFrames(batch);
+      rendered += batch.length;
+      batch = [];
+      onProgress?.(rendered, result.frameCount);
+    };
     for (let frame = result.startFrame; frame < result.endFrame; frame += 1) {
       if (isCancelled()) {
         throw new ExportCancelledError();
@@ -162,10 +180,15 @@ export async function renderExportFrames({
       await seekFrameMedia(sequence, frame, pool, isCancelled);
       renderFrame(context, sequence, frame, { pool, compositionTrees });
       const blob = await canvasToPng(canvas);
-      const data = new Uint8Array(await blob.arrayBuffer());
-      await writeFrame(frame - result.startFrame, data);
-      onProgress?.(frame - result.startFrame + 1, result.frameCount);
+      batch.push({
+        index: frame - result.startFrame,
+        data: new Uint8Array(await blob.arrayBuffer()),
+      });
+      if (batch.length >= limit) {
+        await flush();
+      }
     }
+    await flush();
   } finally {
     pool.dispose();
   }

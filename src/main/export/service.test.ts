@@ -93,6 +93,25 @@ describe('ExportService', () => {
     });
   });
 
+  it('accepts an ordered batch of frames in one call', async () => {
+    const { root, exports } = makeServices();
+    const result = exports.start({
+      presetId: '720p',
+      startFrame: 0,
+      endFrame: 2,
+      outputPath: join(root, 'batch.mp4'),
+    });
+
+    await exports.writeFrames(result.export.id, [
+      { index: 0, data: new Uint8Array([1]) },
+      { index: 1, data: new Uint8Array([2]) },
+    ]);
+    const finished = await exports.finish(result.export.id);
+
+    expect(finished.status).toBe('succeeded');
+    expect(finished.progress).toBe(1);
+  });
+
   it('rejects out-of-order frames and cancels cleanly', async () => {
     const { root, exports } = makeServices();
     const result = exports.start({

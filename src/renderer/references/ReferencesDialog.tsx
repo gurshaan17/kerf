@@ -93,6 +93,8 @@ function AssetThumb({ asset }: { readonly asset: Asset }) {
     <img
       src={mediaUrl(asset.id)}
       alt=""
+      loading="lazy"
+      decoding="async"
       className="h-full w-full object-cover"
       draggable={false}
       onError={() => setFailed(true)}

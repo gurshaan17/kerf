@@ -326,6 +326,11 @@ export interface ExportStartResult {
   readonly frameCount: number;
 }
 
+export interface ExportFrame {
+  readonly index: number;
+  readonly data: Uint8Array;
+}
+
 export interface ExportEvent {
   readonly type: 'export.changed';
   readonly export: ExportRecord;
@@ -538,6 +543,7 @@ export const KERF_IPC = {
     pickPath: 'kerf:export:pick-path',
     start: 'kerf:export:start',
     writeFrame: 'kerf:export:write-frame',
+    writeFrames: 'kerf:export:write-frames',
     finish: 'kerf:export:finish',
     cancel: 'kerf:export:cancel',
     list: 'kerf:export:list',
@@ -628,6 +634,10 @@ export interface KerfBridge {
       id: string,
       index: number,
       data: Uint8Array,
+    ) => Promise<void>;
+    readonly writeFrames: (
+      id: string,
+      frames: readonly ExportFrame[],
     ) => Promise<void>;
     readonly finish: (id: string) => Promise<ExportRecord>;
     readonly cancel: (id: string) => Promise<boolean>;

@@ -186,6 +186,7 @@ function makeBridge(snapshot: ProjectSnapshot) {
         throw new Error('not used');
       }),
       writeFrame: vi.fn(async () => undefined),
+      writeFrames: vi.fn(async () => undefined),
       finish: vi.fn(async () => {
         throw new Error('not used');
       }),

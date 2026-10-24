@@ -166,6 +166,8 @@ function AssetPreview({ asset }: { asset: Asset }) {
     <img
       src={source}
       alt=""
+      loading="lazy"
+      decoding="async"
       className={cn(
         'h-full w-full',
         asset.kind === 'audio'

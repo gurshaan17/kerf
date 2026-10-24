@@ -147,6 +147,7 @@ const bridge: KerfBridge = {
       throw new Error('not used');
     },
     writeFrame: async () => {},
+    writeFrames: async () => {},
     finish: async () => {
       throw new Error('not used');
     },

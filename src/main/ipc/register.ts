@@ -33,6 +33,19 @@ import {
 } from '../../shared/contracts';
 import { suggestedExportName } from '../../shared/export-plan';
 
+function exportFrameBytes(data: unknown): Uint8Array {
+  const bytes =
+    data instanceof Uint8Array
+      ? data
+      : data instanceof ArrayBuffer
+        ? new Uint8Array(data)
+        : null;
+  if (!bytes) {
+    throw new Error('The exported frame data was not a byte buffer.');
+  }
+  return bytes;
+}
+
 const projectIdSchema = z.string().min(1);
 const projectNameSchema = z.string().trim().min(1).max(120);
 const importPathsSchema = z.array(z.string().min(1)).max(100);
@@ -460,20 +473,33 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   ipcMain.handle(
     KERF_IPC.export.writeFrame,
     async (_event, id: unknown, index: unknown, data: unknown) => {
-      const bytes =
-        data instanceof Uint8Array
-          ? data
-          : data instanceof ArrayBuffer
-            ? new Uint8Array(data)
-            : null;
-      if (!bytes) {
-        throw new Error('The exported frame data was not a byte buffer.');
-      }
       await exports.writeFrame(
         exportIdSchema.parse(id),
         exportFrameIndexSchema.parse(index),
-        bytes,
+        exportFrameBytes(data),
       );
+    },
+  );
+  ipcMain.handle(
+    KERF_IPC.export.writeFrames,
+    async (_event, id: unknown, frames: unknown) => {
+      if (!Array.isArray(frames)) {
+        throw new Error('The exported frames were not a list.');
+      }
+      const parsed = frames.map((frame: unknown) => {
+        if (!frame || typeof frame !== 'object') {
+          throw new Error('An exported frame was not an object.');
+        }
+        const record = frame as {
+          readonly index?: unknown;
+          readonly data?: unknown;
+        };
+        return {
+          index: exportFrameIndexSchema.parse(record.index),
+          data: exportFrameBytes(record.data),
+        };
+      });
+      await exports.writeFrames(exportIdSchema.parse(id), parsed);
     },
   );
   ipcMain.handle(KERF_IPC.export.finish, (_event, id: unknown) =>

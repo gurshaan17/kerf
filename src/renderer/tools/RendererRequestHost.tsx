@@ -167,8 +167,8 @@ async function handleRequest(
         sequence: snapshot.project.sequence,
         assets: snapshot.assets,
         compositionTrees: compositionMap(state.compositionTrees),
-        writeFrame: (index, data) =>
-          window.kerf.export.writeFrame(result.export.id, index, data),
+        writeFrames: (frames) =>
+          window.kerf.export.writeFrames(result.export.id, frames),
         isCancelled,
       });
     } catch (cause) {

@@ -157,26 +157,28 @@ export default function App() {
     if (!snapshot) {
       return [];
     }
-    return snapshot.assets.map((asset) => {
-      const scenes = snapshot.scenes.filter(
-        (scene) => scene.assetId === asset.id,
-      );
+    const { assets, scenes, transcripts, beatMaps } = snapshot;
+    return assets.map((asset) => {
+      const assetScenes = scenes.filter((scene) => scene.assetId === asset.id);
       return {
         assetId: asset.id,
-        transcript: snapshot.transcripts.some(
+        transcript: transcripts.some(
           (transcript) => transcript.assetId === asset.id,
         ),
-        sceneCount: scenes.length,
-        descriptions: scenes.filter(
+        sceneCount: assetScenes.length,
+        descriptions: assetScenes.filter(
           (scene) => scene.description !== null && scene.description.length > 0,
         ).length,
-        beatMap: snapshot.beatMaps.some(
-          (beatMap) => beatMap.assetId === asset.id,
-        ),
+        beatMap: beatMaps.some((beatMap) => beatMap.assetId === asset.id),
         embeddings: false,
       };
     });
-  }, [snapshot]);
+  }, [
+    snapshot?.assets,
+    snapshot?.scenes,
+    snapshot?.transcripts,
+    snapshot?.beatMaps,
+  ]);
 
   if (!snapshot) {
     return (

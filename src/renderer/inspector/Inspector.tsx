@@ -1522,9 +1522,10 @@ function InspectorBody({ clip }: { readonly clip: Clip }) {
 }
 
 function SequenceSummary() {
-  const snapshot = useStudio((state) => state.snapshot);
+  const sequence = useStudio(
+    (state) => state.snapshot?.project.sequence ?? null,
+  );
   const selection = useStudio((state) => state.selection);
-  const sequence = snapshot?.project.sequence;
 
   const summary = useMemo(() => {
     if (!sequence) {

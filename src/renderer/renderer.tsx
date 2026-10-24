@@ -4,6 +4,8 @@ import '@kerf/ui';
 import App from './App';
 import { StudioProvider } from './state/StudioProvider';
 
+const bootStartedAt = performance.now();
+const perf = new URLSearchParams(window.location.search).has('perf');
 const container = document.getElementById('root');
 
 if (!container) {
@@ -17,3 +19,13 @@ createRoot(container).render(
     </StudioProvider>
   </React.StrictMode>,
 );
+
+if (perf) {
+  requestAnimationFrame(() => {
+    console.info(
+      `[perf] renderer first frame in ${Math.round(
+        performance.now() - bootStartedAt,
+      )}ms`,
+    );
+  });
+}

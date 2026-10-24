@@ -90,6 +90,8 @@ const bridge: KerfBridge = {
       invoke<ExportStartResult>(KERF_IPC.export.start, request),
     writeFrame: (id, index, data) =>
       invoke<void>(KERF_IPC.export.writeFrame, id, index, data),
+    writeFrames: (id, frames) =>
+      invoke<void>(KERF_IPC.export.writeFrames, id, frames),
     finish: (id) => invoke<ExportRecord>(KERF_IPC.export.finish, id),
     cancel: (id) => invoke<boolean>(KERF_IPC.export.cancel, id),
     list: (projectId) =>
