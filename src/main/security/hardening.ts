@@ -1,4 +1,6 @@
 import { app, session } from 'electron';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const CONTENT_SECURITY_POLICY =
   "default-src 'self'; " +
@@ -35,12 +37,38 @@ function isDevelopment(): boolean {
   );
 }
 
-/** Deny every popup, webview and top-level navigation the app did not load. */
+/**
+ * Reloads and Vite's dev-server full reloads arrive as top-level navigations.
+ * Blocking all of them leaves the window blank whenever the dev server reloads
+ * before React has mounted, so allow the app's own document and nothing else.
+ */
+function isInternalNavigation(url: string): boolean {
+  if (
+    typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== 'undefined' &&
+    MAIN_WINDOW_VITE_DEV_SERVER_URL
+  ) {
+    try {
+      return (
+        new URL(url).origin === new URL(MAIN_WINDOW_VITE_DEV_SERVER_URL).origin
+      );
+    } catch {
+      return false;
+    }
+  }
+  const rendererRoot = pathToFileURL(
+    path.join(__dirname, '..', 'renderer'),
+  ).href;
+  return url === rendererRoot || url.startsWith(`${rendererRoot}/`);
+}
+
+/** Deny every popup, webview and external top-level navigation. */
 export function installNavigationGuards(): void {
   app.on('web-contents-created', (_event, contents) => {
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    contents.on('will-navigate', (event) => {
-      event.preventDefault();
+    contents.on('will-navigate', (event, url) => {
+      if (!isInternalNavigation(url)) {
+        event.preventDefault();
+      }
     });
     contents.on('will-attach-webview', (event) => {
       event.preventDefault();
