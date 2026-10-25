@@ -1,10 +1,15 @@
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   accessSync,
+  closeSync,
   constants,
+  createReadStream,
   createWriteStream,
   existsSync,
   mkdirSync,
+  openSync,
+  readSync,
   renameSync,
   rmSync,
   statSync,
@@ -40,6 +45,16 @@ export const WHISPER_MODELS: ReadonlyArray<
     url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
   },
 ];
+
+/** SHA-256 published by the whisper.cpp model repository for each download. */
+const MODEL_CHECKSUMS: Readonly<Record<string, string>> = {
+  tiny: 'be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21',
+  base: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe',
+  small: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b',
+};
+
+/** Every whisper.cpp model starts with the GGML magic, stored little-endian. */
+const GGML_MAGIC = 0x67676d6c;
 
 const WHISPER_NAMES = ['whisper-cli', 'whisper-cpp', 'whisper'];
 const FALLBACK_DIRECTORIES = [
@@ -122,13 +137,57 @@ export function modelPath(root: string, modelId: string): string | null {
   return model ? join(root, model.fileName) : null;
 }
 
+function hasGgmlMagic(path: string): boolean {
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(path, 'r');
+    const header = Buffer.alloc(4);
+    return (
+      readSync(descriptor, header, 0, header.length, 0) === header.length &&
+      header.readUInt32LE(0) === GGML_MAGIC
+    );
+  } catch {
+    return false;
+  } finally {
+    if (descriptor !== undefined) {
+      closeSync(descriptor);
+    }
+  }
+}
+
+/**
+ * A complete model is large enough and carries the GGML header. Size alone is
+ * not enough: an interrupted or preallocated download can produce a file of the
+ * exact expected length that whisper.cpp rejects as "invalid model data".
+ */
+function isModelFileUsable(
+  path: string,
+  model: Omit<WhisperModelInfo, 'installed' | 'downloadedBytes'>,
+): boolean {
+  return (
+    existsSync(path) &&
+    statSync(path).size >= model.sizeBytes * 0.9 &&
+    hasGgmlMagic(path)
+  );
+}
+
+export async function sha256File(path: string): Promise<string> {
+  const hash = createHash('sha256');
+  await pipeline(createReadStream(path), hash);
+  return hash.digest('hex');
+}
+
 export function installedModels(root: string): WhisperModelInfo[] {
   return WHISPER_MODELS.map((model) => {
     const path = join(root, model.fileName);
     const size = existsSync(path) ? statSync(path).size : 0;
     return {
-      ...model,
-      installed: size >= model.sizeBytes * 0.9,
+      id: model.id,
+      name: model.name,
+      fileName: model.fileName,
+      sizeBytes: model.sizeBytes,
+      url: model.url,
+      installed: isModelFileUsable(path, model),
       downloadedBytes: size,
     };
   });
@@ -169,6 +228,8 @@ export interface DownloadModelOptions {
   readonly signal?: AbortSignal;
   readonly onProgress?: (progress: number) => void;
   readonly fetchImpl?: typeof fetch;
+  /** Overrides the manifest checksum, for tests and local mirrors. */
+  readonly expectedSha256?: string;
 }
 
 export async function downloadModel(
@@ -186,8 +247,7 @@ export async function downloadModel(
   const existing = existsSync(partial) ? statSync(partial).size : 0;
 
   if (existsSync(destination)) {
-    const size = statSync(destination).size;
-    if (size >= model.sizeBytes * 0.9) {
+    if (isModelFileUsable(destination, model)) {
       options.onProgress?.(1);
       return destination;
     }
@@ -226,6 +286,25 @@ export async function downloadModel(
     source,
     createWriteStream(partial, { flags: append ? 'a' : 'w' }),
   );
+
+  const expected = options.expectedSha256 ?? MODEL_CHECKSUMS[model.id];
+  if (!hasGgmlMagic(partial)) {
+    rmSync(partial, { force: true });
+    throw new Error(
+      `Could not download ${model.name}: the file is corrupt. Try again.`,
+    );
+  }
+  if (!expected) {
+    rmSync(partial, { force: true });
+    throw new Error(`No checksum is configured for ${model.name}.`);
+  }
+  if ((await sha256File(partial)) !== expected) {
+    rmSync(partial, { force: true });
+    throw new Error(
+      `Could not download ${model.name}: the checksum did not match. Try again.`,
+    );
+  }
+
   renameSync(partial, destination);
   options.onProgress?.(1);
   return destination;

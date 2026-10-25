@@ -1,5 +1,6 @@
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -7,6 +8,7 @@ import {
   truncateSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -17,7 +19,15 @@ import {
   installedModels,
   modelPath,
   modelRootFor,
+  sha256File,
 } from './whisper';
+
+/** The GGML magic whisper.cpp expects at the start of every model file. */
+const GGML_HEADER = Buffer.from('lmgg');
+
+function fixtureChecksum(body: Buffer): string {
+  return createHash('sha256').update(body).digest('hex');
+}
 
 const directories: string[] = [];
 
@@ -72,7 +82,7 @@ describe('Whisper discovery and models', () => {
     if (!tiny) {
       throw new Error('missing model path');
     }
-    writeFileSync(tiny, '');
+    writeFileSync(tiny, GGML_HEADER);
     truncateSync(tiny, 77_691_713);
 
     const models = installedModels(root);
@@ -82,19 +92,70 @@ describe('Whisper discovery and models', () => {
     expect(deleteModel(root, 'tiny')).toBe(false);
   });
 
+  it('rejects a model of the expected size without a GGML header', () => {
+    const root = modelRootFor(tempDirectory());
+    mkdirSync(root, { recursive: true });
+    const tiny = modelPath(root, 'tiny');
+    if (!tiny) {
+      throw new Error('missing model path');
+    }
+    writeFileSync(tiny, '');
+    truncateSync(tiny, 77_691_713);
+
+    const models = installedModels(root);
+    expect(models.find((model) => model.id === 'tiny')?.installed).toBe(false);
+  });
+
   it('downloads a model response to the model root', async () => {
     const root = tempDirectory();
     const progress: number[] = [];
+    const body = Buffer.concat([GGML_HEADER, Buffer.from([1, 2, 3, 4])]);
     const destination = await downloadModel({
       root,
       modelId: 'tiny',
-      fetchImpl: async () =>
-        new Response(new Uint8Array([1, 2, 3, 4]), { status: 200 }),
+      fetchImpl: async () => new Response(body, { status: 200 }),
+      expectedSha256: fixtureChecksum(body),
       onProgress: (value) => progress.push(value),
     });
 
     expect(destination).toBe(join(root, 'ggml-tiny.bin'));
-    expect(statSync(destination).size).toBe(4);
+    expect(statSync(destination).size).toBe(body.length);
     expect(progress.at(-1)).toBe(1);
+    expect(await sha256File(destination)).toBe(fixtureChecksum(body));
+  });
+
+  it('removes a download that fails its checksum', async () => {
+    const root = tempDirectory();
+    const body = Buffer.concat([GGML_HEADER, Buffer.from([1, 2, 3, 4])]);
+
+    await expect(
+      downloadModel({
+        root,
+        modelId: 'tiny',
+        fetchImpl: async () => new Response(body, { status: 200 }),
+        expectedSha256: 'deadbeef',
+      }),
+    ).rejects.toThrow(/checksum did not match/);
+
+    expect(existsSync(join(root, 'ggml-tiny.bin'))).toBe(false);
+    expect(existsSync(join(root, 'ggml-tiny.bin.part'))).toBe(false);
+  });
+
+  it('re-downloads a corrupt installed model instead of reusing it', async () => {
+    const root = tempDirectory();
+    const corrupt = join(root, 'ggml-tiny.bin');
+    writeFileSync(corrupt, '');
+    truncateSync(corrupt, 77_691_713);
+
+    const body = Buffer.concat([GGML_HEADER, Buffer.from([9])]);
+    const destination = await downloadModel({
+      root,
+      modelId: 'tiny',
+      fetchImpl: async () => new Response(body, { status: 200 }),
+      expectedSha256: fixtureChecksum(body),
+    });
+
+    expect(destination).toBe(corrupt);
+    expect(await sha256File(destination)).toBe(fixtureChecksum(body));
   });
 });
