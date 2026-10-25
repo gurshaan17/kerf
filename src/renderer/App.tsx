@@ -10,6 +10,8 @@ import { useStudio } from './state/StudioProvider';
 import { Timeline } from './timeline/Timeline';
 import { Preview } from './preview/Preview';
 import { Inspector } from './inspector/Inspector';
+import { ScenePanel } from './scenes/ScenePanel';
+import { TranscriptPanel } from './transcript/TranscriptPanel';
 import { ExportDialog } from './export/ExportDialog';
 import { AnalysisSettingsDialog } from './analysis/AnalysisSettingsDialog';
 import { SearchDialog } from './search/SearchDialog';
@@ -59,6 +61,10 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [analysisView, setAnalysisView] = useState<{
+    kind: 'transcript' | 'scenes';
+    assetId: string;
+  } | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [motionOpen, setMotionOpen] = useState(false);
   const [referencesOpen, setReferencesOpen] = useState(false);
@@ -72,6 +78,17 @@ export default function App() {
   const openSearch = useCallback(() => {
     setPaletteOpen(false);
     setSearchOpen(true);
+  }, []);
+  const openTranscript = useCallback((assetId: string) => {
+    setPaletteOpen(false);
+    setAnalysisView({ kind: 'transcript', assetId });
+  }, []);
+  const openScenes = useCallback((assetId: string) => {
+    setPaletteOpen(false);
+    setAnalysisView({ kind: 'scenes', assetId });
+  }, []);
+  const closeAnalysisView = useCallback(() => {
+    setAnalysisView(null);
   }, []);
   const openAnalysis = useCallback(() => {
     setPaletteOpen(false);
@@ -142,6 +159,10 @@ export default function App() {
       sandbox?.dispose();
     };
   }, [compositionSignature, clearCompositionTrees, setCompositionTree]);
+
+  useEffect(() => {
+    setAnalysisView(null);
+  }, [snapshot?.project.id]);
 
   useGlobalShortcuts({
     onOpenPalette: openPalette,
@@ -228,7 +249,25 @@ export default function App() {
         onDismissToast={dismissToast}
         stage={<Preview />}
         timeline={<Timeline />}
-        inspector={<Inspector />}
+        inspector={
+          analysisView ? (
+            analysisView.kind === 'transcript' ? (
+              <TranscriptPanel
+                key={`transcript:${analysisView.assetId}`}
+                assetId={analysisView.assetId}
+                onClose={closeAnalysisView}
+              />
+            ) : (
+              <ScenePanel
+                key={`scenes:${analysisView.assetId}`}
+                assetId={analysisView.assetId}
+                onClose={closeAnalysisView}
+              />
+            )
+          ) : (
+            <Inspector />
+          )
+        }
         leftPanel={
           <FootageBin
             assets={assets}
@@ -241,6 +280,8 @@ export default function App() {
             onRefresh={refreshAssets}
             analysis={analysis}
             onAnalyze={analyze}
+            onOpenTranscript={openTranscript}
+            onOpenScenes={openScenes}
             onOpenSearch={openSearch}
             onOpenAnalysis={openAnalysis}
             onOpenMotion={openMotion}
@@ -267,6 +308,8 @@ export default function App() {
         onShowShortcuts={showShortcutsFromPalette}
         onExport={openExport}
         onOpenSearch={openSearch}
+        onOpenTranscript={openTranscript}
+        onOpenScenes={openScenes}
         onOpenAnalysis={openAnalysis}
         onOpenMotion={openMotion}
         onOpenReferences={openReferences}

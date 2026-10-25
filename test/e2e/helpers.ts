@@ -101,6 +101,46 @@ export function ensureCaptionFixture(): string {
   return video;
 }
 
+export function ensureScenesFixture(): string {
+  mkdirSync(cacheRoot, { recursive: true });
+  const video = join(cacheRoot, 'scenes-source.mp4');
+  if (existsSync(video) && statSync(video).size > 1_000) {
+    return video;
+  }
+  const ffmpeg = executable('ffmpeg');
+  execFileSync(
+    ffmpeg,
+    [
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'color=c=0xff0000:s=640x360:r=24:d=2',
+      '-f',
+      'lavfi',
+      '-i',
+      'color=c=0x00ff00:s=640x360:r=24:d=2',
+      '-f',
+      'lavfi',
+      '-i',
+      'color=c=0x0000ff:s=640x360:r=24:d=2',
+      '-filter_complex',
+      '[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]',
+      '-map',
+      '[v]',
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-movflags',
+      '+faststart',
+      video,
+    ],
+    { stdio: 'inherit' },
+  );
+  return video;
+}
+
 export function probeDurationSeconds(path: string): number {
   const ffprobe = executable('ffprobe');
   const value = execFileSync(

@@ -19,6 +19,10 @@ export type MediaRequest =
       readonly slot: MediaSlot;
     }
   | {
+      readonly kind: 'scene';
+      readonly sceneId: string;
+    }
+  | {
       readonly kind: 'project';
       readonly projectId: string;
       readonly relativePath: string;
@@ -83,6 +87,14 @@ export function parseMediaRequest(rawUrl: string): MediaRequest | null {
     return { kind: 'asset', assetId, slot };
   }
 
+  if (url.host === 'scene' && segments.length === 2) {
+    const sceneId = segments[0];
+    if (!sceneId || segments[1] !== 'thumbnail') {
+      return null;
+    }
+    return { kind: 'scene', sceneId };
+  }
+
   if (url.host === 'project' && segments.length >= 2) {
     const projectId = segments[0];
     const relativePath = segments.slice(1).join('/');
@@ -126,6 +138,23 @@ export function resolveMediaTarget(
   repository: ProjectRepository,
   request: MediaRequest,
 ): MediaTarget | null {
+  if (request.kind === 'scene') {
+    const scene = repository.findScene(request.sceneId);
+    if (!scene?.thumbnailPath) {
+      return null;
+    }
+    const asset = repository.findAsset(scene.assetId);
+    const folder = asset ? repository.folderFor(asset.projectId) : null;
+    if (!folder || !isPathInside(folder, scene.thumbnailPath)) {
+      return null;
+    }
+    return {
+      filePath: scene.thumbnailPath,
+      mimeType: mimeForPath(scene.thumbnailPath),
+      cacheControl: 'private, max-age=3600',
+    };
+  }
+
   if (request.kind === 'project') {
     const folder = repository.folderFor(request.projectId);
     if (!folder) {

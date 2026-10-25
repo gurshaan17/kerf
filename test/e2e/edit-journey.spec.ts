@@ -165,6 +165,23 @@ test('creates, imports, cuts, captions and exports a project', async () => {
       )
       .toBe(true);
 
+    // Verify the transcript viewer: select the source in the bin, open it from
+    // the badge, and confirm segments plus the inline source player render.
+    await assetCard.click();
+    await page.getByRole('button', { name: 'Transcript', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Transcript', exact: true }),
+    ).toBeVisible();
+    const transcriptSegments = page.locator('[data-transcript-segment]');
+    await expect(transcriptSegments.first()).toBeVisible();
+    await expect(
+      page.locator('video[src^="kerfmedia://"][src$="/source"]'),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Close transcript' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Transcript', exact: true }),
+    ).toHaveCount(0);
+
     const captionResult = await kerf.app.evaluate(async (_electron, id) => {
       const services = (
         globalThis as {

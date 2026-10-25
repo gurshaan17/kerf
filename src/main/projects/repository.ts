@@ -653,6 +653,13 @@ export class ProjectRepository {
     return rows.map(sceneFromRow);
   }
 
+  findScene(sceneId: string): Scene | null {
+    const row = this.database
+      .prepare('SELECT * FROM scenes WHERE id = ?')
+      .get(sceneId) as ChildRow | undefined;
+    return row ? sceneFromRow(row) : null;
+  }
+
   saveScene(scene: Scene): Scene {
     this.database
       .prepare(

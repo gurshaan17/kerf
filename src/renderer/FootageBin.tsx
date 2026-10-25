@@ -40,6 +40,8 @@ export interface FootageBinProps {
     assetId: string,
     kinds: readonly ('transcript' | 'scenes' | 'beats' | 'vision')[],
   ) => Promise<void>;
+  readonly onOpenTranscript: (assetId: string) => void;
+  readonly onOpenScenes: (assetId: string) => void;
   readonly onOpenSearch: () => void;
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
@@ -192,6 +194,8 @@ export function FootageBin({
   onRefresh,
   analysis,
   onAnalyze,
+  onOpenTranscript,
+  onOpenScenes,
   onOpenSearch,
   onOpenAnalysis,
   onOpenMotion,
@@ -560,27 +564,35 @@ export function FootageBin({
           ) : null}
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span
-              className={cn(
-                'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase',
-                selectedAnalysis?.transcript
-                  ? 'border-ok/30 bg-ok/10 text-ok'
-                  : 'border-line bg-surface-2 text-ink-faint',
-              )}
-            >
-              <Captions size={9} />{' '}
-              {selectedAnalysis?.transcript ? 'Transcript' : 'No words'}
-            </span>
-            <span
-              className={cn(
-                'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase',
-                selectedAnalysis && selectedAnalysis.sceneCount > 0
-                  ? 'border-ok/30 bg-ok/10 text-ok'
-                  : 'border-line bg-surface-2 text-ink-faint',
-              )}
-            >
-              <ScanLine size={10} /> {selectedAnalysis?.sceneCount ?? 0} scenes
-            </span>
+            {selectedAnalysis?.transcript ? (
+              <button
+                type="button"
+                title="View transcript"
+                onClick={() => onOpenTranscript(selected.id)}
+                className="inline-flex h-[18px] items-center gap-1 rounded-pill border border-ok/30 bg-ok/10 px-1.5 font-mono text-[8px] uppercase text-ok transition-colors duration-150 ease-k hover:border-ok/60 hover:bg-ok/15 focus-visible:outline-none"
+              >
+                <Captions size={9} /> Transcript
+              </button>
+            ) : (
+              <span className="inline-flex h-[18px] items-center gap-1 rounded-pill border border-line bg-surface-2 px-1.5 font-mono text-[8px] uppercase text-ink-faint">
+                <Captions size={9} /> No words
+              </span>
+            )}
+            {selectedAnalysis && selectedAnalysis.sceneCount > 0 ? (
+              <button
+                type="button"
+                title="View scenes"
+                onClick={() => onOpenScenes(selected.id)}
+                className="inline-flex h-[18px] items-center gap-1 rounded-pill border border-ok/30 bg-ok/10 px-1.5 font-mono text-[8px] uppercase text-ok transition-colors duration-150 ease-k hover:border-ok/60 hover:bg-ok/15 focus-visible:outline-none"
+              >
+                <ScanLine size={10} /> {selectedAnalysis.sceneCount}{' '}
+                {selectedAnalysis.sceneCount === 1 ? 'scene' : 'scenes'}
+              </button>
+            ) : (
+              <span className="inline-flex h-[18px] items-center gap-1 rounded-pill border border-line bg-surface-2 px-1.5 font-mono text-[8px] uppercase text-ink-faint">
+                <ScanLine size={10} /> 0 scenes
+              </span>
+            )}
             <span
               className={cn(
                 'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase',

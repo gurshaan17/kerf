@@ -3,6 +3,7 @@ import { useStore } from 'zustand';
 import type { Clip, EditCommand } from '@kerf/model';
 import type { SceneTree } from '@kerf/motion';
 import { sequenceDurationFrames } from '@kerf/engine';
+import { findSequenceFrame } from './sequence-map';
 import type {
   AnalysisKind,
   ChatProviderSetting,
@@ -730,23 +731,16 @@ export function createStudioStore(bridge: KerfBridge) {
         if (!snapshot) {
           return;
         }
-        for (const track of snapshot.project.sequence.tracks) {
-          for (const clip of track.clips) {
-            if (
-              (clip.type === 'video' || clip.type === 'audio') &&
-              clip.assetId === assetId
-            ) {
-              const local = Math.round(
-                (sourceFrame - clip.sourceInFrame) / clip.speed,
-              );
-              if (local >= 0 && local < clip.durationFrames) {
-                get().clearSelection();
-                get().selectClip(clip.id);
-                get().setPlayhead(clip.startFrame + local);
-                return;
-              }
-            }
-          }
+        const match = findSequenceFrame(
+          snapshot.project.sequence,
+          assetId,
+          sourceFrame,
+        );
+        if (match) {
+          get().clearSelection();
+          get().selectClip(match.clipId);
+          get().setPlayhead(match.sequenceFrame);
+          return;
         }
         pushToast({
           title: 'Clip is not on the timeline',

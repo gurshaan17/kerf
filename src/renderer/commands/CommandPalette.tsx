@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   AudioLines,
+  Captions,
   Clapperboard,
   Copy,
   CopyPlus,
@@ -51,6 +52,8 @@ export interface CommandPaletteProps {
   readonly onShowShortcuts: () => void;
   readonly onExport: () => void;
   readonly onOpenSearch: () => void;
+  readonly onOpenTranscript: (assetId: string) => void;
+  readonly onOpenScenes: (assetId: string) => void;
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
   readonly onOpenReferences: () => void;
@@ -63,6 +66,8 @@ export function CommandPalette({
   onShowShortcuts,
   onExport,
   onOpenSearch,
+  onOpenTranscript,
+  onOpenScenes,
   onOpenAnalysis,
   onOpenMotion,
   onOpenReferences,
@@ -73,11 +78,50 @@ export function CommandPalette({
   const playing = useStudio((state) => state.playing);
   const snapEnabled = useStudio((state) => state.snapEnabled);
   const rippleEnabled = useStudio((state) => state.rippleEnabled);
-  const selectionCount = useStudio((state) => state.selection.clipIds.length);
+  const selectedClipIds = useStudio((state) => state.selection.clipIds);
+  const selectionCount = selectedClipIds.length;
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const commandRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const selectedAssetId = useMemo(() => {
+    if (!snapshot || selectedClipIds.length === 0) {
+      return null;
+    }
+    const selected = new Set(selectedClipIds);
+    for (const track of snapshot.project.sequence.tracks) {
+      for (const clip of track.clips) {
+        if (
+          selected.has(clip.id) &&
+          (clip.type === 'video' || clip.type === 'audio')
+        ) {
+          return clip.assetId;
+        }
+      }
+    }
+    return null;
+  }, [snapshot, selectedClipIds]);
+
+  const transcriptTargetId = useMemo(() => {
+    if (!snapshot || !selectedAssetId) {
+      return null;
+    }
+    return snapshot.transcripts.some(
+      (transcript) => transcript.assetId === selectedAssetId,
+    )
+      ? selectedAssetId
+      : null;
+  }, [snapshot, selectedAssetId]);
+
+  const scenesTargetId = useMemo(() => {
+    if (!snapshot || !selectedAssetId) {
+      return null;
+    }
+    return snapshot.scenes.some((scene) => scene.assetId === selectedAssetId)
+      ? selectedAssetId
+      : null;
+  }, [snapshot, selectedAssetId]);
 
   const commandList = useMemo<PaletteCommand[]>(() => {
     const hasSelection = selectionCount > 0;
@@ -293,6 +337,30 @@ export function CommandPalette({
         run: onOpenSearch,
       },
       {
+        id: 'analysis.transcript',
+        label: 'View transcript',
+        keywords: 'words speech read verify captions source',
+        icon: <Captions size={14} />,
+        disabled: !transcriptTargetId,
+        run: () => {
+          if (transcriptTargetId) {
+            onOpenTranscript(transcriptTargetId);
+          }
+        },
+      },
+      {
+        id: 'analysis.scenes.view',
+        label: 'View scenes',
+        keywords: 'storyboard shots cuts keyframes thumbnails',
+        icon: <ScanLine size={14} />,
+        disabled: !scenesTargetId,
+        run: () => {
+          if (scenesTargetId) {
+            onOpenScenes(scenesTargetId);
+          }
+        },
+      },
+      {
         id: 'analysis.settings',
         label: 'Analysis settings',
         keywords: 'whisper transcribe provider key vision consent models',
@@ -373,13 +441,17 @@ export function CommandPalette({
     onOpenMotion,
     onOpenReferences,
     onOpenSearch,
+    onOpenTranscript,
+    onOpenScenes,
     onShowShortcuts,
     open,
     playing,
     rippleEnabled,
+    scenesTargetId,
     selectionCount,
     snapEnabled,
     snapshot,
+    transcriptTargetId,
   ]);
 
   const filtered = useMemo(() => {

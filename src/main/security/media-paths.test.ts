@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { assetSchema, createAsset } from '@kerf/model';
+import { assetSchema, createAsset, newId, sceneSchema } from '@kerf/model';
 import { openDatabase } from '../db';
 import type { DatabaseHandle } from '../db';
 import { ProjectRepository } from '../projects';
@@ -52,8 +52,13 @@ describe('kerfmedia URLs', () => {
       projectId: 'prj_123',
       relativePath: 'exports/final cut.mp4',
     });
+    expect(parseMediaRequest('kerfmedia://scene/scn_123/thumbnail')).toEqual({
+      kind: 'scene',
+      sceneId: 'scn_123',
+    });
     expect(parseMediaRequest('https://example.com/a.mp4')).toBeNull();
     expect(parseMediaRequest('kerfmedia://asset/ast_123/nope')).toBeNull();
+    expect(parseMediaRequest('kerfmedia://scene/scn_123/poster')).toBeNull();
   });
 
   it('maps common media extensions', () => {
@@ -131,6 +136,66 @@ describe('resolveMediaTarget', () => {
       `kerfmedia://project/${bundle.project.id}/%2E%2E%2Foutside.mp4`,
     );
     expect(resolveMediaTarget(repository, traversal!)).toBeNull();
+  });
+
+  it('serves scene thumbnails inside the project and rejects others', () => {
+    const repository = makeRepository();
+    const bundle = repository.create({ name: 'Scenes' });
+    const folder = repository.folderFor(bundle.project.id)!;
+    const source = join(folder, 'source.mp4');
+    writeFileSync(source, '0123456789');
+
+    const asset = assetSchema.parse({
+      ...createAsset({
+        projectId: bundle.project.id,
+        name: 'source.mp4',
+        sourcePath: source,
+        kind: 'video',
+      }),
+    });
+    repository.saveAsset(asset);
+
+    const keyframe = join(
+      folder,
+      'analysis',
+      'keyframes',
+      asset.id,
+      'scene.jpg',
+    );
+    mkdirSync(dirname(keyframe), { recursive: true });
+    writeFileSync(keyframe, 'image-bytes');
+
+    const scene = sceneSchema.parse({
+      id: newId('scene'),
+      assetId: asset.id,
+      index: 0,
+      startFrame: 0,
+      endFrame: 24,
+      thumbnailPath: keyframe,
+      score: 0.6,
+    });
+    repository.saveScene(scene);
+
+    const request = parseMediaRequest(
+      `kerfmedia://scene/${scene.id}/thumbnail`,
+    );
+    expect(request).toEqual({ kind: 'scene', sceneId: scene.id });
+    const target = resolveMediaTarget(repository, request!);
+    expect(target?.filePath).toBe(keyframe);
+    expect(target?.mimeType).toBe('image/jpeg');
+
+    expect(
+      resolveMediaTarget(repository, { kind: 'scene', sceneId: 'scn_missing' }),
+    ).toBeNull();
+
+    const outside = join(tmpdir(), `kerf-outside-${scene.id}.jpg`);
+    writeFileSync(outside, 'nope');
+    repository.saveScene({ ...scene, thumbnailPath: outside });
+    expect(resolveMediaTarget(repository, request!)).toBeNull();
+    rmSync(outside, { force: true });
+
+    repository.saveScene({ ...scene, thumbnailPath: null });
+    expect(resolveMediaTarget(repository, request!)).toBeNull();
   });
 
   it('streams ranges and handles HEAD requests', async () => {
