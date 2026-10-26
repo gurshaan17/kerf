@@ -8,6 +8,7 @@ import {
   Film,
   Layers,
   Plus,
+  Settings2,
   SlidersHorizontal,
   Sparkles,
   Trash2,
@@ -43,6 +44,7 @@ import {
   Textarea,
   cn,
 } from '@kerf/ui';
+import { formatFrameRate } from '../../shared/sequence-presets';
 import { useStudio } from '../state/StudioProvider';
 import { selectSelectedClip } from '../state/selectors';
 
@@ -1521,7 +1523,11 @@ function InspectorBody({ clip }: { readonly clip: Clip }) {
   );
 }
 
-function SequenceSummary() {
+function SequenceSummary({
+  onOpenSequenceSettings,
+}: {
+  readonly onOpenSequenceSettings?: () => void;
+}) {
   const sequence = useStudio(
     (state) => state.snapshot?.project.sequence ?? null,
   );
@@ -1533,6 +1539,9 @@ function SequenceSummary() {
     }
     return {
       name: sequence.name,
+      width: sequence.width,
+      height: sequence.height,
+      frameRate: formatFrameRate(sequence.frameRate),
       tracks: sequence.tracks.length,
       clips: sequence.tracks.reduce(
         (total, track) => total + track.clips.length,
@@ -1575,6 +1584,16 @@ function SequenceSummary() {
         {summary ? (
           <div className="k-inspector__summary">
             <div>
+              <span>Canvas</span>
+              <strong>
+                {summary.width} × {summary.height}
+              </strong>
+            </div>
+            <div>
+              <span>Rate</span>
+              <strong>{summary.frameRate}</strong>
+            </div>
+            <div>
               <span>Tracks</span>
               <strong>{summary.tracks}</strong>
             </div>
@@ -1588,16 +1607,30 @@ function SequenceSummary() {
             </div>
           </div>
         ) : null}
+        {onOpenSequenceSettings ? (
+          <Button
+            variant="secondary"
+            className="w-full"
+            leadingIcon={<Settings2 size={14} />}
+            onClick={onOpenSequenceSettings}
+          >
+            Sequence settings
+          </Button>
+        ) : null}
       </div>
     </Panel>
   );
 }
 
-export function Inspector() {
+export interface InspectorProps {
+  readonly onOpenSequenceSettings?: () => void;
+}
+
+export function Inspector({ onOpenSequenceSettings }: InspectorProps = {}) {
   const clip = useStudio(selectSelectedClip);
 
   if (!clip) {
-    return <SequenceSummary />;
+    return <SequenceSummary onOpenSequenceSettings={onOpenSequenceSettings} />;
   }
 
   return <InspectorBody key={clip.id} clip={clip} />;

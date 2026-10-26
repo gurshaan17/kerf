@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
+  Proportions,
   AudioLines,
   Captions,
   Clapperboard,
@@ -59,6 +60,7 @@ export interface CommandPaletteProps {
   readonly onOpenDescriptions: (assetId: string) => void;
   readonly onOpenBeats: (assetId: string) => void;
   readonly onOpenAnalysis: () => void;
+  readonly onOpenSequenceSettings: () => void;
   readonly onOpenMotion: () => void;
   readonly onOpenReferences: () => void;
   readonly onOpenAbout: () => void;
@@ -75,6 +77,7 @@ export function CommandPalette({
   onOpenDescriptions,
   onOpenBeats,
   onOpenAnalysis,
+  onOpenSequenceSettings,
   onOpenMotion,
   onOpenReferences,
   onOpenAbout,
@@ -418,6 +421,14 @@ export function CommandPalette({
         run: onOpenAnalysis,
       },
       {
+        id: 'sequence.settings',
+        label: 'Sequence settings',
+        keywords: 'canvas resolution aspect ratio frame rate fps size',
+        icon: <Proportions size={14} />,
+        disabled: !hasSequence,
+        run: onOpenSequenceSettings,
+      },
+      {
         id: 'analysis.scenes',
         label: 'Detect scenes for selected asset',
         keywords: 'shots cuts keyframes',
@@ -488,6 +499,7 @@ export function CommandPalette({
     onExport,
     onOpenAbout,
     onOpenAnalysis,
+    onOpenSequenceSettings,
     onOpenMotion,
     onOpenReferences,
     onOpenSearch,

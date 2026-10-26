@@ -4,6 +4,7 @@ export * from './errors';
 export * from './history';
 export * from './queries';
 export * from './ranges';
+export * from './retime';
 export * from './ripple';
 export * from './snapping';
 export * from './source';

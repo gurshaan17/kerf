@@ -15,6 +15,7 @@ import { DescriptionPanel } from './descriptions/DescriptionPanel';
 import { TranscriptPanel } from './transcript/TranscriptPanel';
 import { BeatPanel } from './beats/BeatPanel';
 import { ExportDialog } from './export/ExportDialog';
+import { SequenceSettingsDialog } from './sequence/SequenceSettingsDialog';
 import { AnalysisSettingsDialog } from './analysis/AnalysisSettingsDialog';
 import { SearchDialog } from './search/SearchDialog';
 import { MotionDialog } from './motion/MotionDialog';
@@ -68,6 +69,7 @@ export default function App() {
     assetId: string;
   } | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [sequenceSettingsOpen, setSequenceSettingsOpen] = useState(false);
   const [motionOpen, setMotionOpen] = useState(false);
   const [referencesOpen, setReferencesOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -103,6 +105,10 @@ export default function App() {
   const openAnalysis = useCallback(() => {
     setPaletteOpen(false);
     setAnalysisOpen(true);
+  }, []);
+  const openSequenceSettings = useCallback(() => {
+    setPaletteOpen(false);
+    setSequenceSettingsOpen(true);
   }, []);
   const openMotion = useCallback(() => {
     setPaletteOpen(false);
@@ -290,7 +296,7 @@ export default function App() {
               />
             )
           ) : (
-            <Inspector />
+            <Inspector onOpenSequenceSettings={openSequenceSettings} />
           )
         }
         leftPanel={
@@ -340,6 +346,7 @@ export default function App() {
         onOpenDescriptions={openDescriptions}
         onOpenBeats={openBeats}
         onOpenAnalysis={openAnalysis}
+        onOpenSequenceSettings={openSequenceSettings}
         onOpenMotion={openMotion}
         onOpenReferences={openReferences}
         onOpenAbout={openAbout}
@@ -350,6 +357,10 @@ export default function App() {
       <AnalysisSettingsDialog
         open={analysisOpen}
         onOpenChange={setAnalysisOpen}
+      />
+      <SequenceSettingsDialog
+        open={sequenceSettingsOpen}
+        onOpenChange={setSequenceSettingsOpen}
       />
       <MotionDialog open={motionOpen} onOpenChange={setMotionOpen} />
       <ReferencesDialog

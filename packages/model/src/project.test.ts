@@ -37,6 +37,24 @@ describe('project model', () => {
     expect(projectSchema.parse(project)).toEqual(project);
   });
 
+  it('creates a project with a chosen canvas and frame rate', () => {
+    const project = createProject({
+      name: 'Vertical cut',
+      width: 1080,
+      height: 1920,
+      frameRate: { numerator: 60, denominator: 1 },
+      now: 1_700_000_000_000,
+    });
+
+    expect(project.sequence.width).toBe(1080);
+    expect(project.sequence.height).toBe(1920);
+    expect(project.sequence.frameRate).toEqual({
+      numerator: 60,
+      denominator: 1,
+    });
+    expect(projectSchema.parse(project)).toEqual(project);
+  });
+
   it('applies style overrides without dropping defaults', () => {
     const project = createProject({
       name: 'Bold cut',

@@ -4,14 +4,23 @@ import { Clock3, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react';
 import { KerfMark, Skeleton } from '@kerf/ui';
 import { Button } from '@kerf/ui';
 import { Dialog } from '@kerf/ui';
-import { Field, Input } from '@kerf/ui';
-import type { ProjectSummary } from '../shared/contracts';
+import { Field, Input, Select } from '@kerf/ui';
+import {
+  ASPECT_RATIO_PRESETS,
+  DEFAULT_ASPECT_RATIO_PRESET,
+  DEFAULT_FRAME_RATE_PRESET,
+  FRAME_RATE_PRESETS,
+  aspectRatioPresetById,
+  formatFrameRate,
+  frameRatePresetById,
+} from '../shared/sequence-presets';
+import type { ProjectCreateRequest, ProjectSummary } from '../shared/contracts';
 
 export interface ProjectBrowserScreenProps {
   readonly projects: ProjectSummary[];
   readonly busy: boolean;
   readonly error: string | null;
-  readonly onCreate: (name: string) => Promise<void>;
+  readonly onCreate: (request: ProjectCreateRequest) => Promise<void>;
   readonly onOpen: (id: string) => Promise<void>;
   readonly onRename: (id: string, name: string) => Promise<void>;
   readonly onDelete: (id: string) => Promise<void>;
@@ -40,8 +49,7 @@ function formatRelative(timestamp: number): string {
 }
 
 function formatProjectMeta(project: ProjectSummary): string {
-  const fps = project.frameRate.numerator / project.frameRate.denominator;
-  return `${project.width} × ${project.height} · ${Number.isInteger(fps) ? fps : fps.toFixed(2)} fps`;
+  return `${project.width} × ${project.height} · ${formatFrameRate(project.frameRate)}`;
 }
 
 export function ProjectBrowserScreen({
@@ -56,6 +64,10 @@ export function ProjectBrowserScreen({
   onOpenAbout,
 }: ProjectBrowserScreenProps) {
   const [name, setName] = useState('');
+  const [aspectRatioId, setAspectRatioId] = useState(
+    DEFAULT_ASPECT_RATIO_PRESET.id,
+  );
+  const [frameRateId, setFrameRateId] = useState(DEFAULT_FRAME_RATE_PRESET.id);
   const [formError, setFormError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<ProjectSummary | null>(null);
   const [renameName, setRenameName] = useState('');
@@ -69,8 +81,17 @@ export function ProjectBrowserScreen({
       return;
     }
     setFormError(null);
+    const aspectRatio =
+      aspectRatioPresetById(aspectRatioId) ?? DEFAULT_ASPECT_RATIO_PRESET;
+    const frameRate =
+      frameRatePresetById(frameRateId) ?? DEFAULT_FRAME_RATE_PRESET;
     try {
-      await onCreate(trimmed);
+      await onCreate({
+        name: trimmed,
+        width: aspectRatio.width,
+        height: aspectRatio.height,
+        frameRate: frameRate.frameRate,
+      });
       setName('');
     } catch (cause) {
       setFormError(cause instanceof Error ? cause.message : String(cause));
@@ -112,7 +133,7 @@ export function ProjectBrowserScreen({
         </header>
 
         <section className="mt-8 overflow-hidden rounded-lg border border-line bg-surface-1 shadow-2">
-          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line px-4 py-3.5">
+          <div className="border-b border-line px-4 py-3.5">
             <div>
               <h2 className="text-[12px] font-semibold tracking-[0.02em]">
                 Recent projects
@@ -124,14 +145,36 @@ export function ProjectBrowserScreen({
               </p>
             </div>
             <form
-              className="flex items-end gap-2"
+              className="mt-3 flex flex-wrap items-end gap-2"
               onSubmit={(event) => void submitCreate(event)}
             >
-              <Field label="Project name" className="w-52">
+              <Field label="Project name" className="min-w-52 flex-1">
                 <Input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="New project"
+                  disabled={busy}
+                />
+              </Field>
+              <Field label="Aspect ratio" className="w-44">
+                <Select
+                  value={aspectRatioId}
+                  onChange={(event) => setAspectRatioId(event.target.value)}
+                  options={ASPECT_RATIO_PRESETS.map((preset) => ({
+                    value: preset.id,
+                    label: `${preset.ratio} · ${preset.width} × ${preset.height}`,
+                  }))}
+                  disabled={busy}
+                />
+              </Field>
+              <Field label="Frame rate" className="w-28">
+                <Select
+                  value={frameRateId}
+                  onChange={(event) => setFrameRateId(event.target.value)}
+                  options={FRAME_RATE_PRESETS.map((preset) => ({
+                    value: preset.id,
+                    label: preset.label,
+                  }))}
                   disabled={busy}
                 />
               </Field>
@@ -144,6 +187,10 @@ export function ProjectBrowserScreen({
                 Create
               </Button>
             </form>
+            <p className="mt-2 text-[10px] text-ink-faint">
+              The canvas and frame rate can be changed later in Sequence
+              Settings.
+            </p>
           </div>
 
           {formError || error ? (

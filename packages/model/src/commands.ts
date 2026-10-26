@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   captionWordSchema,
+  clipKeyframesSchema,
   clipSchema,
   fadeSchema,
   fitSchema,
@@ -199,11 +200,41 @@ export const sequenceRenameCommandSchema = z.object({
   name: z.string().min(1),
 });
 
+/**
+ * Frame-based values captured before a frame-rate change. Retiming rounds to
+ * whole frames, so undo restores this payload instead of scaling the retimed
+ * sequence back and risking one-frame drift.
+ */
+export const sequenceTimingSchema = z.object({
+  durationFrames: z.number().int().nonnegative(),
+  markers: z.array(
+    z.object({
+      id: idSchema('marker'),
+      frame: z.number().int().nonnegative(),
+    }),
+  ),
+  clips: z.array(
+    z.object({
+      id: idSchema('clip'),
+      startFrame: z.number().int().nonnegative(),
+      durationFrames: z.number().int().positive(),
+      sourceInFrame: z.number().int().nonnegative().optional(),
+      fade: fadeSchema.optional(),
+      timeMap: timeMapSchema.optional(),
+      keyframes: clipKeyframesSchema.optional(),
+      words: z.array(captionWordSchema).optional(),
+    }),
+  ),
+});
+
+export type SequenceTiming = z.infer<typeof sequenceTimingSchema>;
+
 export const sequenceSetCanvasCommandSchema = z.object({
   type: z.literal('sequence.setCanvas'),
   width: z.number().int().min(16).max(16_384),
   height: z.number().int().min(16).max(16_384),
   frameRate: frameRateSchema.optional(),
+  timing: sequenceTimingSchema.optional(),
 });
 
 export const sequenceSetStyleCommandSchema = z.object({

@@ -20,6 +20,7 @@ import type {
 import {
   clipSchema,
   effectSchema,
+  fpsToNumber,
   isMediaClip,
   markerSchema,
   maskSchema,
@@ -41,6 +42,11 @@ import {
   requireTrack,
   tracksInOrder,
 } from './queries';
+import {
+  captureSequenceTiming,
+  restoreSequenceTiming,
+  retimeSequence,
+} from './retime';
 import { clipSourceRange, sampleTimeMap, sourceFrameAt } from './source';
 
 export interface ApplyResult {
@@ -1458,12 +1464,19 @@ function applySequenceSetCanvas(
   sequence: Sequence,
   command: Extract<EditCommand, { type: 'sequence.setCanvas' }>,
 ): ApplyResult {
+  const frameRate = command.frameRate ?? sequence.frameRate;
+  const retimed = command.timing
+    ? restoreSequenceTiming(sequence, command.timing)
+    : retimeSequence(sequence, frameRate);
   const next = parseSequence({
-    ...sequence,
+    ...retimed,
     width: command.width,
     height: command.height,
-    frameRate: command.frameRate ?? sequence.frameRate,
+    frameRate,
   });
+  const timingChanged =
+    command.timing !== undefined ||
+    fpsToNumber(sequence.frameRate) !== fpsToNumber(frameRate);
   return {
     sequence: next,
     inverse: {
@@ -1471,6 +1484,7 @@ function applySequenceSetCanvas(
       width: sequence.width,
       height: sequence.height,
       frameRate: sequence.frameRate,
+      timing: timingChanged ? captureSequenceTiming(sequence) : undefined,
     },
   };
 }

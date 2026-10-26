@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { useStore } from 'zustand';
+import { fpsToNumber } from '@kerf/model';
 import type { Clip, EditCommand } from '@kerf/model';
 import type { SceneTree } from '@kerf/motion';
 import { sequenceDurationFrames } from '@kerf/engine';
@@ -18,6 +19,7 @@ import type {
   JobSummary,
   KerfBridge,
   KerfEvent,
+  ProjectCreateRequest,
   ProjectSnapshot,
   ProjectSummary,
   SearchResponse,
@@ -80,7 +82,7 @@ export interface StudioState {
   hydrate: () => Promise<void>;
   handleEvent: (event: KerfEvent) => void;
   refreshProjects: () => Promise<void>;
-  createProject: (name: string) => Promise<void>;
+  createProject: (request: ProjectCreateRequest) => Promise<void>;
   openProject: (id: string) => Promise<void>;
   closeProject: () => Promise<void>;
   renameProject: (id: string, name: string) => Promise<void>;
@@ -262,6 +264,19 @@ export function createStudioStore(bridge: KerfBridge) {
         : current.selection.clipIds.filter((id) => existing.has(id));
       const projectChanged =
         current.snapshot?.project.id !== snapshot?.project.id;
+      const rateScale = (() => {
+        const previous = current.snapshot;
+        if (
+          !previous ||
+          !snapshot ||
+          previous.project.id !== snapshot.project.id
+        ) {
+          return 1;
+        }
+        const before = fpsToNumber(previous.project.sequence.frameRate);
+        const after = fpsToNumber(snapshot.project.sequence.frameRate);
+        return before > 0 && after > 0 ? after / before : 1;
+      })();
       set({
         snapshot,
         selection: {
@@ -271,7 +286,9 @@ export function createStudioStore(bridge: KerfBridge) {
               ? null
               : current.selection.trackId,
         },
-        playhead: snapshot ? clamp(current.playhead, 0, end) : 0,
+        playhead: snapshot
+          ? clamp(Math.round(current.playhead * rateScale), 0, end)
+          : 0,
         ...(projectChanged
           ? {
               chatTurns: [],
@@ -505,10 +522,10 @@ export function createStudioStore(bridge: KerfBridge) {
         set({ projects });
       },
 
-      async createProject(name) {
+      async createProject(request) {
         set({ busy: true, error: null });
         try {
-          const snapshot = await bridge.projects.create(name);
+          const snapshot = await bridge.projects.create(request);
           setSnapshot(snapshot, { clearSelection: true });
           set({ playhead: 0, playing: false, exports: [] });
           await Promise.all([get().refreshProjects(), get().refreshExports()]);

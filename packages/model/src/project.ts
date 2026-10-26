@@ -6,6 +6,7 @@ import {
   styleConfigSchema,
   DEFAULT_STYLE,
 } from './style';
+import { FRAME_RATES, frameRateSchema } from './time';
 import type { Sequence } from './sequence';
 import type { ReferenceProfile, StyleConfig } from './style';
 
@@ -28,6 +29,9 @@ export type Project = z.infer<typeof projectSchema>;
 
 export interface CreateProjectInput {
   name: string;
+  width?: number;
+  height?: number;
+  frameRate?: z.input<typeof frameRateSchema>;
   sequence?: Sequence;
   style?: Partial<StyleConfig>;
   reference?: ReferenceProfile | null;
@@ -40,9 +44,9 @@ export function createProject(input: CreateProjectInput): Project {
     input.sequence ??
     createSequence({
       name: input.name,
-      frameRate: { numerator: 24, denominator: 1 },
-      width: 1920,
-      height: 1080,
+      frameRate: input.frameRate ?? FRAME_RATES.film,
+      width: input.width,
+      height: input.height,
     });
 
   return projectSchema.parse({

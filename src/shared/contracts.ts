@@ -32,6 +32,13 @@ export interface ProjectSummary {
   readonly updatedAt: number;
 }
 
+export interface ProjectCreateRequest {
+  readonly name: string;
+  readonly width: number;
+  readonly height: number;
+  readonly frameRate: FrameRate;
+}
+
 export interface ProjectBundle {
   readonly project: Project;
   readonly assets: Asset[];
@@ -605,7 +612,9 @@ export interface KerfBridge {
   readonly projects: {
     readonly list: () => Promise<ProjectSummary[]>;
     readonly active: () => Promise<ProjectSnapshot | null>;
-    readonly create: (name: string) => Promise<ProjectSnapshot>;
+    readonly create: (
+      request: ProjectCreateRequest,
+    ) => Promise<ProjectSnapshot>;
     readonly open: (id: string) => Promise<ProjectSnapshot>;
     readonly close: () => Promise<void>;
     readonly rename: (id: string, name: string) => Promise<ProjectSummary>;

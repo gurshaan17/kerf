@@ -55,7 +55,8 @@ const bridge: KerfBridge = {
   projects: {
     list: () => invoke<ProjectSummary[]>(KERF_IPC.projects.list),
     active: () => invoke<ProjectSnapshot | null>(KERF_IPC.projects.active),
-    create: (name) => invoke<ProjectSnapshot>(KERF_IPC.projects.create, name),
+    create: (request) =>
+      invoke<ProjectSnapshot>(KERF_IPC.projects.create, request),
     open: (id) => invoke<ProjectSnapshot>(KERF_IPC.projects.open, id),
     close: () => invoke<void>(KERF_IPC.projects.close),
     rename: (id, name) =>

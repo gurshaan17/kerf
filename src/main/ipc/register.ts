@@ -7,6 +7,7 @@ import {
   AUDIO_EXTENSIONS,
   IMAGE_EXTENSIONS,
   VIDEO_EXTENSIONS,
+  frameRateSchema,
   newId,
   type AssetKind,
 } from '@kerf/model';
@@ -48,6 +49,12 @@ function exportFrameBytes(data: unknown): Uint8Array {
 
 const projectIdSchema = z.string().min(1);
 const projectNameSchema = z.string().trim().min(1).max(120);
+const projectCreateSchema = z.object({
+  name: projectNameSchema,
+  width: z.number().int().min(16).max(16_384),
+  height: z.number().int().min(16).max(16_384),
+  frameRate: frameRateSchema,
+});
 const importPathsSchema = z.array(z.string().min(1)).max(100);
 const exportIdSchema = z.string().min(1);
 const exportPresetSchema = z.string().min(1).optional();
@@ -196,8 +203,8 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
 
   ipcMain.handle(KERF_IPC.projects.list, () => projects.list());
   ipcMain.handle(KERF_IPC.projects.active, () => projects.current());
-  ipcMain.handle(KERF_IPC.projects.create, (_event, name: unknown) =>
-    projects.create({ name: projectNameSchema.parse(name) }),
+  ipcMain.handle(KERF_IPC.projects.create, (_event, request: unknown) =>
+    projects.create(projectCreateSchema.parse(request)),
   );
   ipcMain.handle(KERF_IPC.projects.open, async (_event, id: unknown) => {
     const projectId = projectIdSchema.parse(id);

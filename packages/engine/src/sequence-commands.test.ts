@@ -1,4 +1,10 @@
-import { createMarker, newId, referenceProfileSchema } from '@kerf/model';
+import {
+  clipSchema,
+  createMarker,
+  newId,
+  referenceProfileSchema,
+  sequenceSchema,
+} from '@kerf/model';
 import { describe, expect, it } from 'vitest';
 import { applyCommand } from './apply';
 import { EngineError, isEngineError } from './errors';
@@ -76,6 +82,107 @@ describe('sequence commands', () => {
           height: 1080,
         }),
       'invalid-command',
+    );
+  });
+
+  it('retimes frame-based values when the frame rate changes', () => {
+    const track = makeTrack('video', 0);
+    const clip = clipSchema.parse({
+      id: newId('clip'),
+      trackId: track.id,
+      type: 'video',
+      assetId: newId('asset'),
+      startFrame: 24,
+      durationFrames: 48,
+      sourceInFrame: 24,
+      fade: { inFrames: 12, outFrames: 6 },
+      timeMap: [
+        { frame: 0, sourceFrame: 0 },
+        { frame: 24, sourceFrame: 48 },
+      ],
+      keyframes: {
+        x: [
+          { frame: 0, value: 0 },
+          { frame: 24, value: 100 },
+        ],
+      },
+    });
+    const sequence = sequenceSchema.parse({
+      ...makeSequence([withClips(track, [clip])]),
+      markers: [createMarker({ frame: 24 })],
+      durationFrames: 72,
+    });
+
+    const result = applyCommand(sequence, {
+      type: 'sequence.setCanvas',
+      width: 1920,
+      height: 1080,
+      frameRate: { numerator: 48, denominator: 1 },
+    });
+    const retimed = result.sequence.tracks[0]?.clips[0];
+
+    expect(retimed).toMatchObject({
+      startFrame: 48,
+      durationFrames: 96,
+      sourceInFrame: 48,
+      fade: { inFrames: 24, outFrames: 12 },
+    });
+    expect(retimed?.keyframes.x.map((keyframe) => keyframe.frame)).toEqual([
+      0, 48,
+    ]);
+    if (retimed?.type !== 'video') {
+      throw new Error('expected the retimed clip to stay a video');
+    }
+    expect(retimed.timeMap).toEqual([
+      { frame: 0, sourceFrame: 0 },
+      { frame: 48, sourceFrame: 96 },
+    ]);
+    expect(result.sequence.markers[0]?.frame).toBe(48);
+    expect(result.sequence.durationFrames).toBe(144);
+
+    if (!result.inverse) {
+      throw new Error('expected an inverse');
+    }
+    expect(applyCommand(result.sequence, result.inverse).sequence).toEqual(
+      sequence,
+    );
+  });
+
+  it('restores exact frames when undoing a lossy frame-rate change', () => {
+    const track = makeTrack('video', 0);
+    const clip = clipSchema.parse({
+      id: newId('clip'),
+      trackId: track.id,
+      type: 'video',
+      assetId: newId('asset'),
+      startFrame: 2,
+      durationFrames: 1,
+      sourceInFrame: 2,
+      fade: { inFrames: 2, outFrames: 1 },
+    });
+    const sequence = sequenceSchema.parse({
+      ...makeSequence([withClips(track, [clip])]),
+      frameRate: { numerator: 30, denominator: 1 },
+      markers: [createMarker({ frame: 2 })],
+      durationFrames: 3,
+    });
+
+    const result = applyCommand(sequence, {
+      type: 'sequence.setCanvas',
+      width: 1920,
+      height: 1080,
+      frameRate: { numerator: 24, denominator: 1 },
+    });
+    if (!result.inverse) {
+      throw new Error('expected an inverse');
+    }
+    const undone = applyCommand(result.sequence, result.inverse);
+    expect(undone.sequence).toEqual(sequence);
+    if (!undone.inverse) {
+      throw new Error('expected the inverse to be reversible');
+    }
+    expect(applyCommand(undone.sequence, undone.inverse).sequence).toEqual(
+      result.sequence,
     );
   });
 
