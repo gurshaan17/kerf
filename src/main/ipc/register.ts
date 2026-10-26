@@ -68,6 +68,7 @@ const analysisKindSchema = z.enum([
 const analysisRunSchema = z.object({
   assetId: z.string().min(1),
   kinds: z.array(analysisKindSchema).min(1).max(5),
+  onlyUndescribed: z.boolean().optional(),
 });
 const searchSchema = z.object({
   query: z.string().max(200),

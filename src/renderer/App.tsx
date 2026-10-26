@@ -11,6 +11,7 @@ import { Timeline } from './timeline/Timeline';
 import { Preview } from './preview/Preview';
 import { Inspector } from './inspector/Inspector';
 import { ScenePanel } from './scenes/ScenePanel';
+import { DescriptionPanel } from './descriptions/DescriptionPanel';
 import { TranscriptPanel } from './transcript/TranscriptPanel';
 import { BeatPanel } from './beats/BeatPanel';
 import { ExportDialog } from './export/ExportDialog';
@@ -63,7 +64,7 @@ export default function App() {
   const [exportOpen, setExportOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [analysisView, setAnalysisView] = useState<{
-    kind: 'transcript' | 'scenes' | 'beats';
+    kind: 'transcript' | 'scenes' | 'descriptions' | 'beats';
     assetId: string;
   } | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -87,6 +88,10 @@ export default function App() {
   const openScenes = useCallback((assetId: string) => {
     setPaletteOpen(false);
     setAnalysisView({ kind: 'scenes', assetId });
+  }, []);
+  const openDescriptions = useCallback((assetId: string) => {
+    setPaletteOpen(false);
+    setAnalysisView({ kind: 'descriptions', assetId });
   }, []);
   const openBeats = useCallback((assetId: string) => {
     setPaletteOpen(false);
@@ -271,6 +276,12 @@ export default function App() {
                 assetId={analysisView.assetId}
                 onClose={closeAnalysisView}
               />
+            ) : analysisView.kind === 'descriptions' ? (
+              <DescriptionPanel
+                key={`descriptions:${analysisView.assetId}`}
+                assetId={analysisView.assetId}
+                onClose={closeAnalysisView}
+              />
             ) : (
               <BeatPanel
                 key={`beats:${analysisView.assetId}`}
@@ -296,6 +307,7 @@ export default function App() {
             onAnalyze={analyze}
             onOpenTranscript={openTranscript}
             onOpenScenes={openScenes}
+            onOpenDescriptions={openDescriptions}
             onOpenBeats={openBeats}
             onOpenSearch={openSearch}
             onOpenAnalysis={openAnalysis}
@@ -325,6 +337,7 @@ export default function App() {
         onOpenSearch={openSearch}
         onOpenTranscript={openTranscript}
         onOpenScenes={openScenes}
+        onOpenDescriptions={openDescriptions}
         onOpenBeats={openBeats}
         onOpenAnalysis={openAnalysis}
         onOpenMotion={openMotion}

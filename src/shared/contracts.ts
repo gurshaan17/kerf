@@ -135,6 +135,7 @@ export type AnalysisKind =
 export interface AnalysisRunRequest {
   readonly assetId: string;
   readonly kinds: readonly AnalysisKind[];
+  readonly onlyUndescribed?: boolean;
 }
 
 export interface AnalysisSkip {

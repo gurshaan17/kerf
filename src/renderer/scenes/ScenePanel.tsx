@@ -7,6 +7,7 @@ import { SourcePreview } from '../analysis/SourcePreview';
 import type { SourcePreviewHandle } from '../analysis/SourcePreview';
 import { findSequenceFrame } from '../state/sequence-map';
 import { useStudio } from '../state/StudioProvider';
+import { SceneThumbnail } from './SceneThumbnail';
 
 export interface ScenePanelProps {
   readonly assetId: string;
@@ -14,30 +15,6 @@ export interface ScenePanelProps {
 }
 
 const FALLBACK_RATE: FrameRate = { numerator: 24, denominator: 1 };
-
-function SceneThumbnail({ scene }: { readonly scene: Scene }) {
-  const [failed, setFailed] = useState(false);
-
-  if (!scene.thumbnailPath || failed) {
-    return (
-      <div className="grid h-full w-full place-content-center bg-surface-2 text-ink-faint">
-        <ScanLine size={16} aria-hidden="true" />
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={`kerfmedia://scene/${encodeURIComponent(scene.id)}/thumbnail`}
-      alt={`Scene ${scene.index + 1}`}
-      loading="lazy"
-      decoding="async"
-      draggable={false}
-      onError={() => setFailed(true)}
-      className="h-full w-full object-cover"
-    />
-  );
-}
 
 /**
  * Storyboard of the detected shots for one asset. Each card plays the source at

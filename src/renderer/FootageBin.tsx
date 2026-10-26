@@ -42,6 +42,7 @@ export interface FootageBinProps {
   ) => Promise<void>;
   readonly onOpenTranscript: (assetId: string) => void;
   readonly onOpenScenes: (assetId: string) => void;
+  readonly onOpenDescriptions: (assetId: string) => void;
   readonly onOpenBeats: (assetId: string) => void;
   readonly onOpenSearch: () => void;
   readonly onOpenAnalysis: () => void;
@@ -201,6 +202,7 @@ export function FootageBin({
   onAnalyze,
   onOpenTranscript,
   onOpenScenes,
+  onOpenDescriptions,
   onOpenBeats,
   onOpenSearch,
   onOpenAnalysis,
@@ -616,17 +618,25 @@ export function FootageBin({
                 <Music2 size={9} /> No tempo
               </span>
             )}
-            <span
-              className={cn(
-                'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase',
-                selectedAnalysis && selectedAnalysis.descriptions > 0
-                  ? 'border-ok/30 bg-ok/10 text-ok'
-                  : 'border-line bg-surface-2 text-ink-faint',
-              )}
-            >
-              <Sparkles size={9} /> {selectedAnalysis?.descriptions ?? 0}{' '}
-              described
-            </span>
+            {selectedAnalysis && selectedAnalysis.sceneCount > 0 ? (
+              <button
+                type="button"
+                title="Review descriptions"
+                onClick={() => onOpenDescriptions(selected.id)}
+                className={cn(
+                  'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase transition-colors duration-150 ease-k focus-visible:outline-none',
+                  selectedAnalysis.descriptions > 0
+                    ? 'border-ok/30 bg-ok/10 text-ok hover:border-ok/60 hover:bg-ok/15'
+                    : 'border-line bg-surface-2 text-ink-faint hover:border-line-strong hover:text-ink-muted',
+                )}
+              >
+                <Sparkles size={9} /> {selectedAnalysis.descriptions} described
+              </button>
+            ) : (
+              <span className="inline-flex h-[18px] items-center gap-1 rounded-pill border border-line bg-surface-2 px-1.5 font-mono text-[8px] uppercase text-ink-faint">
+                <Sparkles size={9} /> 0 described
+              </span>
+            )}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5">

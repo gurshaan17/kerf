@@ -90,7 +90,11 @@ export interface StudioState {
   relinkAsset: (assetId: string) => Promise<void>;
   refreshAssets: () => Promise<void>;
   cancelJob: (jobId: string) => Promise<void>;
-  analyze: (assetId: string, kinds: readonly AnalysisKind[]) => Promise<void>;
+  analyze: (
+    assetId: string,
+    kinds: readonly AnalysisKind[],
+    options?: { readonly onlyUndescribed?: boolean },
+  ) => Promise<void>;
   search: (query: string) => Promise<SearchResponse>;
   saveComposition: (
     request: CompositionSaveRequest,
@@ -655,9 +659,13 @@ export function createStudioStore(bridge: KerfBridge) {
         }
       },
 
-      async analyze(assetId, kinds) {
+      async analyze(assetId, kinds, options) {
         try {
-          const result = await window.kerf.analysis.run({ assetId, kinds });
+          const result = await window.kerf.analysis.run({
+            assetId,
+            kinds,
+            onlyUndescribed: options?.onlyUndescribed,
+          });
           for (const job of result.jobs) {
             pushToast({
               title: 'Analysis queued',

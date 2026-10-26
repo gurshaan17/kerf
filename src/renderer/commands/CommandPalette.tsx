@@ -26,6 +26,7 @@ import {
   Settings2,
   SkipBack,
   SkipForward,
+  Sparkles,
   Trash2,
   Type,
   Undo2,
@@ -55,6 +56,7 @@ export interface CommandPaletteProps {
   readonly onOpenSearch: () => void;
   readonly onOpenTranscript: (assetId: string) => void;
   readonly onOpenScenes: (assetId: string) => void;
+  readonly onOpenDescriptions: (assetId: string) => void;
   readonly onOpenBeats: (assetId: string) => void;
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
@@ -70,6 +72,7 @@ export function CommandPalette({
   onOpenSearch,
   onOpenTranscript,
   onOpenScenes,
+  onOpenDescriptions,
   onOpenBeats,
   onOpenAnalysis,
   onOpenMotion,
@@ -118,6 +121,15 @@ export function CommandPalette({
   }, [snapshot, selectedAssetId]);
 
   const scenesTargetId = useMemo(() => {
+    if (!snapshot || !selectedAssetId) {
+      return null;
+    }
+    return snapshot.scenes.some((scene) => scene.assetId === selectedAssetId)
+      ? selectedAssetId
+      : null;
+  }, [snapshot, selectedAssetId]);
+
+  const descriptionsTargetId = useMemo(() => {
     if (!snapshot || !selectedAssetId) {
       return null;
     }
@@ -375,6 +387,18 @@ export function CommandPalette({
         },
       },
       {
+        id: 'analysis.descriptions.view',
+        label: 'View descriptions',
+        keywords: 'describe vision shots keyframes search text',
+        icon: <Sparkles size={14} />,
+        disabled: !descriptionsTargetId,
+        run: () => {
+          if (descriptionsTargetId) {
+            onOpenDescriptions(descriptionsTargetId);
+          }
+        },
+      },
+      {
         id: 'analysis.beats.view',
         label: 'View beats',
         keywords: 'tempo bpm rhythm music grid markers',
@@ -469,12 +493,14 @@ export function CommandPalette({
     onOpenSearch,
     onOpenTranscript,
     onOpenScenes,
+    onOpenDescriptions,
     onOpenBeats,
     onShowShortcuts,
     open,
     playing,
     rippleEnabled,
     beatsTargetId,
+    descriptionsTargetId,
     scenesTargetId,
     selectionCount,
     snapEnabled,

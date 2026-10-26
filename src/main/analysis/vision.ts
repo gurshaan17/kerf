@@ -17,18 +17,35 @@ export interface DescribeScenesInput {
   readonly providers: ProviderStore;
   readonly provider: ProviderAccount;
   readonly repository: ProjectRepository;
+  readonly onlyUndescribed?: boolean;
   readonly signal?: AbortSignal;
   readonly onProgress?: (progress: number) => void;
+}
+
+export function descriptionCandidates(
+  scenes: readonly Scene[],
+  onlyUndescribed = false,
+): Scene[] {
+  return scenes.filter(
+    (scene) =>
+      Boolean(scene.thumbnailPath) &&
+      (!onlyUndescribed || !scene.description?.trim()),
+  );
 }
 
 export async function describeScenes(
   input: DescribeScenesInput,
 ): Promise<Scene[]> {
-  const scenes = input.scenes.filter(
-    (scene) => scene.thumbnailPath && scene.thumbnailPath.length > 0,
+  const scenes = descriptionCandidates(
+    input.scenes,
+    input.onlyUndescribed ?? false,
   );
   if (scenes.length === 0) {
-    throw new Error('Detect scenes before describing keyframes.');
+    throw new Error(
+      input.onlyUndescribed
+        ? 'Every detected scene already has a description.'
+        : 'Detect scenes before describing keyframes.',
+    );
   }
   const model = input.providers.model(input.provider);
   const updated: Scene[] = [];

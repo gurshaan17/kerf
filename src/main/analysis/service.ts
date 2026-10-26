@@ -43,6 +43,9 @@ import type {
 import { createComposition, newId, referenceProfileSchema } from '@kerf/model';
 
 const assetPayloadSchema = z.object({ assetId: z.string().min(1) });
+const visionPayloadSchema = assetPayloadSchema.extend({
+  onlyUndescribed: z.boolean().optional(),
+});
 const modelPayloadSchema = z.object({ modelId: z.string().min(1) });
 
 const ANALYSIS_KINDS: readonly AnalysisKind[] = [
@@ -186,7 +189,9 @@ export class AnalysisService {
     const jobs = [];
     const skipped: AnalysisSkip[] = [];
     for (const kind of kinds) {
-      const skip = this.skipReason(kind, asset, snapshot);
+      const onlyUndescribed =
+        kind === 'vision' && request.onlyUndescribed === true;
+      const skip = this.skipReason(kind, asset, snapshot, onlyUndescribed);
       if (skip) {
         skipped.push({ kind, reason: skip });
         continue;
@@ -194,7 +199,9 @@ export class AnalysisService {
       const job = this.jobs.enqueue({
         projectId: snapshot.project.id,
         kind: `analysis.${kind}`,
-        payload: { assetId: asset.id },
+        payload: onlyUndescribed
+          ? { assetId: asset.id, onlyUndescribed: true }
+          : { assetId: asset.id },
       });
       jobs.push(job);
     }
@@ -323,6 +330,7 @@ export class AnalysisService {
     kind: AnalysisKind,
     asset: Asset,
     snapshot: ProjectSnapshot,
+    onlyUndescribed = false,
   ): string | null {
     if (kind === 'embeddings') {
       return 'Vector search is unavailable. Lexical search is still active.';
@@ -337,6 +345,12 @@ export class AnalysisService {
       );
       if (scenes.length === 0) {
         return 'Detect scenes before describing keyframes.';
+      }
+      if (
+        onlyUndescribed &&
+        scenes.every((scene) => Boolean(scene.description?.trim()))
+      ) {
+        return 'Every detected scene already has a description.';
       }
       return null;
     }
@@ -379,7 +393,7 @@ export class AnalysisService {
       this.beatsJob(assetPayloadSchema.parse(payload), context),
     );
     this.jobs.registerHandler('analysis.vision', (payload, context) =>
-      this.visionJob(assetPayloadSchema.parse(payload), context),
+      this.visionJob(visionPayloadSchema.parse(payload), context),
     );
     this.jobs.registerHandler('model.download', (payload, context) =>
       this.modelDownloadJob(modelPayloadSchema.parse(payload), context),
@@ -523,7 +537,7 @@ export class AnalysisService {
   }
 
   private async visionJob(
-    payload: { assetId: string },
+    payload: { assetId: string; onlyUndescribed?: boolean },
     context: JobContext,
   ): Promise<{ described: number }> {
     const { projectId, asset } = this.projectContext(payload.assetId);
@@ -542,6 +556,7 @@ export class AnalysisService {
       providers: this.providerStore,
       provider,
       repository: this.repository,
+      onlyUndescribed: payload.onlyUndescribed === true,
       signal: context.signal,
       onProgress: (progress) =>
         context.update(progress, 'Describing keyframes'),
