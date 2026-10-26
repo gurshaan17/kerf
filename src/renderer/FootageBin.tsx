@@ -42,6 +42,7 @@ export interface FootageBinProps {
   ) => Promise<void>;
   readonly onOpenTranscript: (assetId: string) => void;
   readonly onOpenScenes: (assetId: string) => void;
+  readonly onOpenBeats: (assetId: string) => void;
   readonly onOpenSearch: () => void;
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
@@ -98,6 +99,10 @@ function formatFrameRate(asset: Asset): string {
   }
   const fps = asset.frameRate.numerator / asset.frameRate.denominator;
   return `${Number.isInteger(fps) ? fps : fps.toFixed(2)} fps`;
+}
+
+function formatBpm(bpm: number): string {
+  return `${Number.isInteger(bpm) ? bpm : bpm.toFixed(1)} BPM`;
 }
 
 function formatBytes(bytes: number): string {
@@ -196,6 +201,7 @@ export function FootageBin({
   onAnalyze,
   onOpenTranscript,
   onOpenScenes,
+  onOpenBeats,
   onOpenSearch,
   onOpenAnalysis,
   onOpenMotion,
@@ -593,17 +599,23 @@ export function FootageBin({
                 <ScanLine size={10} /> 0 scenes
               </span>
             )}
-            <span
-              className={cn(
-                'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase',
-                selectedAnalysis?.beatMap
-                  ? 'border-ok/30 bg-ok/10 text-ok'
-                  : 'border-line bg-surface-2 text-ink-faint',
-              )}
-            >
-              <Music2 size={9} />{' '}
-              {selectedAnalysis?.beatMap ? 'Beats' : 'No tempo'}
-            </span>
+            {selectedAnalysis?.beatMap ? (
+              <button
+                type="button"
+                title="View beats"
+                onClick={() => onOpenBeats(selected.id)}
+                className="inline-flex h-[18px] items-center gap-1 rounded-pill border border-ok/30 bg-ok/10 px-1.5 font-mono text-[8px] uppercase text-ok transition-colors duration-150 ease-k hover:border-ok/60 hover:bg-ok/15 focus-visible:outline-none"
+              >
+                <Music2 size={9} />{' '}
+                {selectedAnalysis.bpm !== null
+                  ? formatBpm(selectedAnalysis.bpm)
+                  : 'Beats'}
+              </button>
+            ) : (
+              <span className="inline-flex h-[18px] items-center gap-1 rounded-pill border border-line bg-surface-2 px-1.5 font-mono text-[8px] uppercase text-ink-faint">
+                <Music2 size={9} /> No tempo
+              </span>
+            )}
             <span
               className={cn(
                 'inline-flex h-[18px] items-center gap-1 rounded-pill border px-1.5 font-mono text-[8px] uppercase',

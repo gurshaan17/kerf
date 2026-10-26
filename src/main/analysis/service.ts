@@ -152,6 +152,9 @@ export class AnalysisService {
       const scenes = snapshot.scenes.filter(
         (candidate) => candidate.assetId === asset.id,
       );
+      const beatMap =
+        snapshot.beatMaps.find((candidate) => candidate.assetId === asset.id) ??
+        null;
       return {
         assetId: asset.id,
         transcript: transcript !== null,
@@ -159,9 +162,8 @@ export class AnalysisService {
         descriptions: scenes.filter(
           (scene) => scene.description !== null && scene.description.length > 0,
         ).length,
-        beatMap: snapshot.beatMaps.some(
-          (candidate) => candidate.assetId === asset.id,
-        ),
+        beatMap: beatMap !== null,
+        bpm: beatMap?.bpm ?? null,
         embeddings: false,
       };
     });

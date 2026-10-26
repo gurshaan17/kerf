@@ -14,6 +14,7 @@ import {
   Keyboard,
   Magnet,
   MousePointer2,
+  Music2,
   Palette,
   Pause,
   Play,
@@ -54,6 +55,7 @@ export interface CommandPaletteProps {
   readonly onOpenSearch: () => void;
   readonly onOpenTranscript: (assetId: string) => void;
   readonly onOpenScenes: (assetId: string) => void;
+  readonly onOpenBeats: (assetId: string) => void;
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
   readonly onOpenReferences: () => void;
@@ -68,6 +70,7 @@ export function CommandPalette({
   onOpenSearch,
   onOpenTranscript,
   onOpenScenes,
+  onOpenBeats,
   onOpenAnalysis,
   onOpenMotion,
   onOpenReferences,
@@ -119,6 +122,17 @@ export function CommandPalette({
       return null;
     }
     return snapshot.scenes.some((scene) => scene.assetId === selectedAssetId)
+      ? selectedAssetId
+      : null;
+  }, [snapshot, selectedAssetId]);
+
+  const beatsTargetId = useMemo(() => {
+    if (!snapshot || !selectedAssetId) {
+      return null;
+    }
+    return snapshot.beatMaps.some(
+      (beatMap) => beatMap.assetId === selectedAssetId,
+    )
       ? selectedAssetId
       : null;
   }, [snapshot, selectedAssetId]);
@@ -361,6 +375,18 @@ export function CommandPalette({
         },
       },
       {
+        id: 'analysis.beats.view',
+        label: 'View beats',
+        keywords: 'tempo bpm rhythm music grid markers',
+        icon: <Music2 size={14} />,
+        disabled: !beatsTargetId,
+        run: () => {
+          if (beatsTargetId) {
+            onOpenBeats(beatsTargetId);
+          }
+        },
+      },
+      {
         id: 'analysis.settings',
         label: 'Analysis settings',
         keywords: 'whisper transcribe provider key vision consent models',
@@ -443,10 +469,12 @@ export function CommandPalette({
     onOpenSearch,
     onOpenTranscript,
     onOpenScenes,
+    onOpenBeats,
     onShowShortcuts,
     open,
     playing,
     rippleEnabled,
+    beatsTargetId,
     scenesTargetId,
     selectionCount,
     snapEnabled,

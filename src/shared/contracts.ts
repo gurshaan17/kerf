@@ -153,6 +153,7 @@ export interface AnalysisAssetStatus {
   readonly sceneCount: number;
   readonly descriptions: number;
   readonly beatMap: boolean;
+  readonly bpm: number | null;
   readonly embeddings: boolean;
 }
 

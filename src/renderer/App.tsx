@@ -12,6 +12,7 @@ import { Preview } from './preview/Preview';
 import { Inspector } from './inspector/Inspector';
 import { ScenePanel } from './scenes/ScenePanel';
 import { TranscriptPanel } from './transcript/TranscriptPanel';
+import { BeatPanel } from './beats/BeatPanel';
 import { ExportDialog } from './export/ExportDialog';
 import { AnalysisSettingsDialog } from './analysis/AnalysisSettingsDialog';
 import { SearchDialog } from './search/SearchDialog';
@@ -62,7 +63,7 @@ export default function App() {
   const [exportOpen, setExportOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [analysisView, setAnalysisView] = useState<{
-    kind: 'transcript' | 'scenes';
+    kind: 'transcript' | 'scenes' | 'beats';
     assetId: string;
   } | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -86,6 +87,10 @@ export default function App() {
   const openScenes = useCallback((assetId: string) => {
     setPaletteOpen(false);
     setAnalysisView({ kind: 'scenes', assetId });
+  }, []);
+  const openBeats = useCallback((assetId: string) => {
+    setPaletteOpen(false);
+    setAnalysisView({ kind: 'beats', assetId });
   }, []);
   const closeAnalysisView = useCallback(() => {
     setAnalysisView(null);
@@ -188,6 +193,8 @@ export default function App() {
     const { assets, scenes, transcripts, beatMaps } = snapshot;
     return assets.map((asset) => {
       const assetScenes = scenes.filter((scene) => scene.assetId === asset.id);
+      const beatMap =
+        beatMaps.find((candidate) => candidate.assetId === asset.id) ?? null;
       return {
         assetId: asset.id,
         transcript: transcripts.some(
@@ -197,7 +204,8 @@ export default function App() {
         descriptions: assetScenes.filter(
           (scene) => scene.description !== null && scene.description.length > 0,
         ).length,
-        beatMap: beatMaps.some((beatMap) => beatMap.assetId === asset.id),
+        beatMap: beatMap !== null,
+        bpm: beatMap?.bpm ?? null,
         embeddings: false,
       };
     });
@@ -257,9 +265,15 @@ export default function App() {
                 assetId={analysisView.assetId}
                 onClose={closeAnalysisView}
               />
-            ) : (
+            ) : analysisView.kind === 'scenes' ? (
               <ScenePanel
                 key={`scenes:${analysisView.assetId}`}
+                assetId={analysisView.assetId}
+                onClose={closeAnalysisView}
+              />
+            ) : (
+              <BeatPanel
+                key={`beats:${analysisView.assetId}`}
                 assetId={analysisView.assetId}
                 onClose={closeAnalysisView}
               />
@@ -282,6 +296,7 @@ export default function App() {
             onAnalyze={analyze}
             onOpenTranscript={openTranscript}
             onOpenScenes={openScenes}
+            onOpenBeats={openBeats}
             onOpenSearch={openSearch}
             onOpenAnalysis={openAnalysis}
             onOpenMotion={openMotion}
@@ -310,6 +325,7 @@ export default function App() {
         onOpenSearch={openSearch}
         onOpenTranscript={openTranscript}
         onOpenScenes={openScenes}
+        onOpenBeats={openBeats}
         onOpenAnalysis={openAnalysis}
         onOpenMotion={openMotion}
         onOpenReferences={openReferences}

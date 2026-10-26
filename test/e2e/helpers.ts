@@ -101,6 +101,34 @@ export function ensureCaptionFixture(): string {
   return video;
 }
 
+/**
+ * A 120 BPM click track with enough bars for two coarse sections. The short
+ * 1 kHz burst every half second gives the local onset detector a clean grid.
+ */
+export function ensureBeatsFixture(): string {
+  mkdirSync(cacheRoot, { recursive: true });
+  const audio = join(cacheRoot, 'beats-source.wav');
+  if (existsSync(audio) && statSync(audio).size > 1_000) {
+    return audio;
+  }
+  const ffmpeg = executable('ffmpeg');
+  execFileSync(
+    ffmpeg,
+    [
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'aevalsrc=if(lt(mod(t\\,0.5)\\,0.02)\\,0.9*sin(2*PI*1000*t)\\,0):s=44100:d=30',
+      '-c:a',
+      'pcm_s16le',
+      audio,
+    ],
+    { stdio: 'inherit' },
+  );
+  return audio;
+}
+
 export function ensureScenesFixture(): string {
   mkdirSync(cacheRoot, { recursive: true });
   const video = join(cacheRoot, 'scenes-source.mp4');
