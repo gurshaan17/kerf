@@ -1,49 +1,37 @@
-import type { SVGProps } from 'react';
+import type { ImgHTMLAttributes } from 'react';
+import logoUrl from './kerf-logo.svg?url';
 import { cx } from '../cx';
 
-export interface KerfMarkProps extends SVGProps<SVGSVGElement> {
+export interface KerfMarkProps extends Omit<
+  ImgHTMLAttributes<HTMLImageElement>,
+  'src'
+> {
   size?: number;
 }
 
 /**
- * A saw-cut monogram: a K cut into a rounded plate, with the kerf running
- * through the upper corner.
+ * Kerf's brand tile: a gold plate split by the diagonal saw kerf. The artwork
+ * is a multi-tone illustration, so it is rendered as an image rather than a
+ * `currentColor` SVG.
  */
-export function KerfMark({ size = 22, className, ...rest }: KerfMarkProps) {
+export function KerfMark({
+  size = 22,
+  className,
+  alt = '',
+  style,
+  ...rest
+}: KerfMarkProps) {
   return (
-    <svg
+    <img
+      src={logoUrl}
       width={size}
       height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      focusable="false"
-      aria-hidden="true"
+      alt={alt}
+      draggable={false}
+      aria-hidden={alt ? undefined : true}
       className={cx('k-mark', className)}
+      style={{ objectFit: 'cover', borderRadius: '9%', ...style }}
       {...rest}
-    >
-      <rect
-        x="2.5"
-        y="2.5"
-        width="19"
-        height="19"
-        rx="4.5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-      />
-      <path
-        d="M7.5 7v10M7.5 12l5.5-5M7.5 12l5.5 5"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M16.5 4.25 19.75 7.5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        opacity="0.55"
-      />
-    </svg>
+    />
   );
 }

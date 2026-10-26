@@ -41,12 +41,8 @@
 }
 
 .k-shell__brand-mark {
-  display: inline-flex;
+  display: block;
   flex: 0 0 auto;
-  color: var(--k-accent);
-  filter: drop-shadow(
-    0 0 10px color-mix(in srgb, var(--k-accent) 18%, transparent)
-  );
 }
 
 .k-shell__project {

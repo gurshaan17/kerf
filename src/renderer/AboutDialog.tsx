@@ -30,9 +30,7 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
     >
       <div className="space-y-5 text-[12px] leading-relaxed text-ink-muted">
         <div className="flex items-center gap-3">
-          <span className="grid size-12 shrink-0 place-items-center rounded-md border border-line bg-surface-0 text-accent">
-            <KerfMark size={28} />
-          </span>
+          <KerfMark size={48} className="shrink-0" />
           <div>
             <p className="font-display text-[22px] leading-tight font-medium text-ink">
               Kerf

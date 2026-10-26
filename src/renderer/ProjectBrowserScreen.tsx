@@ -115,9 +115,7 @@ export function ProjectBrowserScreen({
     <div className="grid h-full w-full place-items-center overflow-auto bg-surface-0 p-8 text-ink">
       <div className="w-full max-w-3xl">
         <header className="flex items-start gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-md border border-line bg-surface-1 text-accent">
-            <KerfMark size={28} />
-          </span>
+          <KerfMark size={48} className="shrink-0" />
           <div className="min-w-0">
             <p className="font-mono text-[10px] tracking-[0.12em] text-ink-faint uppercase">
               Kerf
@@ -221,9 +219,7 @@ export function ProjectBrowserScreen({
             </div>
           ) : projects.length === 0 ? (
             <div className="grid justify-items-center px-6 py-14 text-center">
-              <span className="grid size-16 place-items-center rounded-lg border border-line bg-surface-0 text-accent">
-                <KerfMark size={38} />
-              </span>
+              <KerfMark size={64} />
               <h3 className="mt-5 font-display text-[24px] leading-tight font-medium">
                 No projects yet
               </h3>

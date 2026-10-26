@@ -1,7 +1,15 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow, nativeImage } from 'electron';
 import path from 'node:path';
 
 const WINDOW_BACKGROUND = '#0b0c0d';
+
+/** The packaged app reads the icon from `extraResource`; dev reads it from the repo. */
+function loadAppIcon() {
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.png')
+    : path.join(app.getAppPath(), 'assets', 'icon.png');
+  return nativeImage.createFromPath(iconPath);
+}
 
 /**
  * The renderer normally mounts within a few hundred milliseconds of the page
@@ -68,6 +76,11 @@ function installBootGuard(mainWindow: BrowserWindow): void {
 }
 
 export function createMainWindow(): BrowserWindow {
+  const icon = loadAppIcon();
+  if (process.platform === 'darwin' && !app.isPackaged && !icon.isEmpty()) {
+    app.dock?.setIcon(icon);
+  }
+
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -75,6 +88,7 @@ export function createMainWindow(): BrowserWindow {
     minHeight: 700,
     show: false,
     backgroundColor: WINDOW_BACKGROUND,
+    ...(process.platform === 'darwin' ? {} : { icon }),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

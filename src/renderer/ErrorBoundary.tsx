@@ -33,9 +33,7 @@ export class ErrorBoundary extends Component<
       <main className="grid h-full w-full place-items-center overflow-auto bg-surface-0 p-8 text-ink">
         <div className="w-full max-w-xl rounded-lg border border-line bg-surface-1 p-6 shadow-2">
           <div className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-md border border-line bg-surface-0 text-accent">
-              <KerfMark size={24} />
-            </span>
+            <KerfMark size={44} className="shrink-0" />
             <div>
               <p className="font-mono text-[10px] tracking-[0.12em] text-ink-faint uppercase">
                 Kerf
