@@ -48,6 +48,7 @@ function audioAsset(project: Project, name: string): Asset {
 
 interface TestHarness {
   readonly context: ToolContext;
+  readonly selection: string[];
   snapshot(): ToolSnapshot;
   commands(): readonly EditCommand[];
 }
@@ -68,6 +69,7 @@ function harness(): TestHarness {
     compositions: [],
   };
   let applied: EditCommand[] = [];
+  const selection: string[] = [];
   const sourceDuration = (assetId: string) => {
     const asset = snapshot.assets.find((candidate) => candidate.id === assetId);
     return asset?.durationSeconds
@@ -103,11 +105,12 @@ function harness(): TestHarness {
   return {
     snapshot: () => snapshot,
     commands: () => applied,
+    selection,
     context: {
       snapshot: () => snapshot,
       editor: () => ({
         playheadFrame: 0,
-        selectedClipIds: [],
+        selectedClipIds: selection,
         selectedAssetId: assets[0]?.id ?? null,
       }),
       apply: (command, options) => apply(command, options),
@@ -316,5 +319,151 @@ describe('property and marker tools', () => {
     });
     expect(test.commands().length).toBe(before + 1);
     expect(test.snapshot().project.sequence.markers).toHaveLength(2);
+  });
+});
+
+describe('overlay tools', () => {
+  async function withVideo() {
+    const test = harness();
+    const assetId = test.snapshot().assets[0]?.id;
+    const inserted = await call(test, 'insertClip', { assetId });
+    return { test, clipId: inserted.clipId as string };
+  }
+
+  it('creates the Effects track and first overlay in one undo step', async () => {
+    const { test, clipId } = await withVideo();
+    const result = await call(test, 'addOverlay', {
+      kind: 'blur',
+      linkedItemId: clipId,
+      props: { mode: 'pixelate', amount: 40 },
+    });
+
+    expect(result).toMatchObject({
+      overlayKind: 'blur',
+      trackCreated: true,
+      startFrame: 0,
+      durationFrames: 240,
+      linkedItemId: clipId,
+    });
+    expect(test.commands().at(-1)).toMatchObject({ type: 'batch' });
+
+    const sequence = test.snapshot().project.sequence;
+    const effects = sequence.tracks.find((track) => track.kind === 'effects');
+    expect(effects).toBeDefined();
+    expect(sequence.tracks[0]?.kind).toBe('effects');
+    const overlay = effects?.clips[0];
+    expect(overlay).toMatchObject({
+      type: 'fxOverlay',
+      linkedItemId: clipId,
+      startFrame: 0,
+      durationFrames: 240,
+      props: {
+        kind: 'blur',
+        mode: 'pixelate',
+        amount: 40,
+        region: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
+      },
+    });
+  });
+
+  it('links to the selected clip by default', async () => {
+    const { test, clipId } = await withVideo();
+    test.selection.push(clipId);
+    const result = await call(test, 'addOverlay', { kind: 'zoom' });
+
+    expect(result).toMatchObject({
+      overlayKind: 'zoom',
+      linkedItemId: clipId,
+      startFrame: 0,
+      durationFrames: 240,
+    });
+  });
+
+  it('defaults an unlinked overlay to the playhead and three seconds', async () => {
+    const test = harness();
+    const result = await call(test, 'addOverlay', {
+      kind: 'callout',
+      linkedItemId: null,
+      startFrame: 12,
+    });
+
+    expect(result).toMatchObject({
+      overlayKind: 'callout',
+      trackCreated: true,
+      startFrame: 12,
+      durationFrames: 72,
+      linkedItemId: null,
+    });
+    const effects = test
+      .snapshot()
+      .project.sequence.tracks.find((track) => track.kind === 'effects');
+    const overlay = effects?.clips[0];
+    expect(overlay?.type).toBe('fxOverlay');
+    if (!overlay || overlay.type !== 'fxOverlay') {
+      throw new Error('overlay not found');
+    }
+    expect(overlay.props).toMatchObject({ kind: 'callout', text: 'Callout' });
+  });
+
+  it('merges partial props without changing the kind', async () => {
+    const { test, clipId } = await withVideo();
+    const added = await call(test, 'addOverlay', {
+      kind: 'blur',
+      linkedItemId: clipId,
+      props: { mode: 'pixelate', amount: 40 },
+    });
+    const updated = await call(test, 'updateOverlay', {
+      overlayId: added.overlayId,
+      durationFrames: 48,
+      props: { amount: 12 },
+    });
+
+    expect(updated).toMatchObject({
+      overlayKind: 'blur',
+      durationFrames: 48,
+      linkedItemId: clipId,
+    });
+    const overlay = clipById(test.snapshot(), added.overlayId);
+    expect(overlay.type).toBe('fxOverlay');
+    if (overlay.type !== 'fxOverlay') {
+      throw new Error('overlay not found');
+    }
+    expect(overlay.props).toMatchObject({
+      kind: 'blur',
+      mode: 'pixelate',
+      amount: 12,
+    });
+
+    await expect(
+      call(test, 'updateOverlay', {
+        overlayId: added.overlayId,
+        props: { kind: 'zoom' },
+      }),
+    ).rejects.toThrow(/not valid|cannot change/i);
+  });
+
+  it('reports overlay details in readTimeline', async () => {
+    const { test, clipId } = await withVideo();
+    const added = await call(test, 'addOverlay', {
+      kind: 'spotlight',
+      linkedItemId: clipId,
+      props: { dim: 0.8 },
+    });
+    const timeline = (await call(test, 'readTimeline', {
+      includeMarkers: false,
+    })) as {
+      tracks: Array<{ kind: string; clips: Array<Record<string, unknown>> }>;
+    };
+    const effects = timeline.tracks.find((track) => track.kind === 'effects');
+    const overlay = effects?.clips.find((clip) => clip.id === added.overlayId);
+
+    expect(overlay).toMatchObject({
+      type: 'fxOverlay',
+      overlayKind: 'spotlight',
+      linkedItemId: clipId,
+      easing: 'ease-in-out',
+      props: { kind: 'spotlight', dim: 0.8 },
+    });
+    expect(overlay?.region).toEqual({ x: 0.3, y: 0.25, w: 0.4, h: 0.5 });
   });
 });

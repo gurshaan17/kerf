@@ -1,4 +1,5 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -37,15 +38,44 @@ function errorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-function textResult(value: unknown) {
-  return {
-    content: [
-      {
-        type: 'text' as const,
-        text: JSON.stringify(value, null, 2),
-      },
-    ],
-  };
+function renderedFramePath(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || !('path' in value)) {
+    return null;
+  }
+  const path = (value as { path?: unknown }).path;
+  return typeof path === 'string' && path.length > 0 ? path : null;
+}
+
+/**
+ * `renderFrame` carries a cache path so the image can be re-read on demand.
+ * MCP clients get the PNG itself when the file is still present, followed by
+ * the JSON text for clients that only render text.
+ */
+function textResult(value: unknown, toolName?: string) {
+  const content: Array<
+    | { type: 'text'; text: string }
+    | { type: 'image'; data: string; mimeType: string }
+  > = [];
+  if (toolName === 'renderFrame') {
+    const path = renderedFramePath(value);
+    if (path) {
+      try {
+        const mimeType = (value as { mimeType?: unknown }).mimeType;
+        content.push({
+          type: 'image',
+          data: readFileSync(path).toString('base64'),
+          mimeType: typeof mimeType === 'string' ? mimeType : 'image/png',
+        });
+      } catch {
+        // The path may have been pruned between the render and this call.
+      }
+    }
+  }
+  content.push({
+    type: 'text',
+    text: JSON.stringify(value, null, 2),
+  });
+  return { content };
 }
 
 function errorResult(message: string) {
@@ -101,7 +131,7 @@ MCP session rules:
             `Completed in ${Date.now() - startedAt}ms`,
             definition.name,
           );
-          return textResult(value);
+          return textResult(value, definition.name);
         } catch (cause) {
           const message = errorMessage(cause);
           onTool?.(false, message.slice(0, 300), definition.name);

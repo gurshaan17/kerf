@@ -1,15 +1,18 @@
 import { z } from 'zod';
 import type { Asset, Clip, Scene, Transcript } from '@kerf/model';
 import {
+  OVERLAY_KINDS,
   assetKindSchema,
   blendModeSchema,
   effectTypeSchema,
   fitSchema,
   fpsToNumber,
   maskTypeSchema,
+  overlayShapeSchema,
   secondsToFrames,
 } from '@kerf/model';
 import { sequenceDurationFrames, tracksInOrder } from '@kerf/engine';
+import { DEFAULT_OVERLAY_PROPS } from './overlays';
 import type { ToolContext } from './types';
 
 const emptyInput = z.object({}).default({});
@@ -104,6 +107,16 @@ function clipSummary(clip: Clip) {
     effectCount: clip.effects.length,
     maskCount: clip.masks.length,
     keyframeProperties: keyframes,
+    overlayKind: clip.type === 'fxOverlay' ? clip.props.kind : null,
+    region: clip.type === 'fxOverlay' ? clip.props.region : null,
+    shape: clip.type === 'fxOverlay' ? clip.props.shape : null,
+    linkedItemId: clip.type === 'fxOverlay' ? clip.linkedItemId : null,
+    transitionInFrames:
+      clip.type === 'fxOverlay' ? clip.props.transitionInFrames : null,
+    transitionOutFrames:
+      clip.type === 'fxOverlay' ? clip.props.transitionOutFrames : null,
+    easing: clip.type === 'fxOverlay' ? clip.props.easing : null,
+    props: clip.type === 'fxOverlay' ? clip.props : null,
   };
 }
 
@@ -431,6 +444,9 @@ export const listEffectsTool = {
       masks: maskTypeSchema.options,
       blendModes: blendModeSchema.options,
       fits: fitSchema.options,
+      overlayKinds: OVERLAY_KINDS,
+      overlayShapes: overlayShapeSchema.options,
+      defaultOverlayProps: DEFAULT_OVERLAY_PROPS,
       keyframeProperties: [
         'x',
         'y',

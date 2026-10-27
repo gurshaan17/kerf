@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { LanguageModel } from 'ai';
 import { createProject } from '@kerf/model';
@@ -181,6 +184,58 @@ describe('AgentService', () => {
       ),
     ).resolves.toEqual({ ok: true });
     expect(call).toHaveBeenCalledWith('insertText', { text: 'Hello' }, 'agent');
+  });
+
+  it('returns a rendered frame to the model as image content', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'kerf-agent-frame-'));
+    const path = join(directory, 'frame.png');
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+    writeFileSync(path, png);
+    try {
+      const call = vi.fn(async () => ({
+        frame: 12,
+        width: 2,
+        height: 2,
+        mimeType: 'image/png',
+        path,
+      }));
+      const tools = createAgentToolSet({ call });
+      const definition = tools['renderFrame'] as unknown as {
+        execute: (
+          input: unknown,
+          options: { toolCallId: string; messages: unknown[] },
+        ) => Promise<unknown>;
+        toModelOutput: (options: {
+          toolCallId: string;
+          input: unknown;
+          output: unknown;
+        }) => unknown;
+      };
+      const output = await definition.execute(
+        { frame: 12 },
+        { toolCallId: 'call_1', messages: [] },
+      );
+      const modelOutput = await definition.toModelOutput({
+        toolCallId: 'call_1',
+        input: { frame: 12 },
+        output,
+      });
+
+      expect(modelOutput).toMatchObject({
+        type: 'content',
+        value: [
+          { type: 'text' },
+          {
+            type: 'file',
+            mediaType: 'image/png',
+            data: { type: 'data', data: png.toString('base64') },
+          },
+        ],
+      });
+      expect(call).toHaveBeenCalledWith('renderFrame', { frame: 12 }, 'agent');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('refuses to start without a consented chat provider', () => {

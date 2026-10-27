@@ -141,6 +141,9 @@ describe('tool registry', () => {
         'listEffects',
       ]),
     );
+    expect(toolRegistry.names()).toEqual(
+      expect.arrayContaining(['addOverlay', 'updateOverlay']),
+    );
   });
 
   it('validates input before execution', async () => {
@@ -260,8 +263,26 @@ describe('read tools', () => {
       'listEffects',
       {},
       testContext(),
-    )) as { effects: string[]; keyframeProperties: string[] };
+    )) as {
+      effects: string[];
+      keyframeProperties: string[];
+      overlayKinds: string[];
+      overlayShapes: string[];
+      defaultOverlayProps: Record<string, Record<string, unknown>>;
+    };
     expect(result.effects).toContain('brightness');
     expect(result.keyframeProperties).toContain('opacity');
+    expect(result.overlayKinds).toEqual([
+      'blur',
+      'callout',
+      'spotlight',
+      'zoom',
+    ]);
+    expect(result.overlayShapes).toEqual(['rect', 'ellipse']);
+    expect(result.defaultOverlayProps.blur).toMatchObject({
+      kind: 'blur',
+      mode: 'gaussian',
+      region: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { stepCountIs, streamText, tool } from 'ai';
 import type { LanguageModel, ModelMessage, ToolSet } from 'ai';
 import { buildAgentSystemPrompt, credentialHint } from '@kerf/agent';
@@ -66,6 +67,38 @@ function errorHint(cause: unknown): string | null {
 }
 
 /**
+ * Render tools return a cache path. The model gets the PNG bytes as a file
+ * part so it can actually see the captured overlay frame, with the structured
+ * result kept as text for providers that prefer text tool results.
+ */
+function renderFrameModelOutput(output: unknown) {
+  const frame = output as { path?: unknown; mimeType?: unknown };
+  const text = JSON.stringify(output, null, 2);
+  if (typeof frame.path === 'string') {
+    try {
+      return {
+        type: 'content' as const,
+        value: [
+          { type: 'text' as const, text },
+          {
+            type: 'file' as const,
+            mediaType:
+              typeof frame.mimeType === 'string' ? frame.mimeType : 'image/png',
+            data: {
+              type: 'data' as const,
+              data: readFileSync(frame.path).toString('base64'),
+            },
+          },
+        ],
+      };
+    } catch {
+      // Keep the path when the cache file has already been pruned.
+    }
+  }
+  return { type: 'text' as const, value: text };
+}
+
+/**
  * Maps the shared tool catalog into the AI SDK's tool shape. Every tool keeps
  * its Zod validation at the registry boundary, so the model cannot hand raw
  * values to an edit command.
@@ -75,16 +108,26 @@ export function createAgentToolSet(
 ): ToolSet {
   const tools: ToolSet = {};
   for (const definition of toolRegistry.list()) {
-    tools[definition.name] = tool({
+    const base = {
       description: definition.description,
       inputSchema: definition.input,
-      execute: async (input: unknown, options) => {
+      execute: async (
+        input: unknown,
+        options: { abortSignal?: AbortSignal },
+      ) => {
         if (options.abortSignal?.aborted) {
           throw new Error('The turn was stopped before this tool ran.');
         }
         return executor.call(definition.name, input, 'agent');
       },
-    });
+    };
+    tools[definition.name] =
+      definition.name === 'renderFrame'
+        ? tool({
+            ...base,
+            toModelOutput: ({ output }) => renderFrameModelOutput(output),
+          })
+        : tool(base);
   }
   return tools;
 }

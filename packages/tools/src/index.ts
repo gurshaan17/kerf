@@ -3,6 +3,7 @@ import { COMPOSITION_TOOLS } from './composition';
 import { EDIT_TOOLS } from './edit';
 import { EXPORT_TOOLS } from './export';
 import { MACRO_TOOLS } from './macros';
+import { OVERLAY_TOOLS } from './overlays';
 import { READ_TOOLS } from './read';
 import { REFERENCE_TOOLS } from './reference';
 import { ToolRegistry } from './registry';
@@ -13,6 +14,7 @@ export * from './composition';
 export * from './edit';
 export * from './export';
 export * from './macros';
+export * from './overlays';
 export * from './read';
 export * from './reference';
 export * from './registry';
@@ -22,6 +24,7 @@ export const TOOL_DEFINITIONS = [
   ...READ_TOOLS,
   ...EDIT_TOOLS,
   ...MACRO_TOOLS,
+  ...OVERLAY_TOOLS,
   ...BEAT_TOOLS,
   ...REFERENCE_TOOLS,
   ...EXPORT_TOOLS,

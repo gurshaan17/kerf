@@ -162,7 +162,7 @@ function mediaClip(
   throw new Error('That asset cannot be placed on the timeline.');
 }
 
-function summary(result: ToolEditResult) {
+export function toolEditSummary(result: ToolEditResult) {
   return {
     commandId: result.command.id,
     label: result.command.label,
@@ -224,7 +224,7 @@ export const insertClipTool = {
       { label: `Insert ${asset.name}` },
     );
     return {
-      ...summary(result),
+      ...toolEditSummary(result),
       clipId: clip.id,
       trackId: track.id,
       startFrame: clip.startFrame,
@@ -272,7 +272,7 @@ export const insertAudioTool = {
       { label: `Insert ${asset.name}` },
     );
     return {
-      ...summary(result),
+      ...toolEditSummary(result),
       clipId: clip.id,
       trackId: track.id,
       startFrame: clip.startFrame,
@@ -335,7 +335,7 @@ export const insertTextTool = {
       { label: 'Insert text' },
     );
     return {
-      ...summary(result),
+      ...toolEditSummary(result),
       clipId: clip.id,
       trackId: track.id,
       startFrame,
@@ -365,7 +365,7 @@ export const editClipTool = {
       { type: 'clip.update', clipId: input.clipId, patch: input.patch },
       { label: 'Edit clip' },
     );
-    return { ...summary(result), clipId: input.clipId };
+    return { ...toolEditSummary(result), clipId: input.clipId };
   },
 };
 
@@ -393,7 +393,7 @@ export const moveClipTool = {
       { label: 'Move clip' },
     );
     return {
-      ...summary(result),
+      ...toolEditSummary(result),
       clipId: input.clipId,
       startFrame: input.startFrame,
     };
@@ -423,7 +423,7 @@ export const trimClipTool = {
       },
       { label: 'Trim clip' },
     );
-    return { ...summary(result), clipId: input.clipId };
+    return { ...toolEditSummary(result), clipId: input.clipId };
   },
 };
 
@@ -440,7 +440,7 @@ export const splitClipTool = {
       { type: 'clip.split', clipId: input.clipId, frame: input.frame },
       { label: 'Split clip' },
     );
-    return { ...summary(result), clipId: input.clipId };
+    return { ...toolEditSummary(result), clipId: input.clipId };
   },
 };
 
@@ -467,7 +467,7 @@ export const duplicateClipTool = {
       },
       { label: 'Duplicate clip' },
     );
-    return { ...summary(result), sourceClipId: input.clipId };
+    return { ...toolEditSummary(result), sourceClipId: input.clipId };
   },
 };
 
@@ -492,7 +492,7 @@ export const removeClipsTool = {
         : context.applyBatch(commands, {
             label: `Remove ${commands.length} clips`,
           });
-    return { ...summary(result), removedClipIds: input.clipIds };
+    return { ...toolEditSummary(result), removedClipIds: input.clipIds };
   },
 };
 
@@ -517,7 +517,7 @@ export const slipClipTool = {
       },
       { label: 'Slip clip' },
     );
-    return { ...summary(result), clipId: input.clipId };
+    return { ...toolEditSummary(result), clipId: input.clipId };
   },
 };
 
@@ -569,7 +569,7 @@ export const setSpeedMapTool = {
         : context.applyBatch(commands, {
             label: 'Set speed map',
           });
-    return { ...summary(result), clipId: input.clipId };
+    return { ...toolEditSummary(result), clipId: input.clipId };
   },
 };
 
@@ -601,7 +601,7 @@ export const animatePropertyTool = {
       { label: `Animate ${input.property}` },
     );
     return {
-      ...summary(result),
+      ...toolEditSummary(result),
       clipId: input.clipId,
       property: input.property,
       keyframeCount: input.keyframes.length,
@@ -638,7 +638,11 @@ export const markMomentTool = {
       { type: 'marker.add', marker },
       { label: `Mark ${input.label || input.kind}` },
     );
-    return { ...summary(result), markerId: marker.id, frame: marker.frame };
+    return {
+      ...toolEditSummary(result),
+      markerId: marker.id,
+      frame: marker.frame,
+    };
   },
 };
 
@@ -662,7 +666,7 @@ export const applyBatchTool = {
     };
     const result = context.apply(batch, { label: input.label });
     return {
-      ...summary(result),
+      ...toolEditSummary(result),
       commandCount: input.commands.length,
     };
   },

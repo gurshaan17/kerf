@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -44,6 +47,8 @@ describe('McpServerHost', () => {
       const names = listed.tools.map((tool) => tool.name);
       expect(names).toContain('readTimeline');
       expect(names).toContain('insertText');
+      expect(names).toContain('addOverlay');
+      expect(names).toContain('updateOverlay');
       expect(names).toContain('startExport');
       expect(client.getInstructions()).toMatch(/Kerf's editing agent/);
       expect(host.sessionCount).toBe(1);
@@ -71,6 +76,55 @@ describe('McpServerHost', () => {
       ).toBe(true);
     } finally {
       await client.close();
+    }
+  }, 20_000);
+
+  it('returns a rendered frame as an image plus its JSON summary', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'kerf-mcp-frame-'));
+    const path = join(directory, 'frame.png');
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+    writeFileSync(path, png);
+    const token = 'kerf_frame_token';
+    const host = new McpServerHost({
+      token,
+      tools: {
+        call: async () => ({
+          frame: 12,
+          width: 2,
+          height: 2,
+          mimeType: 'image/png',
+          path,
+        }),
+      },
+      port: 0,
+    });
+    hosts.push(host);
+    try {
+      await host.start();
+      const { client } = await connect(host, token);
+      try {
+        const result = await client.callTool({
+          name: 'renderFrame',
+          arguments: { frame: 12 },
+        });
+        const content = result.content as Array<{
+          type: string;
+          data?: string;
+          mimeType?: string;
+          text?: string;
+        }>;
+        expect(content[0]).toMatchObject({
+          type: 'image',
+          mimeType: 'image/png',
+          data: png.toString('base64'),
+        });
+        expect(content[1]).toMatchObject({ type: 'text' });
+        expect(content[1]?.text).toContain(path);
+      } finally {
+        await client.close();
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
     }
   }, 20_000);
 
