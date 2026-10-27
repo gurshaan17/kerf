@@ -2,6 +2,9 @@ import type { Asset } from '@kerf/model';
 
 export type MediaSlot = 'source' | 'proxy' | 'thumbnail';
 
+/** Import quality for video assets. Images always use their source file. */
+export type MediaQuality = 'proxy' | 'source';
+
 function encoded(value: string): string {
   return encodeURIComponent(value);
 }
@@ -10,7 +13,7 @@ export function assetMediaUrl(asset: Asset, slot: MediaSlot): string {
   return `kerfmedia://asset/${encoded(asset.id)}/${slot}`;
 }
 
-function videoUrl(asset: Asset): string {
+function proxyUrl(asset: Asset): string {
   return asset.cache.proxyPath
     ? assetMediaUrl(asset, 'proxy')
     : assetMediaUrl(asset, 'source');
@@ -26,11 +29,41 @@ function visualAsset(asset: Asset): boolean {
   );
 }
 
-function mediaReady(element: HTMLVideoElement | HTMLImageElement): boolean {
-  if (element instanceof HTMLVideoElement) {
-    return element.readyState >= 2 && element.videoWidth > 0;
+interface ReadyMedia {
+  readonly readyState?: number;
+  readonly videoWidth?: number;
+  readonly complete?: boolean;
+  readonly naturalWidth?: number;
+}
+
+/**
+ * Duck-types readiness so the compositor and the pool work with real DOM media
+ * as well as the Node canvas images used by golden tests.
+ */
+export function mediaElementReady(
+  element: HTMLVideoElement | HTMLImageElement | null | undefined,
+): boolean {
+  if (!element) {
+    return false;
   }
-  return element.complete && element.naturalWidth > 0;
+  const media = element as unknown as ReadyMedia;
+  if (typeof media.videoWidth === 'number') {
+    return (media.readyState ?? 0) >= 2 && media.videoWidth > 0;
+  }
+  return Boolean(media.complete) && (media.naturalWidth ?? 0) > 0;
+}
+
+interface VideoSlots {
+  proxy?: HTMLVideoElement;
+  source?: HTMLVideoElement;
+}
+
+export interface MediaPoolOptions {
+  /**
+   * Slot created eagerly for each video. Preview uses `proxy`; export and
+   * single-frame rendering use `source`. The other slot is created lazily.
+   */
+  readonly defaultQuality?: MediaQuality;
 }
 
 /**
@@ -39,12 +72,14 @@ function mediaReady(element: HTMLVideoElement | HTMLImageElement): boolean {
  */
 export class MediaPool {
   private readonly assets = new Map<string, Asset>();
-  private readonly videos = new Map<string, HTMLVideoElement>();
+  private readonly videos = new Map<string, VideoSlots>();
   private readonly images = new Map<string, HTMLImageElement>();
   private readonly listeners = new Set<() => void>();
+  readonly defaultQuality: MediaQuality;
   private disposed = false;
 
-  constructor(assets: readonly Asset[] = []) {
+  constructor(assets: readonly Asset[] = [], options: MediaPoolOptions = {}) {
+    this.defaultQuality = options.defaultQuality ?? 'proxy';
     this.setAssets(assets);
   }
 
@@ -60,46 +95,69 @@ export class MediaPool {
         continue;
       }
       if (asset.kind === 'video') {
-        if (!this.videos.has(id)) {
-          this.createVideo(asset);
+        const slots = this.videos.get(id) ?? {};
+        this.videos.set(id, slots);
+        if (!slots[this.defaultQuality]) {
+          this.createVideo(asset, this.defaultQuality);
         }
       } else if (!this.images.has(id)) {
         this.createImage(asset);
       }
     }
-    for (const id of this.videos.keys()) {
+    for (const id of Array.from(this.videos.keys())) {
       if (!next.has(id as Asset['id'])) {
         this.removeVideo(id);
       }
     }
-    for (const id of this.images.keys()) {
+    for (const id of Array.from(this.images.keys())) {
       if (!next.has(id as Asset['id'])) {
         this.removeImage(id);
       }
     }
   }
 
-  private createVideo(asset: Asset): void {
+  private createVideo(asset: Asset, quality: MediaQuality): void {
+    const slots = this.videos.get(asset.id) ?? {};
+    this.videos.set(asset.id, slots);
+
+    // Without a proxy the two qualities are the same file; sharing one element
+    // avoids decoding the same video twice.
+    if (quality === 'proxy' && !asset.cache.proxyPath) {
+      const existing = slots.source;
+      if (existing) {
+        slots.proxy = existing;
+        return;
+      }
+    }
+    if (quality === 'source' && slots.proxy && !asset.cache.proxyPath) {
+      slots.source = slots.proxy;
+      return;
+    }
+
     const video = document.createElement('video');
-    const fallback = sourceUrl(asset);
     video.preload = 'auto';
     video.muted = true;
     video.playsInline = true;
     video.crossOrigin = 'anonymous';
-    video.src = videoUrl(asset);
-    let fellBack = video.src === fallback;
-    video.addEventListener('error', () => {
-      if (!fellBack) {
-        fellBack = true;
-        video.src = fallback;
-        video.load();
-      }
-    });
+    if (quality === 'source') {
+      video.src = sourceUrl(asset);
+    } else {
+      const fallback = sourceUrl(asset);
+      video.src = proxyUrl(asset);
+      let fellBack = video.src === fallback;
+      video.addEventListener('error', () => {
+        if (!fellBack) {
+          fellBack = true;
+          video.src = fallback;
+          video.load();
+        }
+      });
+    }
     video.addEventListener('loadeddata', this.notify);
     video.addEventListener('seeked', this.notify);
     video.addEventListener('canplay', this.notify);
     video.load();
-    this.videos.set(asset.id, video);
+    slots[quality] = video;
   }
 
   private createImage(asset: Asset): void {
@@ -112,13 +170,20 @@ export class MediaPool {
   }
 
   private removeVideo(id: string): void {
-    const video = this.videos.get(id);
-    if (!video) {
+    const slots = this.videos.get(id);
+    if (!slots) {
       return;
     }
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
+    const seen = new Set<HTMLVideoElement>();
+    for (const video of [slots.proxy, slots.source]) {
+      if (!video || seen.has(video)) {
+        continue;
+      }
+      seen.add(video);
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    }
     this.videos.delete(id);
   }
 
@@ -142,21 +207,59 @@ export class MediaPool {
     return () => this.listeners.delete(listener);
   }
 
-  video(assetId: string): HTMLVideoElement | null {
-    return this.videos.get(assetId) ?? null;
+  /** Creates and returns the requested video slot if it does not exist yet. */
+  ensure(
+    assetId: string,
+    quality: MediaQuality = this.defaultQuality,
+  ): HTMLVideoElement | null {
+    const asset = this.assets.get(assetId);
+    if (!asset || asset.kind !== 'video') {
+      return null;
+    }
+    const slots = this.videos.get(assetId) ?? {};
+    this.videos.set(assetId, slots);
+    if (slots[quality]) {
+      return slots[quality] ?? null;
+    }
+    if (!asset.cache.proxyPath && (slots.proxy || slots.source)) {
+      const shared = slots.source ?? slots.proxy ?? null;
+      slots.proxy = shared ?? undefined;
+      slots.source = shared ?? undefined;
+      return shared;
+    }
+    this.createVideo(asset, quality);
+    return slots[quality] ?? null;
+  }
+
+  video(
+    assetId: string,
+    quality: MediaQuality = this.defaultQuality,
+  ): HTMLVideoElement | null {
+    const slots = this.videos.get(assetId);
+    if (!slots) {
+      return null;
+    }
+    return (
+      slots[quality] ?? slots[quality === 'proxy' ? 'source' : 'proxy'] ?? null
+    );
   }
 
   image(assetId: string): HTMLImageElement | null {
     return this.images.get(assetId) ?? null;
   }
 
-  media(assetId: string): HTMLVideoElement | HTMLImageElement | null {
-    return this.videos.get(assetId) ?? this.images.get(assetId) ?? null;
+  media(
+    assetId: string,
+    quality: MediaQuality = this.defaultQuality,
+  ): HTMLVideoElement | HTMLImageElement | null {
+    return this.images.get(assetId) ?? this.video(assetId, quality);
   }
 
-  isReady(assetId: string): boolean {
-    const element = this.media(assetId);
-    return element !== null && mediaReady(element);
+  isReady(
+    assetId: string,
+    quality: MediaQuality = this.defaultQuality,
+  ): boolean {
+    return mediaElementReady(this.media(assetId, quality));
   }
 
   asset(assetId: string): Asset | undefined {
@@ -207,6 +310,10 @@ export function seekVideo(
   });
 }
 
-export function mediaReadyForAsset(assetId: string, pool: MediaPool): boolean {
-  return pool.isReady(assetId);
+export function mediaReadyForAsset(
+  assetId: string,
+  pool: MediaPool,
+  quality: MediaQuality = pool.defaultQuality,
+): boolean {
+  return pool.isReady(assetId, quality);
 }

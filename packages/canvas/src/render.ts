@@ -3,16 +3,19 @@ import type {
   BlendMode,
   CaptionClip,
   Clip,
+  FxOverlayClip,
   Sequence,
   ShapeClip,
   TextClip,
-  TextStyle,
 } from '@kerf/model';
 import { fpsToNumber, sampleTransform } from '@kerf/model';
-import { sourceFrameAt, tracksInOrder } from '@kerf/engine';
+import { clipsAtFrame, sourceFrameAt, tracksInOrder } from '@kerf/engine';
 import { renderSceneTree } from '@kerf/motion';
 import type { SceneTree } from '@kerf/motion';
-import { MediaPool } from './media-pool';
+import { MediaPool, mediaElementReady } from './media-pool';
+import type { MediaQuality } from './media-pool';
+import { drawOverlay } from './overlays';
+import { setFont, wrapText } from './text';
 
 export interface RenderFrameOptions {
   readonly pool: MediaPool;
@@ -20,6 +23,10 @@ export interface RenderFrameOptions {
   /** Pass null to show the checkerboard through the frame. */
   readonly background?: string | null;
   readonly compositionTrees?: ReadonlyMap<string, SceneTree>;
+  /** Video quality for base layers. Defaults to the pool's default quality. */
+  readonly mediaQuality?: MediaQuality;
+  /** Video quality used under a magnifier lens. Defaults to `source`. */
+  readonly lensQuality?: MediaQuality;
 }
 
 export interface RenderStats {
@@ -94,19 +101,20 @@ export function mediaSourceSeconds(
 function mediaReady(
   element: HTMLVideoElement | HTMLImageElement | null,
 ): boolean {
-  if (!element) {
-    return false;
-  }
-  if (element instanceof HTMLVideoElement) {
-    return element.readyState >= 2 && element.videoWidth > 0;
-  }
-  return element.complete && element.naturalWidth > 0;
+  return mediaElementReady(element);
 }
 
 function sourceSize(source: HTMLVideoElement | HTMLImageElement): Point {
-  return source instanceof HTMLVideoElement
-    ? { x: source.videoWidth, y: source.videoHeight }
-    : { x: source.naturalWidth, y: source.naturalHeight };
+  const media = source as unknown as {
+    videoWidth?: number;
+    videoHeight?: number;
+    naturalWidth?: number;
+    naturalHeight?: number;
+  };
+  if (typeof media.videoWidth === 'number') {
+    return { x: media.videoWidth, y: media.videoHeight ?? 0 };
+  }
+  return { x: media.naturalWidth ?? 0, y: media.naturalHeight ?? 0 };
 }
 
 function fitBox(
@@ -293,18 +301,35 @@ function drawCompositionPlaceholder(
   context.fillText(clip.name, 0, 0);
 }
 
+/**
+ * Picks the requested media slot, falling back to the other slot when the
+ * requested one is not ready. A zoom lens therefore shows proxy footage until
+ * the source slot loads instead of showing an empty lens.
+ */
+function selectMedia(
+  pool: MediaPool,
+  assetId: string,
+  quality: MediaQuality,
+): HTMLVideoElement | HTMLImageElement | null {
+  const requested = pool.media(assetId, quality);
+  if (mediaReady(requested)) {
+    return requested;
+  }
+  const fallback = pool.media(
+    assetId,
+    quality === 'source' ? 'proxy' : 'source',
+  );
+  return mediaReady(fallback) ? fallback : requested;
+}
+
 function drawMedia(
   context: CanvasRenderingContext2D,
   clip: Clip,
-  pool: MediaPool,
+  media: HTMLVideoElement | HTMLImageElement,
   width: number,
   height: number,
 ): boolean {
   if (clip.type !== 'video' && clip.type !== 'image') {
-    return false;
-  }
-  const media = pool.media(clip.assetId);
-  if (!mediaReady(media) || !media) {
     return false;
   }
   const source = sourceSize(media);
@@ -321,47 +346,6 @@ function drawMedia(
     box.height,
   );
   return true;
-}
-
-function setFont(context: CanvasRenderingContext2D, style: TextStyle): void {
-  context.font = `${style.fontWeight} ${style.fontSize}px "${style.fontFamily}"`;
-  const withSpacing = context as CanvasRenderingContext2D & {
-    letterSpacing?: string;
-  };
-  withSpacing.letterSpacing = `${style.letterSpacing}px`;
-}
-
-function wrapText(
-  context: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-): string[] {
-  const paragraphs = text.split('\n');
-  const lines: string[] = [];
-  for (const paragraph of paragraphs) {
-    const words = paragraph.split(/\s+/).filter(Boolean);
-    if (words.length === 0) {
-      lines.push('');
-      continue;
-    }
-    let current = '';
-    for (const word of words) {
-      const candidate = current.length === 0 ? word : `${current} ${word}`;
-      if (
-        current.length > 0 &&
-        context.measureText(candidate).width > maxWidth
-      ) {
-        lines.push(current);
-        current = word;
-      } else {
-        current = candidate;
-      }
-    }
-    if (current.length > 0) {
-      lines.push(current);
-    }
-  }
-  return lines;
 }
 
 function drawText(
@@ -546,6 +530,99 @@ function drawCheckerboard(
   }
 }
 
+interface LayerContext {
+  readonly pool: MediaPool;
+  readonly quality: MediaQuality;
+  readonly compositionTrees?: ReadonlyMap<string, SceneTree>;
+}
+
+function isDeferredLayer(clip: Clip): boolean {
+  return clip.type === 'text' || clip.type === 'caption';
+}
+
+/** Draws one base visual layer. Overlay clips never enter this path. */
+function drawVisualClip(
+  context: CanvasRenderingContext2D,
+  clip: Clip,
+  frame: number,
+  width: number,
+  height: number,
+  layer: LayerContext,
+): boolean {
+  if (clip.type === 'video' || clip.type === 'image') {
+    const media = selectMedia(layer.pool, clip.assetId, layer.quality);
+    if (!media) {
+      return false;
+    }
+    withClipTransform(
+      context,
+      clip,
+      frame,
+      width,
+      height,
+      { x: width / 2, y: height / 2 },
+      () => drawMedia(context, clip, media, width, height),
+    );
+    return true;
+  }
+  if (clip.type === 'text') {
+    withClipTransform(
+      context,
+      clip,
+      frame,
+      width,
+      height,
+      { x: width / 2, y: height / 2 },
+      () => drawText(context, clip, width),
+    );
+    return true;
+  }
+  if (clip.type === 'caption') {
+    withClipTransform(
+      context,
+      clip,
+      frame,
+      width,
+      height,
+      { x: width / 2, y: height * 0.84 },
+      () => drawCaption(context, clip, width, frame),
+    );
+    return true;
+  }
+  if (clip.type === 'shape') {
+    withClipTransform(
+      context,
+      clip,
+      frame,
+      width,
+      height,
+      { x: width / 2, y: height / 2 },
+      () => drawPath(context, clip, width, height),
+    );
+    return true;
+  }
+  if (clip.type === 'composition') {
+    withClipTransform(
+      context,
+      clip,
+      frame,
+      width,
+      height,
+      { x: width / 2, y: height / 2 },
+      () =>
+        drawComposition(
+          context,
+          clip,
+          width,
+          height,
+          layer.compositionTrees?.get(clip.compositionId),
+        ),
+    );
+    return true;
+  }
+  return false;
+}
+
 export function renderFrame(
   context: CanvasRenderingContext2D,
   sequence: Sequence,
@@ -553,6 +630,8 @@ export function renderFrame(
   options: RenderFrameOptions,
 ): RenderStats {
   const { width, height } = context.canvas;
+  const quality = options.mediaQuality ?? options.pool.defaultQuality;
+  const lensQuality = options.lensQuality ?? 'source';
   context.save();
   context.clearRect(0, 0, width, height);
   const background =
@@ -569,90 +648,93 @@ export function renderFrame(
   const missing = new Set<string>();
   let drawn = 0;
 
-  for (const track of tracksInOrder(sequence)) {
-    if (track.hidden || track.kind === 'audio') {
+  const tracks = tracksInOrder(sequence).filter(
+    (track) => !track.hidden && track.kind !== 'audio',
+  );
+
+  const baseLayers: Clip[] = [];
+  const effectsLayers: FxOverlayClip[] = [];
+  for (const track of tracks) {
+    if (track.kind === 'effects') {
+      for (const clip of clipsAtFrame(track, frame)) {
+        if (clip.type === 'fxOverlay') {
+          effectsLayers.push(clip);
+        }
+      }
       continue;
     }
     const clip = clipAtFrame(sequence, track.id, frame);
-    if (!clip) {
+    if (clip) {
+      baseLayers.push(clip);
+    }
+  }
+
+  const paint = (clip: Clip): void => {
+    const painted = drawVisualClip(context, clip, frame, width, height, {
+      pool: options.pool,
+      quality,
+      compositionTrees: options.compositionTrees,
+    });
+    if (painted) {
+      drawn += 1;
+    } else if (clip.type === 'video' || clip.type === 'image') {
+      missing.add(clip.assetId);
+    }
+  };
+
+  // Without an active overlay this is the original single pass, preserving
+  // the existing z-order for projects that never use effects.
+  const hasOverlay = effectsLayers.length > 0;
+  for (const clip of baseLayers) {
+    if (hasOverlay && isDeferredLayer(clip)) {
       continue;
     }
-    const drawnLayer = (() => {
-      if (clip.type === 'video' || clip.type === 'image') {
-        if (!mediaReady(options.pool.media(clip.assetId))) {
-          missing.add(clip.assetId);
-          return false;
-        }
-        withClipTransform(
-          context,
-          clip,
-          frame,
-          width,
-          height,
-          { x: width / 2, y: height / 2 },
-          () => drawMedia(context, clip, options.pool, width, height),
-        );
-        return true;
+    paint(clip);
+  }
+
+  if (hasOverlay) {
+    const zoomLayers = baseLayers.filter((clip) => !isDeferredLayer(clip));
+    const drawLayer = (
+      layerContext: CanvasRenderingContext2D,
+      clip: Clip,
+      layerQuality: MediaQuality,
+    ): boolean =>
+      drawVisualClip(layerContext, clip, frame, width, height, {
+        pool: options.pool,
+        quality: layerQuality,
+        compositionTrees: options.compositionTrees,
+      });
+
+    const paintBackdrop = (backdropContext: CanvasRenderingContext2D): void => {
+      if (background) {
+        backdropContext.fillStyle = background;
+        backdropContext.fillRect(0, 0, width, height);
+      } else {
+        drawCheckerboard(backdropContext, width, height);
       }
-      if (clip.type === 'text') {
-        withClipTransform(
-          context,
-          clip,
-          frame,
-          width,
-          height,
-          { x: width / 2, y: height / 2 },
-          () => drawText(context, clip, width),
-        );
-        return true;
+    };
+
+    const overlayOptions = {
+      width,
+      height,
+      lensQuality,
+      layers: zoomLayers,
+      drawLayer,
+      paintBackdrop,
+    };
+
+    for (const overlay of effectsLayers) {
+      if (drawOverlay(context, overlay, frame, sequence, overlayOptions)) {
+        drawn += 1;
       }
-      if (clip.type === 'caption') {
-        withClipTransform(
-          context,
-          clip,
-          frame,
-          width,
-          height,
-          { x: width / 2, y: height * 0.84 },
-          () => drawCaption(context, clip, width, frame),
-        );
-        return true;
+    }
+
+    // Effects sit above footage but below text and captions, so deferred
+    // layers are painted last at their normal scale.
+    for (const clip of baseLayers) {
+      if (isDeferredLayer(clip)) {
+        paint(clip);
       }
-      if (clip.type === 'shape') {
-        withClipTransform(
-          context,
-          clip,
-          frame,
-          width,
-          height,
-          { x: width / 2, y: height / 2 },
-          () => drawPath(context, clip, width, height),
-        );
-        return true;
-      }
-      if (clip.type === 'composition') {
-        withClipTransform(
-          context,
-          clip,
-          frame,
-          width,
-          height,
-          { x: width / 2, y: height / 2 },
-          () =>
-            drawComposition(
-              context,
-              clip,
-              width,
-              height,
-              options.compositionTrees?.get(clip.compositionId),
-            ),
-        );
-        return true;
-      }
-      return false;
-    })();
-    if (drawnLayer) {
-      drawn += 1;
     }
   }
 

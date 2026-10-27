@@ -106,7 +106,7 @@ async function seekFrameMedia(
     if (!clip || clip.type !== 'video') {
       continue;
     }
-    const video = pool.video(clip.assetId);
+    const video = pool.video(clip.assetId, 'source');
     if (!video) {
       continue;
     }
@@ -155,7 +155,7 @@ export async function renderExportFrames({
     throw new Error('The renderer could not create an export canvas.');
   }
 
-  const pool = new MediaPool(assets);
+  const pool = new MediaPool(assets, { defaultQuality: 'source' });
   const limit = Math.max(1, Math.min(16, Math.floor(batchSize)));
   try {
     const ids = visualAssetIds(sequence, result.startFrame, result.endFrame);
@@ -178,7 +178,11 @@ export async function renderExportFrames({
         throw new ExportCancelledError();
       }
       await seekFrameMedia(sequence, frame, pool, isCancelled);
-      renderFrame(context, sequence, frame, { pool, compositionTrees });
+      renderFrame(context, sequence, frame, {
+        pool,
+        compositionTrees,
+        mediaQuality: 'source',
+      });
       const blob = await canvasToPng(canvas);
       batch.push({
         index: frame - result.startFrame,
@@ -214,12 +218,16 @@ export async function renderSingleFrame({
     throw new Error('The renderer could not create a still-frame canvas.');
   }
 
-  const pool = new MediaPool(assets);
+  const pool = new MediaPool(assets, { defaultQuality: 'source' });
   try {
     const ids = visualAssetIds(sequence, frame, frame + 1);
     await waitForMedia(pool, ids, () => false);
     await seekFrameMedia(sequence, frame, pool, () => false);
-    renderFrame(context, sequence, frame, { pool, compositionTrees });
+    renderFrame(context, sequence, frame, {
+      pool,
+      compositionTrees,
+      mediaQuality: 'source',
+    });
 
     const output = canvas;
     const width = Math.max(

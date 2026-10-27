@@ -16,7 +16,11 @@ import {
   renderFrame,
   MediaPool,
 } from '@kerf/canvas';
-import { sequenceDurationFrames, visualTracksInOrder } from '@kerf/engine';
+import {
+  clipsAtFrame,
+  sequenceDurationFrames,
+  visualTracksInOrder,
+} from '@kerf/engine';
 import { IconButton, cn } from '@kerf/ui';
 import { useStudio, useStudioStoreApi } from '../state/StudioProvider';
 import { selectSelectedClip } from '../state/selectors';
@@ -29,6 +33,17 @@ function clampPlaybackRate(rate: number): number {
   return Math.max(0.0625, Math.min(16, rate));
 }
 
+/** True when a magnifier lens is active, which needs source-quality media. */
+function lensActive(sequence: Sequence, frame: number): boolean {
+  return sequence.tracks.some(
+    (track) =>
+      track.kind === 'effects' &&
+      clipsAtFrame(track, frame).some(
+        (clip) => clip.type === 'fxOverlay' && clip.props.kind === 'zoom',
+      ),
+  );
+}
+
 function syncVideos(
   sequence: Sequence,
   frame: number,
@@ -38,6 +53,7 @@ function syncVideos(
   force = false,
 ): void {
   const active = new Set<string>();
+  const lensSource = lensActive(sequence, frame);
   for (const track of visualTracksInOrder(sequence)) {
     const clip = clipAtFrame(sequence, track.id, frame);
     if (!clip || clip.type !== 'video') {
@@ -84,13 +100,30 @@ function syncVideos(
         void video.play().catch(() => undefined);
       });
     }
+
+    const source = lensSource ? pool.ensure(clip.assetId, 'source') : null;
+    if (source && source !== video) {
+      source.muted = true;
+      source.playbackRate = clampPlaybackRate(clip.speed);
+      if (
+        force ||
+        clipChanged ||
+        Math.abs(source.currentTime - seconds) > HARD_SEEK_SECONDS
+      ) {
+        source.currentTime = seconds;
+      }
+      if (source.paused) {
+        void source.play().catch(() => undefined);
+      }
+    }
   }
   for (const track of visualTracksInOrder(sequence)) {
     for (const clip of track.clips) {
       if (clip.type !== 'video' || active.has(clip.assetId)) {
         continue;
       }
-      pool.video(clip.assetId)?.pause();
+      pool.video(clip.assetId, 'proxy')?.pause();
+      pool.video(clip.assetId, 'source')?.pause();
     }
   }
 }
@@ -116,6 +149,16 @@ function seekVideos(sequence: Sequence, frame: number, pool: MediaPool): void {
     if (Math.abs(video.currentTime - seconds) > 0.02) {
       video.currentTime = seconds;
     }
+    if (lensActive(sequence, frame)) {
+      const source = pool.ensure(clip.assetId, 'source');
+      if (source && source !== video) {
+        source.muted = true;
+        source.playbackRate = clampPlaybackRate(clip.speed);
+        if (Math.abs(source.currentTime - seconds) > 0.02) {
+          source.currentTime = seconds;
+        }
+      }
+    }
   }
 }
 
@@ -128,7 +171,8 @@ function pauseVideos(sequence: Sequence, pool: MediaPool): void {
     ),
   );
   for (const id of ids) {
-    pool.video(id)?.pause();
+    pool.video(id, 'proxy')?.pause();
+    pool.video(id, 'source')?.pause();
   }
 }
 
@@ -202,6 +246,8 @@ export function Preview() {
       pool,
       selectedClipId: selection.clipIds[0] ?? null,
       compositionTrees: treeMap,
+      mediaQuality: 'proxy',
+      lensQuality: 'source',
     });
     setMissingMedia(stats.missingAssets.length > 0);
   }, [mediaRevision, playhead, pool, selection.clipIds, sequence, treeMap]);

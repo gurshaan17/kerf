@@ -55,6 +55,7 @@ function fakeContext(): CanvasRenderingContext2D & { calls: string[] } {
   return {
     canvas: { width: 1920, height: 1080 },
     calls,
+    clip: () => calls.push('clip'),
     save: () => calls.push('save'),
     restore: () => calls.push('restore'),
     clearRect: () => calls.push('clearRect'),
@@ -85,11 +86,31 @@ function fakeContext(): CanvasRenderingContext2D & { calls: string[] } {
 
 function fakePool(): MediaPool {
   return {
+    defaultQuality: 'proxy',
     media: () => null,
     asset: () => undefined,
     video: () => null,
     image: () => null,
     isReady: () => false,
+    ensure: () => null,
+  } as unknown as MediaPool;
+}
+
+function recordingPool(
+  media: HTMLVideoElement | HTMLImageElement | null,
+  qualities: string[],
+): MediaPool {
+  return {
+    defaultQuality: 'proxy',
+    media: (_assetId: string, quality: string) => {
+      qualities.push(quality);
+      return media;
+    },
+    asset: () => undefined,
+    video: () => null,
+    image: () => null,
+    isReady: () => true,
+    ensure: () => null,
   } as unknown as MediaPool;
 }
 
@@ -263,5 +284,176 @@ describe('canvas compositor helpers', () => {
     expect(context.calls).toContain('ellipse');
     expect(context.calls).toContain('text:Hello kerf');
     expect(context.calls.filter((call) => call === 'save')).toHaveLength(4);
+  });
+
+  it('defers text until after effects so overlays never cover captions', () => {
+    const project = createProject({ name: 'Order', now: 1 });
+    const videoTrack = createTrack({ kind: 'video', order: 0 });
+    const textTrack = createTrack({ kind: 'overlay', order: 1 });
+    const effectsTrack = createTrack({ kind: 'effects', order: 2 });
+    const text = clipSchema.parse({
+      id: newId('clip'),
+      type: 'text',
+      trackId: textTrack.id,
+      startFrame: 0,
+      durationFrames: 50,
+      text: 'Hello',
+    });
+    const overlay = clipSchema.parse({
+      id: newId('clip'),
+      type: 'fxOverlay',
+      trackId: effectsTrack.id,
+      startFrame: 0,
+      durationFrames: 50,
+      props: {
+        kind: 'callout',
+        region: { x: 0.2, y: 0.2, w: 0.4, h: 0.4 },
+        text: 'Overlay',
+      },
+    });
+    const sequence = createSequence({
+      name: 'Order',
+      width: 1920,
+      height: 1080,
+      tracks: [
+        videoTrack,
+        { ...textTrack, clips: [text] },
+        { ...effectsTrack, clips: [overlay] },
+      ],
+    });
+    const context = fakeContext();
+
+    renderFrame(context, sequence, 5, {
+      pool: fakePool(),
+      background: project.sequence.style.background,
+    });
+
+    const overlayText = context.calls.indexOf('text:Overlay');
+    const plainText = context.calls.indexOf('text:Hello');
+    expect(overlayText).toBeGreaterThanOrEqual(0);
+    expect(plainText).toBeGreaterThan(overlayText);
+  });
+
+  it('draws the base pass at the requested quality and the lens at source', () => {
+    const videoTrack = createTrack({ kind: 'video', order: 0 });
+    const effectsTrack = createTrack({ kind: 'effects', order: 1 });
+    const clip = clipSchema.parse({
+      id: newId('clip'),
+      type: 'video',
+      trackId: videoTrack.id,
+      assetId: newId('asset'),
+      startFrame: 0,
+      durationFrames: 50,
+      sourceInFrame: 0,
+    });
+    const overlay = clipSchema.parse({
+      id: newId('clip'),
+      type: 'fxOverlay',
+      trackId: effectsTrack.id,
+      startFrame: 0,
+      durationFrames: 50,
+      props: {
+        kind: 'zoom',
+        region: { x: 0.3, y: 0.3, w: 0.4, h: 0.4 },
+        zoom: 2,
+      },
+    });
+    const sequence = createSequence({
+      name: 'Quality',
+      width: 1920,
+      height: 1080,
+      tracks: [
+        { ...videoTrack, clips: [clip] },
+        { ...effectsTrack, clips: [overlay] },
+      ],
+    });
+    const media = {
+      readyState: 2,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as unknown as HTMLVideoElement;
+    const qualities: string[] = [];
+    const context = fakeContext();
+
+    renderFrame(context, sequence, 5, {
+      pool: recordingPool(media, qualities),
+      mediaQuality: 'proxy',
+      lensQuality: 'source',
+    });
+
+    expect(qualities).toContain('proxy');
+    expect(qualities).toContain('source');
+    expect(context.calls).toContain('clip');
+  });
+
+  it('falls back to the proxy slot until lens source media is ready', () => {
+    const videoTrack = createTrack({ kind: 'video', order: 0 });
+    const effectsTrack = createTrack({ kind: 'effects', order: 1 });
+    const clip = clipSchema.parse({
+      id: newId('clip'),
+      type: 'video',
+      trackId: videoTrack.id,
+      assetId: newId('asset'),
+      startFrame: 0,
+      durationFrames: 50,
+      sourceInFrame: 0,
+    });
+    const overlay = clipSchema.parse({
+      id: newId('clip'),
+      type: 'fxOverlay',
+      trackId: effectsTrack.id,
+      startFrame: 0,
+      durationFrames: 50,
+      props: {
+        kind: 'zoom',
+        region: { x: 0.3, y: 0.3, w: 0.4, h: 0.4 },
+        zoom: 2,
+      },
+    });
+    const sequence = createSequence({
+      name: 'Fallback',
+      width: 1920,
+      height: 1080,
+      tracks: [
+        { ...videoTrack, clips: [clip] },
+        { ...effectsTrack, clips: [overlay] },
+      ],
+    });
+    const readyProxy = {
+      readyState: 2,
+      videoWidth: 960,
+      videoHeight: 540,
+    } as unknown as HTMLVideoElement;
+    const pendingSource = {
+      readyState: 0,
+      videoWidth: 0,
+      videoHeight: 0,
+    } as unknown as HTMLVideoElement;
+    const qualities: string[] = [];
+    const pool = {
+      defaultQuality: 'proxy',
+      media: (_assetId: string, quality: string) => {
+        qualities.push(quality);
+        return quality === 'source' ? pendingSource : readyProxy;
+      },
+      asset: () => undefined,
+      video: () => null,
+      image: () => null,
+      isReady: () => false,
+      ensure: () => null,
+    } as unknown as MediaPool;
+    const context = fakeContext();
+
+    const stats = renderFrame(context, sequence, 5, {
+      pool,
+      mediaQuality: 'proxy',
+      lensQuality: 'source',
+    });
+
+    expect(stats.missingAssets).toEqual([]);
+    expect(qualities).toContain('source');
+    // The lens asked for source, then fell back to the ready proxy slot.
+    expect(qualities[qualities.length - 1]).toBe('proxy');
+    expect(context.calls).toContain('drawImage');
   });
 });
