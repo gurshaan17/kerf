@@ -33,6 +33,10 @@ describe('track compatibility', () => {
     expect(isClipCompatible('audio', 'audio')).toBe(true);
     expect(isClipCompatible('caption', 'caption')).toBe(true);
     expect(isClipCompatible('overlay', 'caption')).toBe(true);
+    expect(isClipCompatible('effects', 'fxOverlay')).toBe(true);
+    expect(isClipCompatible('overlay', 'fxOverlay')).toBe(false);
+    expect(isClipCompatible('video', 'fxOverlay')).toBe(false);
+    expect(compatibleTrackKinds('fxOverlay')).toEqual(['effects']);
   });
 
   it('lists every track kind that accepts a clip type', () => {

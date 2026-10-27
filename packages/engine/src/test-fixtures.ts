@@ -2,7 +2,10 @@ import type {
   AudioClip,
   Clip,
   Effect,
+  FxOverlayClip,
   Mask,
+  NormalizedRegion,
+  OverlayKind,
   Sequence,
   TimeMapPoint,
   Track,
@@ -82,6 +85,37 @@ export function makeTextClip(
     type: 'text',
     text: 'Title',
   });
+}
+
+interface MakeOverlayInput {
+  trackId?: string;
+  startFrame?: number;
+  durationFrames?: number;
+  linkedItemId?: string | null;
+  kind?: OverlayKind;
+  region?: NormalizedRegion;
+  props?: Record<string, unknown>;
+}
+
+export function makeFxOverlayClip(input: MakeOverlayInput = {}): FxOverlayClip {
+  const clip = clipSchema.parse({
+    id: newId('clip'),
+    trackId: input.trackId ?? newId('track'),
+    startFrame: input.startFrame ?? 0,
+    durationFrames: input.durationFrames ?? 48,
+    type: 'fxOverlay',
+    linkedItemId: input.linkedItemId ?? null,
+    props: {
+      kind: input.kind ?? 'blur',
+      region: input.region ?? { x: 0.1, y: 0.1, w: 0.4, h: 0.4 },
+      ...input.props,
+    },
+  });
+
+  if (clip.type !== 'fxOverlay') {
+    throw new Error('expected an effect overlay');
+  }
+  return clip;
 }
 
 export function makeTrack(

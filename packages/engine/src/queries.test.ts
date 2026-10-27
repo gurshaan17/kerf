@@ -6,6 +6,7 @@ import {
   clipAtFrame,
   clipEnd,
   clipStart,
+  clipsAtFrame,
   clipsForAsset,
   clipsInRange,
   clipsOnTrack,
@@ -17,11 +18,13 @@ import {
   requireClip,
   requireTrack,
   sequenceDurationFrames,
+  timelineDurationFrames,
   tracksInOrder,
   visualTracksInOrder,
 } from './queries';
 import {
   makeAudioClip,
+  makeFxOverlayClip,
   makeSequence,
   makeTrack,
   makeVideoClip,
@@ -135,6 +138,35 @@ describe('sequence queries', () => {
     expect(clipEnd(lateClip)).toBe(72);
     expect(sequenceDurationFrames(sequence)).toBe(72);
     expect(nextTrackOrder(sequence)).toBe(3);
+  });
+
+  it('separates export duration from timeline extent and stacks overlays', () => {
+    const effectsTrack = makeTrack('effects', 0);
+    const early = makeFxOverlayClip({
+      trackId: effectsTrack.id,
+      startFrame: 0,
+      durationFrames: 24,
+    });
+    const late = makeFxOverlayClip({
+      trackId: effectsTrack.id,
+      startFrame: 12,
+      durationFrames: 24,
+    });
+    const trailing = makeFxOverlayClip({
+      trackId: effectsTrack.id,
+      startFrame: 100,
+      durationFrames: 50,
+    });
+    const populatedEffects = withClips(effectsTrack, [early, late, trailing]);
+    const withOverlays = makeSequence([populatedEffects, populatedVideo]);
+
+    expect(sequenceDurationFrames(withOverlays)).toBe(72);
+    expect(timelineDurationFrames(withOverlays)).toBe(150);
+    expect(clipsAtFrame(populatedEffects, 20).map((clip) => clip.id)).toEqual([
+      early.id,
+      late.id,
+    ]);
+    expect(clipsAtFrame(populatedEffects, 80)).toEqual([]);
   });
 
   it('finds every clip that uses an asset', () => {

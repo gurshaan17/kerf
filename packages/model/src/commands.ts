@@ -104,6 +104,7 @@ export const clipUpdateCommandSchema = z.object({
   type: z.literal('clip.update'),
   clipId: idSchema('clip'),
   patch: clipPatchSchema,
+  index: z.number().int().nonnegative().optional(),
 });
 
 export const clipMoveCommandSchema = z.object({
@@ -111,6 +112,7 @@ export const clipMoveCommandSchema = z.object({
   clipId: idSchema('clip'),
   trackId: idSchema('track').optional(),
   startFrame: z.number().int().nonnegative(),
+  index: z.number().int().nonnegative().optional(),
 });
 
 export const clipTrimCommandSchema = z.object({

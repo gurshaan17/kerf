@@ -13,6 +13,7 @@ import { applyCommand } from './apply';
 import type { ApplyContext, ApplyResult } from './apply';
 import {
   makeAudioClip,
+  makeFxOverlayClip,
   makeSequence,
   makeTextClip,
   makeTrack,
@@ -474,6 +475,40 @@ function randomInt(
 ): number {
   return minimum + Math.floor(random() * (maximum - minimum + 1));
 }
+
+describe('overlay-aware inverses', () => {
+  it('restores a removed source clip and its linked overlays', () => {
+    const effectsTrack = makeTrack('effects', 0);
+    const videoTrack = makeTrack('video', 1);
+    const source = makeVideoClip({
+      trackId: videoTrack.id,
+      startFrame: 0,
+      durationFrames: 20,
+    });
+    const overlay = makeFxOverlayClip({
+      trackId: effectsTrack.id,
+      startFrame: 0,
+      durationFrames: 20,
+      linkedItemId: source.id,
+    });
+    const sequence = makeSequence([
+      withClips(effectsTrack, [overlay]),
+      withClips(videoTrack, [source]),
+    ]);
+
+    const result = applyCommand(sequence, {
+      type: 'clip.remove',
+      clipId: source.id,
+    });
+    expect(result.inverse?.type).toBe('batch');
+    if (!result.inverse) {
+      throw new Error('expected an inverse');
+    }
+    expect(applyCommand(result.sequence, result.inverse).sequence).toEqual(
+      sequence,
+    );
+  });
+});
 
 describe('randomized inverse properties', () => {
   it('keeps insert and remove reversible across a changing track', () => {

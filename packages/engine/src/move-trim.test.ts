@@ -72,7 +72,7 @@ describe('clip.move', () => {
     });
     expect(result.sequence.tracks[0]?.clips).toEqual([]);
     expect(result.sequence.tracks[1]?.clips[0]?.startFrame).toBe(32);
-    expect(result.inverse?.type).toBe('batch');
+    expect(result.inverse?.type).toBe('clip.move');
 
     if (!result.inverse) {
       throw new Error('expected an inverse');

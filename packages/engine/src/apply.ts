@@ -15,6 +15,7 @@ import type {
   StyleConfig,
   TimeMapPoint,
   Track,
+  TrackId,
   TrackPatch,
 } from '@kerf/model';
 import {
@@ -34,6 +35,15 @@ import {
 } from '@kerf/model';
 import { assertClipCompatible } from './compatibility';
 import { EngineError } from './errors';
+import {
+  clampOverlayTransitions,
+  cloneLinkedOverlays,
+  relinkAfterSplit,
+  removeLinkedOverlays,
+  resolveOverlayPropsPatch,
+  shiftLinkedOverlays,
+} from './links';
+import type { OverlayLocation } from './links';
 import {
   findClip,
   findOverlap,
@@ -213,6 +223,13 @@ function assertVisualClip(clip: Clip, feature: string): void {
       'invalid-command',
       `An audio clip does not support ${feature}.`,
       'Add the edit to a video, image, text or shape clip instead.',
+    );
+  }
+  if (clip.type === 'fxOverlay') {
+    throw new EngineError(
+      'invalid-command',
+      `An effect overlay does not support ${feature}.`,
+      'Edit the overlay from the Effects panel instead.',
     );
   }
 }
@@ -399,6 +416,9 @@ function assertNoOverlap(
   clip: Clip,
   ignoreClipId?: string,
 ): void {
+  if (track.kind === 'effects') {
+    return;
+  }
   const overlap = findOverlap(
     track,
     clip.startFrame,
@@ -503,7 +523,13 @@ function applyInsert(
   const track = requireTrack(sequence, command.clip.trackId);
   assertTrackUnlocked(track);
 
-  const clip = parseClip(command.clip);
+  let clip = parseClip(command.clip);
+  if (clip.type === 'fxOverlay') {
+    const props = clampOverlayTransitions(clip.props, clip.durationFrames);
+    if (props !== clip.props) {
+      clip = parseClip({ ...clip, props });
+    }
+  }
   if (findClip(sequence, clip.id)) {
     throw new EngineError(
       'invalid-command',
@@ -544,7 +570,8 @@ function applyRemove(
   const location = requireClip(sequence, command.clipId);
   assertTrackUnlocked(location.track);
 
-  const tracks = sequence.tracks.map((candidate) =>
+  const cascade = removeLinkedOverlays(sequence.tracks, location.clip.id);
+  const tracks = cascade.tracks.map((candidate) =>
     candidate.id === location.track.id
       ? {
           ...candidate,
@@ -553,12 +580,73 @@ function applyRemove(
       : candidate,
   );
 
+  const inserts: Array<{ trackId: TrackId; index: number; clip: Clip }> = [
+    {
+      trackId: location.track.id,
+      index: location.index,
+      clip: location.clip,
+    },
+    ...cascade.removed.map((entry) => ({
+      trackId: entry.trackId,
+      index: entry.index,
+      clip: entry.clip,
+    })),
+  ];
+  const trackOrder = new Map(
+    sequence.tracks.map((candidate, index) => [candidate.id, index]),
+  );
+  inserts.sort(
+    (left, right) =>
+      (trackOrder.get(left.trackId) ?? 0) -
+        (trackOrder.get(right.trackId) ?? 0) || left.index - right.index,
+  );
+
+  if (inserts.length === 1) {
+    return {
+      sequence: withTracks(sequence, tracks),
+      inverse: {
+        type: 'clip.insert',
+        clip: location.clip,
+        index: location.index,
+      },
+    };
+  }
+
+  const lockedOverlayTracks = [
+    ...new Set(cascade.removed.map((entry) => entry.trackId)),
+  ].filter(
+    (trackId) =>
+      sequence.tracks.find((candidate) => candidate.id === trackId)?.locked,
+  );
+  const inverseCommands: EditCommand[] = [];
+  for (const trackId of lockedOverlayTracks) {
+    inverseCommands.push({
+      type: 'track.update',
+      trackId,
+      patch: { locked: false },
+    });
+  }
+  for (const entry of inserts) {
+    inverseCommands.push({
+      type: 'clip.insert',
+      clip: entry.clip,
+      index: entry.index,
+    });
+  }
+  for (const trackId of lockedOverlayTracks) {
+    inverseCommands.push({
+      type: 'track.update',
+      trackId,
+      patch: { locked: true },
+    });
+  }
+
   return {
     sequence: withTracks(sequence, tracks),
     inverse: {
-      type: 'clip.insert',
-      clip: location.clip,
-      index: location.index,
+      type: 'batch',
+      label: 'Undo remove',
+      commands: inverseCommands,
     },
   };
 }
@@ -573,22 +661,50 @@ function applyUpdate(
   const patch = compactPatch(command.patch);
   assertPatchKeys(location.clip, patch);
 
-  const updated = parseClip({ ...location.clip, ...patch });
+  const effectivePatch: ClipPatch =
+    location.clip.type === 'fxOverlay'
+      ? {
+          ...patch,
+          props: resolveOverlayPropsPatch(
+            location.clip.props,
+            patch.props ?? {},
+            patch.durationFrames ?? location.clip.durationFrames,
+          ),
+        }
+      : patch;
+
+  let updated = parseClip({ ...location.clip, ...effectivePatch });
+  if (updated.type === 'fxOverlay') {
+    const props = clampOverlayTransitions(
+      updated.props,
+      updated.durationFrames,
+    );
+    if (props !== updated.props) {
+      updated = parseClip({ ...updated, props });
+    }
+  }
+
+  const shift = updated.startFrame - location.clip.startFrame;
   const trackChanged = updated.trackId !== location.track.id;
+  const inversePatch = capturePreviousPatch(location.clip, effectivePatch);
 
   if (!trackChanged) {
     assertClipCompatible(location.track, updated);
     assertNoOverlap(location.track, updated, updated.id);
 
-    const tracks = sequence.tracks.map((candidate) =>
-      candidate.id === location.track.id
-        ? {
-            ...candidate,
-            clips: candidate.clips.map((clip) =>
-              clip.id === updated.id ? updated : clip,
-            ),
-          }
-        : candidate,
+    const tracks = shiftLinkedOverlays(
+      sequence.tracks.map((candidate) =>
+        candidate.id === location.track.id
+          ? {
+              ...candidate,
+              clips: candidate.clips.map((clip) =>
+                clip.id === updated.id ? updated : clip,
+              ),
+            }
+          : candidate,
+      ),
+      updated.id,
+      shift,
     );
 
     return {
@@ -596,7 +712,7 @@ function applyUpdate(
       inverse: {
         type: 'clip.update',
         clipId: updated.id,
-        patch: capturePreviousPatch(location.clip, patch),
+        patch: inversePatch,
       },
     };
   }
@@ -606,40 +722,41 @@ function applyUpdate(
   assertClipCompatible(target, updated);
   assertNoOverlap(target, updated, updated.id);
 
-  const insertionIndex = Math.min(location.index, target.clips.length);
-  const tracks = sequence.tracks.map((candidate) => {
-    if (candidate.id === location.track.id) {
-      return {
-        ...candidate,
-        clips: candidate.clips.filter((clip) => clip.id !== location.clip.id),
-      };
-    }
-    if (candidate.id === target.id) {
-      return {
-        ...candidate,
-        clips: [
-          ...candidate.clips.slice(0, insertionIndex),
-          updated,
-          ...candidate.clips.slice(insertionIndex),
-        ],
-      };
-    }
-    return candidate;
-  });
+  const insertionIndex = Math.min(
+    command.index ?? location.index,
+    target.clips.length,
+  );
+  const tracks = shiftLinkedOverlays(
+    sequence.tracks.map((candidate) => {
+      if (candidate.id === location.track.id) {
+        return {
+          ...candidate,
+          clips: candidate.clips.filter((clip) => clip.id !== location.clip.id),
+        };
+      }
+      if (candidate.id === target.id) {
+        return {
+          ...candidate,
+          clips: [
+            ...candidate.clips.slice(0, insertionIndex),
+            updated,
+            ...candidate.clips.slice(insertionIndex),
+          ],
+        };
+      }
+      return candidate;
+    }),
+    updated.id,
+    shift,
+  );
 
   return {
     sequence: withTracks(sequence, tracks),
     inverse: {
-      type: 'batch',
-      label: 'Undo clip move',
-      commands: [
-        { type: 'clip.remove', clipId: updated.id },
-        {
-          type: 'clip.insert',
-          clip: location.clip,
-          index: location.index,
-        },
-      ],
+      type: 'clip.update',
+      clipId: updated.id,
+      patch: inversePatch,
+      index: location.index,
     },
   };
 }
@@ -659,21 +776,19 @@ function applyMove(
       trackId: targetTrackId,
       startFrame: command.startFrame,
     },
+    index: command.index,
   });
 
-  if (!trackChanged && result.inverse?.type === 'clip.update') {
-    return {
-      sequence: result.sequence,
-      inverse: {
-        type: 'clip.move',
-        clipId: command.clipId,
-        trackId: location.track.id,
-        startFrame: location.clip.startFrame,
-      },
-    };
-  }
-
-  return result;
+  return {
+    sequence: result.sequence,
+    inverse: {
+      type: 'clip.move',
+      clipId: command.clipId,
+      trackId: location.track.id,
+      startFrame: location.clip.startFrame,
+      ...(trackChanged ? { index: location.index } : {}),
+    },
+  };
 }
 
 function trimTimeMapIn(
@@ -788,6 +903,10 @@ function applyTrim(
     }
   }
 
+  if (clip.type === 'fxOverlay') {
+    changes.props = clampOverlayTransitions(clip.props, newDuration);
+  }
+
   const updated = parseClip({ ...clip, ...changes });
   assertSourceBounds(updated, context);
   assertNoOverlap(location.track, updated, clip.id);
@@ -803,17 +922,26 @@ function applyTrim(
       : candidate,
   );
 
-  const inversePatch: ClipPatch = isMediaClip(clip)
-    ? {
-        startFrame: clip.startFrame,
-        durationFrames: clip.durationFrames,
-        sourceInFrame: clip.sourceInFrame,
-        timeMap: clip.timeMap,
-      }
-    : {
-        startFrame: clip.startFrame,
-        durationFrames: clip.durationFrames,
-      };
+  let inversePatch: ClipPatch;
+  if (clip.type === 'fxOverlay') {
+    inversePatch = {
+      startFrame: clip.startFrame,
+      durationFrames: clip.durationFrames,
+      props: clip.props,
+    };
+  } else if (isMediaClip(clip)) {
+    inversePatch = {
+      startFrame: clip.startFrame,
+      durationFrames: clip.durationFrames,
+      sourceInFrame: clip.sourceInFrame,
+      timeMap: clip.timeMap,
+    };
+  } else {
+    inversePatch = {
+      startFrame: clip.startFrame,
+      durationFrames: clip.durationFrames,
+    };
+  }
 
   return {
     sequence: withTracks(sequence, tracks),
@@ -876,39 +1004,85 @@ function applySplit(
     }
   }
 
+  if (clip.type === 'fxOverlay') {
+    leftChanges.props = clampOverlayTransitions(clip.props, leftDuration);
+    rightChanges.props = clampOverlayTransitions(clip.props, rightDuration);
+  }
+
   const left = parseClip({ ...clip, ...leftChanges });
   const right = parseClip({ ...clip, ...rightChanges });
-  const tracks = sequence.tracks.map((candidate) =>
-    candidate.id === location.track.id
-      ? {
-          ...candidate,
-          clips: candidate.clips.flatMap((candidateClip) =>
-            candidateClip.id === clip.id ? [left, right] : [candidateClip],
-          ),
-        }
-      : candidate,
+  const tracks = relinkAfterSplit(
+    sequence.tracks.map((candidate) =>
+      candidate.id === location.track.id
+        ? {
+            ...candidate,
+            clips: candidate.clips.flatMap((candidateClip) =>
+              candidateClip.id === clip.id ? [left, right] : [candidateClip],
+            ),
+          }
+        : candidate,
+    ),
+    clip.id,
+    right.id,
+    splitFrame,
   );
 
   const inversePatch: ClipPatch = { durationFrames: clip.durationFrames };
+  if (clip.type === 'fxOverlay') {
+    inversePatch.props = clip.props;
+  }
   if (isMediaClip(clip)) {
     inversePatch.sourceInFrame = clip.sourceInFrame;
     inversePatch.timeMap = clip.timeMap;
     inversePatch.fade = clip.fade;
   }
 
+  const relinkedIds = new Set(tracks.relinked.map((overlay) => overlay.id));
+  const lockedEffectsTracks = sequence.tracks
+    .filter(
+      (candidate) =>
+        candidate.locked &&
+        candidate.kind === 'effects' &&
+        candidate.clips.some((candidateClip) =>
+          relinkedIds.has(candidateClip.id),
+        ),
+    )
+    .map((candidate) => candidate.id);
+  const inverseCommands: EditCommand[] = [];
+  for (const trackId of lockedEffectsTracks) {
+    inverseCommands.push({
+      type: 'track.update',
+      trackId,
+      patch: { locked: false },
+    });
+  }
+  for (const overlay of tracks.relinked) {
+    inverseCommands.push({
+      type: 'clip.update',
+      clipId: overlay.id,
+      patch: { linkedItemId: clip.id },
+    });
+  }
+  for (const trackId of lockedEffectsTracks) {
+    inverseCommands.push({
+      type: 'track.update',
+      trackId,
+      patch: { locked: true },
+    });
+  }
+  inverseCommands.push({ type: 'clip.remove', clipId: right.id });
+  inverseCommands.push({
+    type: 'clip.update',
+    clipId: left.id,
+    patch: inversePatch,
+  });
+
   return {
-    sequence: withTracks(sequence, tracks),
+    sequence: withTracks(sequence, tracks.tracks),
     inverse: {
       type: 'batch',
       label: 'Undo split',
-      commands: [
-        { type: 'clip.remove', clipId: right.id },
-        {
-          type: 'clip.update',
-          clipId: left.id,
-          patch: inversePatch,
-        },
-      ],
+      commands: inverseCommands,
     },
   };
 }
@@ -946,9 +1120,18 @@ function applyDuplicate(
       ? { ...candidate, clips: [...candidate.clips, duplicate] }
       : candidate,
   );
+  const followed =
+    duplicate.type === 'fxOverlay'
+      ? tracks
+      : cloneLinkedOverlays(
+          tracks,
+          location.clip.id,
+          duplicate.id,
+          duplicate.startFrame - location.clip.startFrame,
+        ).tracks;
 
   return {
-    sequence: withTracks(sequence, tracks),
+    sequence: withTracks(sequence, followed),
     inverse: { type: 'clip.remove', clipId: duplicate.id },
   };
 }
@@ -1578,12 +1761,89 @@ function applyTrackRemove(
   const index = sequence.tracks.findIndex(
     (candidate) => candidate.id === track.id,
   );
+
+  const sourceIds = new Set(track.clips.map((clip) => clip.id));
+  const removed: OverlayLocation[] = [];
+  for (const candidate of sequence.tracks) {
+    if (candidate.id === track.id) {
+      continue;
+    }
+    candidate.clips.forEach((clip, clipIndex) => {
+      if (
+        clip.type === 'fxOverlay' &&
+        clip.linkedItemId !== null &&
+        sourceIds.has(clip.linkedItemId)
+      ) {
+        removed.push({
+          trackId: candidate.id,
+          index: clipIndex,
+          clip,
+        });
+      }
+    });
+  }
+
+  const removedIds = new Set(removed.map((entry) => entry.clip.id));
+  const remainingTracks = sequence.tracks
+    .filter((candidate) => candidate.id !== track.id)
+    .map((candidate) => {
+      const clips = candidate.clips.filter((clip) => !removedIds.has(clip.id));
+      return clips.length === candidate.clips.length
+        ? candidate
+        : { ...candidate, clips };
+    });
+  const trackOrder = new Map(
+    sequence.tracks.map((candidate, order) => [candidate.id, order]),
+  );
+  removed.sort(
+    (left, right) =>
+      (trackOrder.get(left.trackId) ?? 0) -
+        (trackOrder.get(right.trackId) ?? 0) || left.index - right.index,
+  );
+
+  if (removed.length === 0) {
+    return {
+      sequence: withTracks(sequence, remainingTracks),
+      inverse: { type: 'track.add', track, index },
+    };
+  }
+
+  const lockedOverlayTracks = [
+    ...new Set(removed.map((entry) => entry.trackId)),
+  ].filter(
+    (trackId) =>
+      sequence.tracks.find((candidate) => candidate.id === trackId)?.locked,
+  );
+  const inverseCommands: EditCommand[] = [{ type: 'track.add', track, index }];
+  for (const trackId of lockedOverlayTracks) {
+    inverseCommands.push({
+      type: 'track.update',
+      trackId,
+      patch: { locked: false },
+    });
+  }
+  for (const entry of removed) {
+    inverseCommands.push({
+      type: 'clip.insert',
+      clip: entry.clip,
+      index: entry.index,
+    });
+  }
+  for (const trackId of lockedOverlayTracks) {
+    inverseCommands.push({
+      type: 'track.update',
+      trackId,
+      patch: { locked: true },
+    });
+  }
+
   return {
-    sequence: withTracks(
-      sequence,
-      sequence.tracks.filter((candidate) => candidate.id !== track.id),
-    ),
-    inverse: { type: 'track.add', track, index },
+    sequence: withTracks(sequence, remainingTracks),
+    inverse: {
+      type: 'batch',
+      label: 'Undo remove track',
+      commands: inverseCommands,
+    },
   };
 }
 

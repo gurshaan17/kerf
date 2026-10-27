@@ -94,6 +94,22 @@ export function clipAtFrame(track: Track, frame: number): Clip | undefined {
   );
 }
 
+/**
+ * Every clip active at a frame, ordered by start frame and then by insertion
+ * order. Effects tracks can stack overlapping overlays, so they need all hits.
+ */
+export function clipsAtFrame(track: Track, frame: number): Clip[] {
+  return track.clips
+    .map((clip, index) => ({ clip, index }))
+    .filter(({ clip }) => clip.startFrame <= frame && frame < clipEnd(clip))
+    .sort(
+      (left, right) =>
+        left.clip.startFrame - right.clip.startFrame ||
+        left.index - right.index,
+    )
+    .map(({ clip }) => clip);
+}
+
 export function clipsInRange(
   track: Track,
   startFrame: number,
@@ -133,13 +149,30 @@ export function hasOverlap(
   );
 }
 
-/** The sequence ends at the last clip edge, or at an explicit longer duration. */
+/** The sequence ends at the last non-overlay clip edge, or an explicit duration. */
 export function sequenceDurationFrames(sequence: Sequence): number {
+  return durationFromClips(sequence, false);
+}
+
+/**
+ * The timeline extent including timed overlays. Overlays can extend past the
+ * footage, so the ruler and scroll area use this instead of the export length.
+ */
+export function timelineDurationFrames(sequence: Sequence): number {
+  return durationFromClips(sequence, true);
+}
+
+function durationFromClips(
+  sequence: Sequence,
+  includeOverlays: boolean,
+): number {
   const lastClip = sequence.tracks.reduce((latest, track) => {
-    const trackEnd = track.clips.reduce(
-      (end, clip) => Math.max(end, clipEnd(clip)),
-      0,
-    );
+    const trackEnd = track.clips.reduce((end, clip) => {
+      if (!includeOverlays && clip.type === 'fxOverlay') {
+        return end;
+      }
+      return Math.max(end, clipEnd(clip));
+    }, 0);
     return Math.max(latest, trackEnd);
   }, 0);
 

@@ -192,7 +192,7 @@ describe('clip.update', () => {
     expect(undone.sequence).toEqual(sequence);
   });
 
-  it('moves a clip between compatible tracks with a batch inverse', () => {
+  it('moves a clip between compatible tracks with an update inverse', () => {
     const firstTrack = makeTrack('video', 0);
     const secondTrack = makeTrack('video', 1);
     const clip = makeVideoClip({
@@ -209,7 +209,7 @@ describe('clip.update', () => {
     });
     expect(result.sequence.tracks[0]?.clips).toEqual([]);
     expect(result.sequence.tracks[1]?.clips[0]?.id).toBe(clip.id);
-    expect(result.inverse?.type).toBe('batch');
+    expect(result.inverse?.type).toBe('clip.update');
 
     if (!result.inverse) {
       throw new Error('expected an inverse');
