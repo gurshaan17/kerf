@@ -16,6 +16,7 @@ const expected: Record<TrackKind, ClipType[]> = {
   audio: ['audio'],
   caption: ['caption'],
   overlay: ['video', 'image', 'text', 'caption', 'shape', 'composition'],
+  effects: ['fxOverlay'],
 };
 
 describe('track compatibility', () => {
@@ -70,5 +71,6 @@ describe('track compatibility', () => {
     expect(trackKindLabel('audio')).toBe('audio');
     expect(trackKindLabel('caption')).toBe('caption');
     expect(trackKindLabel('overlay')).toBe('overlay');
+    expect(trackKindLabel('effects')).toBe('effects');
   });
 });

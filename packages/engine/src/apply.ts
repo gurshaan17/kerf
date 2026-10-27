@@ -80,6 +80,7 @@ const PATCH_KEYS_BY_TYPE: Record<ClipType, readonly (keyof ClipPatch)[]> = {
   caption: ['text', 'style', 'words', 'transcriptId', 'segmentId'],
   shape: ['shape', 'width', 'height', 'fill', 'stroke', 'strokeWidth', 'path'],
   composition: ['compositionId', 'name'],
+  fxOverlay: ['props', 'linkedItemId'],
 };
 
 function withTracks(sequence: Sequence, tracks: Sequence['tracks']): Sequence {

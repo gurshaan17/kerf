@@ -6,6 +6,7 @@ export const CLIP_TYPES_BY_TRACK_KIND = {
   audio: ['audio'],
   caption: ['caption'],
   overlay: ['video', 'image', 'text', 'caption', 'shape', 'composition'],
+  effects: ['fxOverlay'],
 } as const satisfies Record<TrackKind, readonly ClipType[]>;
 
 export function allowedClipTypes(kind: TrackKind): readonly ClipType[] {
@@ -32,6 +33,8 @@ export function trackKindLabel(kind: TrackKind): string {
       return 'caption';
     case 'overlay':
       return 'overlay';
+    case 'effects':
+      return 'effects';
   }
 }
 

@@ -6,6 +6,7 @@ export * from './compositions';
 export * from './effects';
 export * from './ids';
 export * from './keyframes';
+export * from './overlays';
 export * from './project';
 export * from './scenes';
 export * from './sequence';

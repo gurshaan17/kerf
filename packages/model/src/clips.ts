@@ -6,6 +6,7 @@ import {
   transformSchema,
   DEFAULT_TRANSFORM,
 } from './keyframes';
+import { overlayPropsSchema } from './overlays';
 import { textAlignSchema } from './style';
 
 export const fadeSchema = z
@@ -194,6 +195,19 @@ export const compositionClipSchema = z.object({
 
 export type CompositionClip = z.infer<typeof compositionClipSchema>;
 
+/**
+ * A timed effect overlay lives on an Effects track. Its visual parameters sit
+ * under `props` so they cannot collide with the flat shape clip fields.
+ */
+export const fxOverlayClipSchema = z.object({
+  ...clipBaseShape,
+  type: z.literal('fxOverlay'),
+  linkedItemId: idSchema('clip').nullable().default(null),
+  props: overlayPropsSchema,
+});
+
+export type FxOverlayClip = z.infer<typeof fxOverlayClipSchema>;
+
 export const clipSchema = z.discriminatedUnion('type', [
   videoClipSchema,
   audioClipSchema,
@@ -202,6 +216,7 @@ export const clipSchema = z.discriminatedUnion('type', [
   captionClipSchema,
   shapeClipSchema,
   compositionClipSchema,
+  fxOverlayClipSchema,
 ]);
 
 export type Clip = z.infer<typeof clipSchema>;
@@ -219,4 +234,8 @@ export function isMediaClip(clip: Clip): clip is MediaClip {
 
 export function isVisualClip(clip: Clip): clip is VisualClip {
   return clip.type !== 'audio';
+}
+
+export function isFxOverlayClip(clip: Clip): clip is FxOverlayClip {
+  return clip.type === 'fxOverlay';
 }

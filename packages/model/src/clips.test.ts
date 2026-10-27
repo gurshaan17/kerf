@@ -3,6 +3,7 @@ import {
   clipEndFrame,
   clipSchema,
   DEFAULT_TEXT_STYLE,
+  isFxOverlayClip,
   isMediaClip,
   isVisualClip,
   timeMapSchema,
@@ -153,5 +154,90 @@ describe('clip union', () => {
     expect(isVisualClip(video)).toBe(true);
     expect(isMediaClip(shape)).toBe(false);
     expect(isVisualClip(shape)).toBe(true);
+  });
+
+  it('applies defaults to every effect overlay kind', () => {
+    const overlayBase = (kind: string) => ({
+      ...clipBase(),
+      type: 'fxOverlay',
+      props: {
+        kind,
+        region: { x: 0.1, y: 0.2, w: 0.4, h: 0.3 },
+      },
+    });
+
+    const blur = clipSchema.parse(overlayBase('blur'));
+    const callout = clipSchema.parse(overlayBase('callout'));
+    const spotlight = clipSchema.parse(overlayBase('spotlight'));
+    const zoom = clipSchema.parse(overlayBase('zoom'));
+
+    for (const clip of [blur, callout, spotlight, zoom]) {
+      if (clip.type !== 'fxOverlay') {
+        throw new Error('expected an effect overlay');
+      }
+      expect(clip.linkedItemId).toBeNull();
+      expect(clip.props.region).toEqual({ x: 0.1, y: 0.2, w: 0.4, h: 0.3 });
+      expect(clip.props.shape).toBe('rect');
+      expect(clip.props.cornerRadius).toBe(0);
+      expect(clip.props.transitionInFrames).toBe(0);
+      expect(clip.props.transitionOutFrames).toBe(0);
+      expect(clip.props.easing).toBe('ease-in-out');
+    }
+
+    if (
+      blur.type !== 'fxOverlay' ||
+      blur.props.kind !== 'blur' ||
+      callout.type !== 'fxOverlay' ||
+      callout.props.kind !== 'callout' ||
+      spotlight.type !== 'fxOverlay' ||
+      spotlight.props.kind !== 'spotlight' ||
+      zoom.type !== 'fxOverlay' ||
+      zoom.props.kind !== 'zoom'
+    ) {
+      throw new Error('expected matching overlay kinds');
+    }
+
+    expect(blur.props.mode).toBe('gaussian');
+    expect(blur.props.amount).toBe(24);
+    expect(callout.props.text).toBe('Callout');
+    expect(callout.props.pointer).toBeNull();
+    expect(callout.props.borderWidth).toBe(3);
+    expect(callout.props.fontSize).toBe(36);
+    expect(spotlight.props.dim).toBe(0.55);
+    expect(spotlight.props.feather).toBe(24);
+    expect(spotlight.props.color).toBe('#000000');
+    expect(zoom.props.zoom).toBe(2);
+    expect(zoom.props.focus).toBeNull();
+    expect(zoom.props.borderWidth).toBe(4);
+    expect(zoom.props.shadow).toBe(true);
+    expect(isFxOverlayClip(blur)).toBe(true);
+  });
+
+  it('rejects invalid effect overlay props', () => {
+    const overlay = (props: Record<string, unknown>) => ({
+      ...clipBase(),
+      type: 'fxOverlay',
+      props,
+    });
+    const region = { x: 0.1, y: 0.2, w: 0.4, h: 0.3 };
+
+    expect(() =>
+      clipSchema.parse(overlay({ kind: 'sparkle', region })),
+    ).toThrow();
+    expect(() =>
+      clipSchema.parse(overlay({ kind: 'blur', region: { ...region, w: 0 } })),
+    ).toThrow();
+    expect(() =>
+      clipSchema.parse(overlay({ kind: 'blur', region: { ...region, x: 3 } })),
+    ).toThrow();
+    expect(() =>
+      clipSchema.parse(overlay({ kind: 'callout', region, textColor: 'red' })),
+    ).toThrow();
+    expect(() =>
+      clipSchema.parse(overlay({ kind: 'zoom', region, zoom: 9 })),
+    ).toThrow();
+    expect(() =>
+      clipSchema.parse({ ...clipBase(), type: 'fxOverlay' }),
+    ).toThrow();
   });
 });

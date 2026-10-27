@@ -9,7 +9,13 @@ import {
   styleConfigSchema,
 } from './style';
 
-export const trackKindSchema = z.enum(['video', 'audio', 'caption', 'overlay']);
+export const trackKindSchema = z.enum([
+  'video',
+  'audio',
+  'caption',
+  'overlay',
+  'effects',
+]);
 export type TrackKind = z.infer<typeof trackKindSchema>;
 
 /**
@@ -91,6 +97,8 @@ function defaultTrackName(kind: TrackKind): string {
       return 'Captions';
     case 'overlay':
       return 'Overlay';
+    case 'effects':
+      return 'Effects';
   }
 }
 

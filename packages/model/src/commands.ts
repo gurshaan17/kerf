@@ -19,6 +19,7 @@ import {
 import { idSchema, newId } from './ids';
 import type { CommandId } from './ids';
 import { numberKeyframesSchema, transformSchema } from './keyframes';
+import { overlayPropsPatchSchema } from './overlays';
 import {
   markerKindSchema,
   markerSchema,
@@ -61,6 +62,8 @@ export const clipPatchSchema = z.object({
   path: z.string().nullable().optional(),
   compositionId: idSchema('composition').optional(),
   name: z.string().optional(),
+  props: overlayPropsPatchSchema.optional(),
+  linkedItemId: idSchema('clip').nullable().optional(),
 });
 
 export type ClipPatch = z.infer<typeof clipPatchSchema>;

@@ -31,6 +31,8 @@ function nextTrackName(state: StudioState, kind: TrackKind): string {
       return count === 1 ? 'Captions' : `Captions ${count}`;
     case 'overlay':
       return `Overlay ${count}`;
+    case 'effects':
+      return count === 1 ? 'Effects' : `Effects ${count}`;
   }
 }
 

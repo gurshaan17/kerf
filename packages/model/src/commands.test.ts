@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { clipSchema } from './clips';
 import {
   COMMAND_TYPES,
+  clipPatchSchema,
   commandLabel,
   createCommandEnvelope,
   editCommandEnvelopeSchema,
@@ -9,6 +10,7 @@ import {
 } from './commands';
 import type { EditCommand } from './commands';
 import { newId } from './ids';
+import { applyOverlayPropsPatch, overlayPropsSchema } from './overlays';
 import { createMarker, createTrack } from './sequence';
 
 const makeClip = () =>
@@ -188,5 +190,73 @@ describe('edit commands', () => {
         createdAt: 1,
       }),
     ).toThrow();
+  });
+
+  it('accepts partial overlay props in a clip patch', () => {
+    const patch = clipPatchSchema.parse({
+      props: {
+        region: { x: 0.2 },
+        transitionInFrames: 12,
+        pointer: { y: 0.4 },
+      },
+      linkedItemId: null,
+    });
+
+    expect(patch.props?.region).toEqual({ x: 0.2 });
+    expect(patch.props?.transitionInFrames).toBe(12);
+    expect(patch.props?.pointer).toEqual({ y: 0.4 });
+    expect(patch.linkedItemId).toBeNull();
+  });
+});
+
+describe('overlay props patches', () => {
+  const region = { x: 0.1, y: 0.2, w: 0.4, h: 0.3 };
+
+  it('deep-merges nested props and preserves the kind', () => {
+    const blur = overlayPropsSchema.parse({ kind: 'blur', region });
+    const updated = applyOverlayPropsPatch(blur, {
+      region: { x: 0.3 },
+      amount: 40,
+      easing: 'linear',
+    });
+
+    if (updated.kind !== 'blur') {
+      throw new Error('expected a blur overlay');
+    }
+    expect(updated.region).toEqual({ x: 0.3, y: 0.2, w: 0.4, h: 0.3 });
+    expect(updated.amount).toBe(40);
+    expect(updated.easing).toBe('linear');
+  });
+
+  it('merges partial points and can clear a nullable point', () => {
+    const zoom = overlayPropsSchema.parse({
+      kind: 'zoom',
+      region,
+      focus: { x: 0.2, y: 0.3 },
+    });
+    const moved = applyOverlayPropsPatch(zoom, { focus: { y: 0.6 } });
+    if (moved.kind !== 'zoom') {
+      throw new Error('expected a zoom overlay');
+    }
+    expect(moved.focus).toEqual({ x: 0.2, y: 0.6 });
+
+    const callout = overlayPropsSchema.parse({
+      kind: 'callout',
+      region,
+      pointer: { x: 0.8, y: 0.9 },
+    });
+    const cleared = applyOverlayPropsPatch(callout, { pointer: null });
+    if (cleared.kind !== 'callout') {
+      throw new Error('expected a callout overlay');
+    }
+    expect(cleared.pointer).toBeNull();
+  });
+
+  it('rejects a kind change', () => {
+    const blur = overlayPropsSchema.parse({ kind: 'blur', region });
+
+    expect(() =>
+      applyOverlayPropsPatch(blur, { kind: 'zoom', zoom: 3 }),
+    ).toThrow(/cannot change/);
   });
 });
