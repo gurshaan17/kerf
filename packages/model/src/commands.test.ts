@@ -207,6 +207,19 @@ describe('edit commands', () => {
     expect(patch.props?.pointer).toEqual({ y: 0.4 });
     expect(patch.linkedItemId).toBeNull();
   });
+
+  it('does not add media defaults to partial clip patches', () => {
+    const parsed = editCommandSchema.parse({
+      type: 'clip.update',
+      clipId: newId('clip'),
+      patch: { props: { region: { x: 0.25 } } },
+    });
+
+    if (parsed.type !== 'clip.update') {
+      throw new Error('expected a clip update');
+    }
+    expect(parsed.patch).toEqual({ props: { region: { x: 0.25 } } });
+  });
 });
 
 describe('overlay props patches', () => {
