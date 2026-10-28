@@ -22,6 +22,7 @@ import {
   Type,
   Undo2,
   Volume2,
+  Wand2,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -44,6 +45,7 @@ export interface StudioShellProps {
   sequenceLabel?: string;
   assetCount?: number;
   leftPanel?: ReactNode;
+  effectsPanel?: ReactNode;
   chatPanel?: ReactNode;
   stage?: ReactNode;
   timeline?: ReactNode;
@@ -392,6 +394,7 @@ export function StudioShell({
   sequenceLabel = '1920 × 1080 · 24 fps',
   assetCount = 0,
   leftPanel,
+  effectsPanel,
   chatPanel,
   stage,
   timeline,
@@ -413,11 +416,13 @@ export function StudioShell({
   const isMac =
     typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
   const showLibrary = Boolean(leftPanel) && rail === 'media';
+  const showEffects = Boolean(effectsPanel) && rail === 'effects';
   const showChat = Boolean(chatPanel) && rail === 'chat';
-  const showLeftPanel = showLibrary || showChat;
+  const showLeftPanel = showLibrary || showEffects || showChat;
 
   const railItems = [
     { id: 'media', label: 'Media', icon: <Library size={18} /> },
+    { id: 'effects', label: 'Effects', icon: <Wand2 size={18} /> },
     { id: 'motion', label: 'Motion', icon: <Sparkles size={18} /> },
     { id: 'chat', label: 'Assistant', icon: <MessageSquare size={18} /> },
   ];
@@ -520,6 +525,11 @@ export function StudioShell({
         {showLibrary ? (
           <aside className="k-shell__library" aria-label="Footage bin">
             {leftPanel}
+          </aside>
+        ) : null}
+        {showEffects ? (
+          <aside className="k-shell__library" aria-label="Effects">
+            {effectsPanel}
           </aside>
         ) : null}
         {showChat ? (

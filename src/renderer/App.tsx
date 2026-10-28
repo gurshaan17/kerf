@@ -4,6 +4,7 @@ import { ChatPanel } from './chat/ChatPanel';
 import { CommandPalette } from './commands/CommandPalette';
 import { ShortcutsDialog } from './commands/ShortcutsDialog';
 import { useGlobalShortcuts } from './commands/use-global-shortcuts';
+import { EffectsPanel } from './effects/EffectsPanel';
 import { FootageBin } from './FootageBin';
 import { ProjectBrowserScreen } from './ProjectBrowserScreen';
 import { useStudio } from './state/StudioProvider';
@@ -299,6 +300,7 @@ export default function App() {
             <Inspector onOpenSequenceSettings={openSequenceSettings} />
           )
         }
+        effectsPanel={<EffectsPanel />}
         leftPanel={
           <FootageBin
             assets={assets}

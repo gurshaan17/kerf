@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Trash2,
+  Unlink,
 } from 'lucide-react';
 import type {
   Clip,
@@ -19,8 +20,11 @@ import type {
   EasingName,
   Effect,
   EffectType,
+  FxOverlayClip,
   Mask,
   NumberKeyframe,
+  OverlayPropsPatch,
+  Sequence,
   TextStyle,
 } from '@kerf/model';
 import {
@@ -48,7 +52,7 @@ import { formatFrameRate } from '../../shared/sequence-presets';
 import { useStudio } from '../state/StudioProvider';
 import { selectSelectedClip } from '../state/selectors';
 
-type InspectorTab = 'clip' | 'effects' | 'motion' | 'masks';
+type InspectorTab = 'clip' | 'filters' | 'motion' | 'masks';
 
 type KeyframeProperty = 'x' | 'y' | 'scale' | 'rotation' | 'opacity' | 'volume';
 
@@ -630,7 +634,630 @@ function ClipFields({ clip }: { readonly clip: Clip }) {
   );
 }
 
-function EffectsPanel({ clip }: { readonly clip: Clip }) {
+const OVERLAY_KIND_LABELS = {
+  blur: 'Blur',
+  callout: 'Callout',
+  spotlight: 'Spotlight',
+  zoom: 'Zoom',
+} as const;
+
+const OVERLAY_KIND_NOTES = {
+  blur: 'Softens or pixelates the region above the footage.',
+  callout: 'Draws a text card, optionally pointing at a detail.',
+  spotlight: 'Dims the frame outside the region.',
+  zoom: 'Magnifies source-quality footage inside the lens.',
+} as const;
+
+function overlayLinkedLabel(
+  clip: FxOverlayClip,
+  sequence: Sequence | null,
+): string {
+  if (!clip.linkedItemId) {
+    return 'Unlinked';
+  }
+  if (!sequence) {
+    return 'Linked';
+  }
+  for (const track of sequence.tracks) {
+    const linked = track.clips.find(
+      (candidate) => candidate.id === clip.linkedItemId,
+    );
+    if (linked) {
+      return linked.label || linked.type;
+    }
+  }
+  return 'Linked clip missing';
+}
+
+function OverlayPanel({ clip }: { readonly clip: FxOverlayClip }) {
+  const apply = useStudio((state) => state.apply);
+  const sequence = useStudio((state) => state.snapshot?.project.sequence);
+  const rate = sequence?.frameRate;
+  const props = clip.props;
+
+  const update = (patch: ClipPatch, label: string) => {
+    void apply({ type: 'clip.update', clipId: clip.id, patch }, label);
+  };
+  const updateProps = (patch: OverlayPropsPatch, label: string) => {
+    update({ props: patch }, label);
+  };
+
+  const linkOptions = [
+    { value: '', label: 'Unlinked' },
+    ...(sequence?.tracks ?? []).flatMap((track) =>
+      track.clips
+        .filter(
+          (candidate) =>
+            candidate.type !== 'fxOverlay' && candidate.type !== 'audio',
+        )
+        .map((candidate) => ({
+          value: candidate.id,
+          label: candidate.label || candidate.type,
+        })),
+    ),
+  ];
+
+  const setPoint = (
+    key: 'pointer' | 'focus',
+    point: { x: number; y: number } | null,
+    label: string,
+  ) => {
+    updateProps(
+      key === 'pointer' ? { pointer: point } : { focus: point },
+      label,
+    );
+  };
+
+  return (
+    <Panel
+      title="Inspector"
+      subtitle={clip.label || 'Overlay'}
+      bodyClassName="p-0"
+    >
+      <Tabs
+        label="Inspector sections"
+        value="overlay"
+        onValueChange={() => undefined}
+        items={[
+          {
+            id: 'overlay',
+            label: 'Overlay',
+            icon: <Sparkles size={13} />,
+          },
+        ]}
+      />
+      <ClipHeader clip={clip} />
+      <div className="k-inspector__stack">
+        <Field label="Label" hint="Shown on the timeline and overlay list.">
+          <TextInput
+            value={clip.label}
+            placeholder={OVERLAY_KIND_LABELS[props.kind]}
+            onCommit={(label) => update({ label }, 'Rename overlay')}
+          />
+        </Field>
+
+        <div className="k-inspector__section">
+          <div className="k-inspector__section-title">Timing</div>
+          <FieldRow>
+            <Field label="Start frame">
+              <NumberInput
+                value={clip.startFrame}
+                min={0}
+                integer
+                onCommit={(startFrame) =>
+                  update({ startFrame }, 'Move overlay in time')
+                }
+              />
+            </Field>
+            <Field label="Duration">
+              <NumberInput
+                value={clip.durationFrames}
+                min={1}
+                integer
+                onCommit={(durationFrames) =>
+                  update({ durationFrames }, 'Resize overlay')
+                }
+              />
+            </Field>
+          </FieldRow>
+          {rate ? (
+            <p className="k-inspector__hint">
+              In {formatTimecode(clip.startFrame, rate)} · Out{' '}
+              {formatTimecode(clip.startFrame + clip.durationFrames, rate)}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="k-inspector__section">
+          <div className="k-inspector__section-title">Link</div>
+          <Field
+            label="Source clip"
+            hint="Linked overlays follow their source on move, ripple and split."
+          >
+            <Select
+              value={clip.linkedItemId ?? ''}
+              options={linkOptions}
+              onChange={(event) =>
+                update(
+                  {
+                    linkedItemId: (event.target.value ||
+                      null) as FxOverlayClip['linkedItemId'],
+                  },
+                  'Link overlay',
+                )
+              }
+            />
+          </Field>
+          <p className="k-inspector__hint">
+            {overlayLinkedLabel(clip, sequence ?? null)}
+          </p>
+        </div>
+
+        <div className="k-inspector__section">
+          <div className="k-inspector__section-title">
+            {OVERLAY_KIND_LABELS[props.kind]} · {props.kind}
+          </div>
+          <p className="k-inspector__hint">{OVERLAY_KIND_NOTES[props.kind]}</p>
+
+          {props.kind === 'blur' ? (
+            <>
+              <Field label="Mode">
+                <Select
+                  value={props.mode}
+                  options={[
+                    { value: 'gaussian', label: 'Gaussian blur' },
+                    { value: 'pixelate', label: 'Pixelate' },
+                  ]}
+                  onChange={(event) =>
+                    updateProps(
+                      { mode: event.target.value as 'gaussian' | 'pixelate' },
+                      'Change blur mode',
+                    )
+                  }
+                />
+              </Field>
+              <Field label="Amount" hint="1080p-height pixels.">
+                <NumberInput
+                  value={props.amount}
+                  min={0.5}
+                  max={200}
+                  step={1}
+                  onCommit={(amount) =>
+                    updateProps({ amount }, 'Change blur amount')
+                  }
+                />
+              </Field>
+            </>
+          ) : null}
+
+          {props.kind === 'callout' ? (
+            <>
+              <Field label="Text">
+                <TextInput
+                  value={props.text}
+                  placeholder="Callout"
+                  onCommit={(textValue) =>
+                    updateProps({ text: textValue }, 'Change callout text')
+                  }
+                />
+              </Field>
+              <FieldRow>
+                <Field label="Text colour">
+                  <TextInput
+                    value={props.textColor}
+                    placeholder="#ece6dc"
+                    onCommit={(textColor) =>
+                      updateProps({ textColor }, 'Change callout text colour')
+                    }
+                  />
+                </Field>
+                <Field label="Border colour">
+                  <TextInput
+                    value={props.borderColor}
+                    placeholder="#c9a46a"
+                    onCommit={(borderColor) =>
+                      updateProps(
+                        { borderColor },
+                        'Change callout border colour',
+                      )
+                    }
+                  />
+                </Field>
+              </FieldRow>
+              <Field label="Background" hint="Any CSS colour.">
+                <TextInput
+                  value={props.background}
+                  placeholder="rgba(11, 12, 13, 0.82)"
+                  onCommit={(background) =>
+                    updateProps({ background }, 'Change callout background')
+                  }
+                />
+              </Field>
+              <FieldRow>
+                <Field label="Border width">
+                  <NumberInput
+                    value={props.borderWidth}
+                    min={0}
+                    step={1}
+                    onCommit={(borderWidth) =>
+                      updateProps(
+                        { borderWidth },
+                        'Change callout border width',
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="Font size">
+                  <NumberInput
+                    value={props.fontSize}
+                    min={1}
+                    step={1}
+                    onCommit={(fontSize) =>
+                      updateProps({ fontSize }, 'Change callout font size')
+                    }
+                  />
+                </Field>
+              </FieldRow>
+              <Field
+                label="Pointer"
+                hint="Drag the dot in the preview to aim the pointer."
+              >
+                <div className="k-inspector__inline">
+                  {props.pointer ? (
+                    <>
+                      <PercentInput
+                        value={props.pointer.x}
+                        onCommit={(x) =>
+                          setPoint(
+                            'pointer',
+                            { ...props.pointer!, x },
+                            'Move callout pointer',
+                          )
+                        }
+                      />
+                      <PercentInput
+                        value={props.pointer.y}
+                        onCommit={(y) =>
+                          setPoint(
+                            'pointer',
+                            { ...props.pointer!, y },
+                            'Move callout pointer',
+                          )
+                        }
+                      />
+                      <IconButton
+                        label="Remove pointer"
+                        size="sm"
+                        icon={<Trash2 size={13} />}
+                        onClick={() =>
+                          setPoint('pointer', null, 'Remove callout pointer')
+                        }
+                      />
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() =>
+                        setPoint(
+                          'pointer',
+                          {
+                            x: props.region.x + props.region.w / 2,
+                            y: props.region.y + props.region.h / 2,
+                          },
+                          'Add callout pointer',
+                        )
+                      }
+                    >
+                      Add pointer
+                    </Button>
+                  )}
+                </div>
+              </Field>
+            </>
+          ) : null}
+
+          {props.kind === 'spotlight' ? (
+            <FieldRow>
+              <Field label="Dim">
+                <PercentInput
+                  value={props.dim}
+                  onCommit={(dim) =>
+                    updateProps({ dim }, 'Change spotlight dim')
+                  }
+                />
+              </Field>
+              <Field label="Feather">
+                <NumberInput
+                  value={props.feather}
+                  min={0}
+                  step={1}
+                  onCommit={(feather) =>
+                    updateProps({ feather }, 'Change spotlight feather')
+                  }
+                />
+              </Field>
+              <Field label="Colour">
+                <TextInput
+                  value={props.color}
+                  placeholder="#000000"
+                  onCommit={(color) =>
+                    updateProps({ color }, 'Change spotlight colour')
+                  }
+                />
+              </Field>
+            </FieldRow>
+          ) : null}
+
+          {props.kind === 'zoom' ? (
+            <>
+              <FieldRow>
+                <Field label="Zoom">
+                  <NumberInput
+                    value={props.zoom}
+                    min={1}
+                    max={8}
+                    step={0.1}
+                    onCommit={(zoom) =>
+                      updateProps({ zoom }, 'Change zoom amount')
+                    }
+                  />
+                </Field>
+                <Field label="Border width">
+                  <NumberInput
+                    value={props.borderWidth}
+                    min={0}
+                    step={1}
+                    onCommit={(borderWidth) =>
+                      updateProps({ borderWidth }, 'Change zoom border width')
+                    }
+                  />
+                </Field>
+              </FieldRow>
+              <Field label="Border colour">
+                <TextInput
+                  value={props.borderColor}
+                  placeholder="#ece6dc"
+                  onCommit={(borderColor) =>
+                    updateProps({ borderColor }, 'Change zoom border colour')
+                  }
+                />
+              </Field>
+              <Field label="Shadow">
+                <Select
+                  value={props.shadow ? 'on' : 'off'}
+                  options={[
+                    { value: 'on', label: 'On' },
+                    { value: 'off', label: 'Off' },
+                  ]}
+                  onChange={(event) =>
+                    updateProps(
+                      { shadow: event.target.value === 'on' },
+                      'Toggle zoom shadow',
+                    )
+                  }
+                />
+              </Field>
+              <Field
+                label="Focus"
+                hint="Drag the dot in the preview to choose the magnified point."
+              >
+                <div className="k-inspector__inline">
+                  {props.focus ? (
+                    <>
+                      <PercentInput
+                        value={props.focus.x}
+                        onCommit={(x) =>
+                          setPoint(
+                            'focus',
+                            { ...props.focus!, x },
+                            'Move zoom focus',
+                          )
+                        }
+                      />
+                      <PercentInput
+                        value={props.focus.y}
+                        onCommit={(y) =>
+                          setPoint(
+                            'focus',
+                            { ...props.focus!, y },
+                            'Move zoom focus',
+                          )
+                        }
+                      />
+                      <IconButton
+                        label="Reset focus"
+                        size="sm"
+                        icon={<Trash2 size={13} />}
+                        onClick={() =>
+                          setPoint('focus', null, 'Reset zoom focus')
+                        }
+                      />
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() =>
+                        setPoint(
+                          'focus',
+                          {
+                            x: props.region.x + props.region.w / 2,
+                            y: props.region.y + props.region.h / 2,
+                          },
+                          'Set zoom focus',
+                        )
+                      }
+                    >
+                      Set focus
+                    </Button>
+                  )}
+                </div>
+              </Field>
+            </>
+          ) : null}
+        </div>
+
+        <div className="k-inspector__section">
+          <div className="k-inspector__section-title">Region</div>
+          <FieldRow>
+            <Field label="X">
+              <PercentInput
+                value={props.region.x}
+                min={0}
+                onCommit={(x) =>
+                  updateProps({ region: { x } }, 'Move overlay region')
+                }
+              />
+            </Field>
+            <Field label="Y">
+              <PercentInput
+                value={props.region.y}
+                min={0}
+                onCommit={(y) =>
+                  updateProps({ region: { y } }, 'Move overlay region')
+                }
+              />
+            </Field>
+            <Field label="Width">
+              <PercentInput
+                value={props.region.w}
+                min={1}
+                onCommit={(w) =>
+                  updateProps({ region: { w } }, 'Resize overlay region')
+                }
+              />
+            </Field>
+            <Field label="Height">
+              <PercentInput
+                value={props.region.h}
+                min={1}
+                onCommit={(h) =>
+                  updateProps({ region: { h } }, 'Resize overlay region')
+                }
+              />
+            </Field>
+          </FieldRow>
+          <FieldRow>
+            <Field label="Shape">
+              <Select
+                value={props.shape}
+                options={[
+                  { value: 'rect', label: 'Rectangle' },
+                  { value: 'ellipse', label: 'Ellipse' },
+                ]}
+                onChange={(event) =>
+                  updateProps(
+                    { shape: event.target.value as 'rect' | 'ellipse' },
+                    'Change overlay shape',
+                  )
+                }
+              />
+            </Field>
+            <Field label="Corner radius">
+              <NumberInput
+                value={props.cornerRadius}
+                min={0}
+                step={1}
+                onCommit={(cornerRadius) =>
+                  updateProps({ cornerRadius }, 'Change overlay corner radius')
+                }
+              />
+            </Field>
+          </FieldRow>
+        </div>
+
+        <div className="k-inspector__section">
+          <div className="k-inspector__section-title">Transitions</div>
+          <FieldRow>
+            <Field label="In">
+              <NumberInput
+                value={props.transitionInFrames}
+                min={0}
+                integer
+                onCommit={(transitionInFrames) =>
+                  updateProps(
+                    { transitionInFrames },
+                    'Change overlay transition in',
+                  )
+                }
+              />
+            </Field>
+            <Field label="Out">
+              <NumberInput
+                value={props.transitionOutFrames}
+                min={0}
+                integer
+                onCommit={(transitionOutFrames) =>
+                  updateProps(
+                    { transitionOutFrames },
+                    'Change overlay transition out',
+                  )
+                }
+              />
+            </Field>
+          </FieldRow>
+          <Field label="Easing">
+            <Select
+              value={props.easing}
+              options={[
+                { value: 'linear', label: 'Linear' },
+                { value: 'ease-in', label: 'Ease in' },
+                { value: 'ease-out', label: 'Ease out' },
+                { value: 'ease-in-out', label: 'Ease in and out' },
+              ]}
+              onChange={(event) =>
+                updateProps(
+                  {
+                    easing: event.target.value as
+                      | 'linear'
+                      | 'ease-in'
+                      | 'ease-out'
+                      | 'ease-in-out',
+                  },
+                  'Change overlay easing',
+                )
+              }
+            />
+          </Field>
+          <p className="k-inspector__hint">
+            Transition frames are clamped so the in and out total cannot exceed
+            the overlay duration.
+          </p>
+        </div>
+
+        <div className="k-inspector__section">
+          <div className="k-inspector__inline k-inspector__inline--wrap">
+            <Button
+              variant="secondary"
+              size="sm"
+              leadingIcon={<Unlink size={13} />}
+              disabled={!clip.linkedItemId}
+              onClick={() => update({ linkedItemId: null }, 'Unlink overlay')}
+            >
+              Unlink
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              leadingIcon={<Trash2 size={13} />}
+              onClick={() =>
+                void apply(
+                  { type: 'clip.remove', clipId: clip.id },
+                  'Delete overlay',
+                )
+              }
+            >
+              Delete overlay
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function FiltersPanel({ clip }: { readonly clip: Clip }) {
   const apply = useStudio((state) => state.apply);
   const [effectType, setEffectType] = useState<EffectType>('blur');
 
@@ -1463,6 +2090,13 @@ function MotionPanel({ clip }: { readonly clip: Clip }) {
 }
 
 function InspectorBody({ clip }: { readonly clip: Clip }) {
+  if (clip.type === 'fxOverlay') {
+    return <OverlayPanel clip={clip} />;
+  }
+  return <ClipInspectorBody clip={clip} />;
+}
+
+function ClipInspectorBody({ clip }: { readonly clip: Clip }) {
   const [tab, setTab] = useState<InspectorTab>('clip');
   const label = clip.label || clip.type;
 
@@ -1484,8 +2118,8 @@ function InspectorBody({ clip }: { readonly clip: Clip }) {
               ),
           },
           {
-            id: 'effects',
-            label: 'Effects',
+            id: 'filters',
+            label: 'Filters',
             icon: <Sparkles size={13} />,
             badge: clip.effects.length || undefined,
           },
@@ -1512,8 +2146,8 @@ function InspectorBody({ clip }: { readonly clip: Clip }) {
         <div className="k-inspector__stack">
           <ClipFields clip={clip} />
         </div>
-      ) : tab === 'effects' ? (
-        <EffectsPanel clip={clip} />
+      ) : tab === 'filters' ? (
+        <FiltersPanel clip={clip} />
       ) : tab === 'motion' ? (
         <MotionPanel clip={clip} />
       ) : (

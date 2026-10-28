@@ -23,6 +23,7 @@ import {
 } from '@kerf/engine';
 import { IconButton, cn } from '@kerf/ui';
 import { useStudio, useStudioStoreApi } from '../state/StudioProvider';
+import { OverlayControls } from './OverlayControls';
 import { selectSelectedClip } from '../state/selectors';
 
 const HARD_SEEK_SECONDS = 0.75;
@@ -310,6 +311,13 @@ export function Preview() {
   }
 
   const empty = sequence.tracks.every((track) => track.clips.length === 0);
+  const activeOverlay =
+    selectedClip?.type === 'fxOverlay' &&
+    !playing &&
+    playhead >= selectedClip.startFrame &&
+    playhead < selectedClip.startFrame + selectedClip.durationFrames
+      ? selectedClip
+      : null;
 
   return (
     <section className="k-stage" aria-label="Preview">
@@ -361,6 +369,9 @@ export function Preview() {
               <span className="k-stage__loading-dot" />
               Loading media
             </div>
+          ) : null}
+          {activeOverlay ? (
+            <OverlayControls key={activeOverlay.id} overlay={activeOverlay} />
           ) : null}
         </div>
       </div>

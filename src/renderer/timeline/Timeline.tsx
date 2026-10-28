@@ -25,8 +25,10 @@ import {
   Scissors,
   Trash2,
   Undo2,
+  Unlink,
   Volume2,
   VolumeX,
+  Wand2,
   Waves,
   ZoomIn,
   ZoomOut,
@@ -43,8 +45,8 @@ import { formatDuration, fpsToNumber, secondsToFrames } from '@kerf/model';
 import {
   findClip,
   isClipCompatible,
-  sequenceDurationFrames,
   snapStart,
+  timelineDurationFrames,
   tracksInOrder,
 } from '@kerf/engine';
 import { Button, IconButton, Input, cn } from '@kerf/ui';
@@ -57,6 +59,50 @@ import { clipsInWindow, visibleFrameWindow } from './windowing';
 const HEADER_WIDTH = 112;
 const SNAP_PIXELS = 7;
 const EMPTY_ASSETS: readonly Asset[] = Object.freeze([]);
+
+const OVERLAY_LABELS = {
+  blur: 'Blur',
+  callout: 'Callout',
+  spotlight: 'Spotlight',
+  zoom: 'Zoom',
+} as const;
+
+interface ClipStack {
+  readonly row: number;
+  readonly rows: number;
+}
+
+/**
+ * Overlapping overlays share one Effects lane, so assign each clip the first
+ * free row and give every clip in that lane the same row count.
+ */
+function stackLayout(tracks: readonly Track[]): Map<string, ClipStack> {
+  const layout = new Map<string, ClipStack>();
+  for (const track of tracks) {
+    if (track.kind !== 'effects' || track.clips.length === 0) {
+      continue;
+    }
+    const ordered = [...track.clips].sort(
+      (left, right) =>
+        left.startFrame - right.startFrame || left.id.localeCompare(right.id),
+    );
+    const rowEnds: number[] = [];
+    const rowsById = new Map<string, number>();
+    for (const clip of ordered) {
+      let row = rowEnds.findIndex((end) => end <= clip.startFrame);
+      if (row === -1) {
+        row = rowEnds.length;
+      }
+      rowEnds[row] = clip.startFrame + clip.durationFrames;
+      rowsById.set(clip.id, row);
+    }
+    const rows = Math.max(1, rowEnds.length);
+    for (const [id, row] of rowsById) {
+      layout.set(id, { row, rows });
+    }
+  }
+  return layout;
+}
 
 function clampNumber(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
@@ -121,6 +167,7 @@ function ClipBar({
   dragging,
   left,
   width,
+  stack,
   onSelect,
   onBeginDrag,
   onContextMenu,
@@ -131,6 +178,7 @@ function ClipBar({
   readonly dragging: boolean;
   readonly left: number;
   readonly width: number;
+  readonly stack?: ClipStack;
   readonly onSelect: (clip: Clip) => void;
   readonly onBeginDrag: (
     event: ReactPointerEvent<HTMLElement>,
@@ -151,7 +199,20 @@ function ClipBar({
     asset && clip.type === 'audio'
       ? `kerfmedia://asset/${encodeURIComponent(asset.id)}/waveform`
       : null;
-  const label = clip.label || clip.type;
+  const sequence = useStudio((state) => state.snapshot?.project.sequence);
+  const linked =
+    clip.type === 'fxOverlay' && clip.linkedItemId && sequence
+      ? findClip(sequence, clip.linkedItemId)?.clip
+      : null;
+  const label =
+    clip.type === 'fxOverlay'
+      ? `${OVERLAY_LABELS[clip.props.kind]}${
+          linked ? ` · ${linked.label || linked.type}` : ''
+        }`
+      : clip.label || clip.type;
+  const stacked = stack !== undefined && stack.rows > 1;
+  const laneHeight = Math.max(1, track.height - 8);
+  const rowHeight = stacked ? laneHeight / stack.rows : laneHeight;
 
   return (
     <div
@@ -168,6 +229,9 @@ function ClipBar({
       style={{
         left: `${left}px`,
         width: `${Math.max(3, width)}px`,
+        top: stacked ? `${4 + stack.row * rowHeight}px` : undefined,
+        bottom: stacked ? 'auto' : undefined,
+        height: stacked ? `${Math.max(8, rowHeight - 2)}px` : undefined,
         backgroundImage: thumb
           ? `linear-gradient(90deg, color-mix(in srgb, var(--k-clip-color) 28%, transparent), color-mix(in srgb, var(--k-surface-2) 72%, transparent)), url("${thumb}")`
           : waveform
@@ -219,6 +283,8 @@ function TrackHeader({
       <AudioLines size={11} />
     ) : track.kind === 'caption' ? (
       <span className="font-mono text-[8px]">CC</span>
+    ) : track.kind === 'effects' ? (
+      <Wand2 size={11} />
     ) : (
       <Film size={11} />
     );
@@ -434,10 +500,11 @@ export function Timeline() {
     () => (sequence ? tracksInOrder(sequence) : []),
     [sequence],
   );
+  const stacks = useMemo(() => stackLayout(tracks), [tracks]);
   const rate = sequence?.frameRate ?? { numerator: 24, denominator: 1 };
   const duration = sequence
     ? Math.max(
-        sequenceDurationFrames(sequence),
+        timelineDurationFrames(sequence),
         ...sequence.markers.map((marker) => marker.frame + 1),
         Math.round(fpsToNumber(rate) * 10),
       )
@@ -799,7 +866,7 @@ export function Timeline() {
     if (!sequence || viewportWidth <= HEADER_WIDTH) {
       return;
     }
-    const visibleFrames = Math.max(1, sequenceDurationFrames(sequence));
+    const visibleFrames = Math.max(1, timelineDurationFrames(sequence));
     setPixelsPerFrame((viewportWidth - HEADER_WIDTH - 48) / visibleFrames);
   };
 
@@ -1209,6 +1276,7 @@ export function Timeline() {
                     dragging={drag?.clipId === clip.id}
                     left={clip.startFrame * pixelsPerFrame}
                     width={clip.durationFrames * pixelsPerFrame}
+                    stack={stacks.get(clip.id)}
                     onSelect={(next) => selectClip(next.id)}
                     onBeginDrag={(event, kind) =>
                       beginDrag(clip, track, event, kind)
@@ -1293,6 +1361,27 @@ export function Timeline() {
           <div className="k-context-menu__label">
             {menuClip?.label || 'Clip'}
           </div>
+          {menuClip?.type === 'fxOverlay' ? (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!menuClip.linkedItemId}
+              onClick={() => {
+                void apply(
+                  {
+                    type: 'clip.update',
+                    clipId: menuClip.id,
+                    patch: { linkedItemId: null },
+                  },
+                  'Unlink overlay',
+                );
+                setMenu(null);
+              }}
+            >
+              <Unlink size={13} />
+              Unlink
+            </button>
+          ) : null}
           <button
             type="button"
             role="menuitem"
@@ -1404,6 +1493,14 @@ export function Timeline() {
           >
             <span className="font-mono text-[9px]">CC</span>
             Caption track
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => addTrack('effects')}
+          >
+            <Wand2 size={13} />
+            Effects track
           </button>
         </div>
       ) : null}

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   FRAME_RATES,
+  clipSchema,
   createAsset,
   createProject,
   createSequence,
   createTrack,
+  newId,
 } from '@kerf/model';
 import { applyCommand } from '@kerf/engine';
 import {
@@ -47,6 +49,27 @@ function imageAsset() {
     }),
     durationSeconds: 0,
   };
+}
+
+function blurOverlay(
+  track: ReturnType<typeof createTrack>,
+  linkedItemId: string | null,
+  startFrame = 0,
+  durationFrames = 48,
+) {
+  return clipSchema.parse({
+    id: newId('clip'),
+    trackId: track.id,
+    type: 'fxOverlay',
+    startFrame,
+    durationFrames,
+    label: 'Blur',
+    linkedItemId,
+    props: {
+      kind: 'blur',
+      region: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
+    },
+  });
 }
 
 function audioAsset() {
@@ -206,6 +229,97 @@ describe('timeline clip commands', () => {
       expect(starts).toEqual([1000, 1300]);
       expect(pasted.clipIds).toHaveLength(2);
     }
+  });
+
+  it('leaves a linked overlay to its source delete cascade', () => {
+    const videoTrack = createTrack({ kind: 'video', order: 0 });
+    const effectsTrack = createTrack({ kind: 'effects', order: 1 });
+    const source = createClipForAsset(
+      videoAsset(),
+      videoTrack,
+      0,
+      FRAME_RATES.film,
+    )!;
+    const overlay = blurOverlay(
+      effectsTrack,
+      source.id,
+      0,
+      source.durationFrames,
+    );
+    const sequence = createSequence({
+      name: 'Test',
+      tracks: [
+        { ...videoTrack, clips: [source] },
+        { ...effectsTrack, clips: [overlay] },
+      ],
+    });
+
+    expect(
+      deleteClipsCommand(sequence, [source.id, overlay.id], false),
+    ).toEqual({ type: 'clip.remove', clipId: source.id });
+    expect(deleteClipsCommand(sequence, [overlay.id], false)).toEqual({
+      type: 'clip.remove',
+      clipId: overlay.id,
+    });
+  });
+
+  it('creates an Effects track when pasting the first overlay', () => {
+    const videoTrack = createTrack({ kind: 'video', order: 0 });
+    const clip = createClipForAsset(
+      videoAsset(),
+      videoTrack,
+      0,
+      FRAME_RATES.film,
+    )!;
+    const sequence = createSequence({
+      name: 'Test',
+      tracks: [{ ...videoTrack, clips: [clip] }],
+    });
+    const detachedEffects = createTrack({ kind: 'effects', order: 1 });
+    const overlay = blurOverlay(detachedEffects, clip.id, 0, 48);
+
+    const pasted = pasteClipsCommand(sequence, [overlay], 100);
+
+    expect(pasted?.command.type).toBe('batch');
+    if (pasted?.command.type !== 'batch') {
+      throw new Error('expected a batch');
+    }
+    expect(
+      pasted.command.commands.some((command) => command.type === 'track.add'),
+    ).toBe(true);
+    expect(pasted.clipIds).toHaveLength(1);
+
+    const result = applyCommand(sequence, pasted.command);
+    const effects = result.sequence.tracks.find(
+      (track) => track.kind === 'effects',
+    );
+    expect(effects).toBeDefined();
+    expect(result.sequence.tracks[0]?.kind).toBe('effects');
+    expect(effects?.clips).toHaveLength(1);
+    expect(effects?.clips[0]).toMatchObject({
+      type: 'fxOverlay',
+      startFrame: 100,
+      linkedItemId: clip.id,
+    });
+  });
+
+  it('pastes overlapping overlays without shifting them later', () => {
+    const effectsTrack = createTrack({ kind: 'effects', order: 0 });
+    const existing = blurOverlay(effectsTrack, null, 0, 48);
+    const sequence = createSequence({
+      name: 'Test',
+      tracks: [{ ...effectsTrack, clips: [existing] }],
+    });
+
+    const pasted = pasteClipsCommand(sequence, [existing], 0);
+
+    expect(pasted?.command.type).toBe('clip.insert');
+    if (pasted?.command.type !== 'clip.insert') {
+      throw new Error('expected an insert');
+    }
+    expect(pasted.command.clip.startFrame).toBe(0);
+    const result = applyCommand(sequence, pasted.command);
+    expect(result.sequence.tracks[0]?.clips).toHaveLength(2);
   });
 
   it('deletes or duplicates selected clips', () => {

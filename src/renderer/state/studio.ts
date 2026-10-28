@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import { fpsToNumber } from '@kerf/model';
 import type { Clip, EditCommand } from '@kerf/model';
 import type { SceneTree } from '@kerf/motion';
-import { sequenceDurationFrames } from '@kerf/engine';
+import { timelineDurationFrames } from '@kerf/engine';
 import { findSequenceFrame } from './sequence-map';
 import type {
   AnalysisKind,
@@ -165,7 +165,7 @@ function sequenceEnd(snapshot: ProjectSnapshot | null): number {
   if (!snapshot) {
     return 0;
   }
-  return sequenceDurationFrames(snapshot.project.sequence);
+  return timelineDurationFrames(snapshot.project.sequence);
 }
 
 function jobMerge(jobs: readonly JobSummary[], job: JobSummary): JobSummary[] {

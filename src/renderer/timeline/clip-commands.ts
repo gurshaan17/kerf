@@ -9,6 +9,7 @@ import type {
 import { clipEndFrame, clipSchema, newId, secondsToFrames } from '@kerf/model';
 import {
   clipsOnTrack,
+  ensureEffectsTrackCommands,
   findClip,
   isClipCompatible,
   rippleDeleteCommand,
@@ -169,12 +170,23 @@ export function deleteClipsCommand(
   ripple: boolean,
 ): EditCommand | null {
   const commands: EditCommand[] = [];
+  const selected = new Set(clipIds);
   // Ripple from right to left so earlier removals cannot invalidate the
-  // starting frames used by later ripple helpers.
+  // starting frames used by later ripple helpers. A linked overlay is removed
+  // by its source's cascade, so removing it separately would target a clip
+  // that no longer exists.
   const locations = clipIds
     .map((id) => findClip(sequence, id))
     .filter((location): location is NonNullable<typeof location> =>
       Boolean(location),
+    )
+    .filter(
+      (location) =>
+        !(
+          location.clip.type === 'fxOverlay' &&
+          location.clip.linkedItemId !== null &&
+          selected.has(location.clip.linkedItemId)
+        ),
     )
     .sort((left, right) => right.clip.startFrame - left.clip.startFrame);
 
@@ -241,12 +253,44 @@ export interface PasteClipsResult {
  * relative spacing and pushing the whole group later until every copy fits on
  * a compatible unlocked track.
  */
+interface PasteTarget {
+  readonly clip: Clip;
+  readonly trackId: Track['id'];
+  readonly kind: Track['kind'];
+  readonly existing: readonly Clip[];
+}
+
 export function pasteClipsCommand(
   sequence: Sequence,
   clips: readonly Clip[],
   frame: number,
 ): PasteClipsResult | null {
-  const targets = clips.flatMap((clip) => {
+  const overlayCount = clips.filter((clip) => clip.type === 'fxOverlay').length;
+  const existingEffects = sequence.tracks.find(
+    (track) => track.kind === 'effects',
+  );
+  const ensureEffects =
+    overlayCount > 0 && !existingEffects
+      ? ensureEffectsTrackCommands(sequence)
+      : null;
+  const effectsTrackId: Track['id'] | null =
+    existingEffects?.id ??
+    (ensureEffects ? (ensureEffects.trackId as Track['id']) : null);
+
+  const targets = clips.flatMap<PasteTarget>((clip) => {
+    if (clip.type === 'fxOverlay') {
+      if (!effectsTrackId || existingEffects?.locked) {
+        return [];
+      }
+      return [
+        {
+          clip,
+          trackId: effectsTrackId,
+          kind: 'effects',
+          existing: existingEffects?.clips ?? [],
+        },
+      ];
+    }
     const original = sequence.tracks.find((track) => track.id === clip.trackId);
     const track =
       original && !original.locked && isClipCompatible(original.kind, clip.type)
@@ -255,7 +299,16 @@ export function pasteClipsCommand(
             (candidate) =>
               !candidate.locked && isClipCompatible(candidate.kind, clip.type),
           );
-    return track ? [{ clip, track }] : [];
+    return track
+      ? [
+          {
+            clip,
+            trackId: track.id,
+            kind: track.kind,
+            existing: track.clips,
+          },
+        ]
+      : [];
   });
   if (targets.length === 0) {
     return null;
@@ -266,12 +319,16 @@ export function pasteClipsCommand(
 
   for (let attempts = 0; attempts < 1000; attempts += 1) {
     const collisions: number[] = [];
-    for (const { clip, track } of targets) {
+    for (const { clip, kind, existing } of targets) {
+      // Effects overlays are allowed to overlap; stacking keeps both visible.
+      if (kind === 'effects') {
+        continue;
+      }
       const start = clip.startFrame + shift;
       const end = start + clip.durationFrames;
-      for (const existing of track.clips) {
-        if (existing.startFrame < end && clipEndFrame(existing) > start) {
-          collisions.push(clipEndFrame(existing) - clip.startFrame);
+      for (const candidate of existing) {
+        if (candidate.startFrame < end && clipEndFrame(candidate) > start) {
+          collisions.push(clipEndFrame(candidate) - clip.startFrame);
         }
       }
     }
@@ -281,13 +338,13 @@ export function pasteClipsCommand(
     shift = Math.max(shift, ...collisions);
   }
 
-  const commands: EditCommand[] = [];
+  const commands: EditCommand[] = [...(ensureEffects?.commands ?? [])];
   const clipIds: Clip['id'][] = [];
-  for (const { clip, track } of targets) {
+  for (const { clip, trackId } of targets) {
     const copy: Clip = clipSchema.parse({
       ...clip,
       id: newId('clip'),
-      trackId: track.id,
+      trackId,
       startFrame: clip.startFrame + shift,
       locked: false,
     });
@@ -295,7 +352,7 @@ export function pasteClipsCommand(
     clipIds.push(copy.id);
   }
 
-  if (commands.length === 0) {
+  if (clipIds.length === 0) {
     return null;
   }
 
