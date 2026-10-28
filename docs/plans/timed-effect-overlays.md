@@ -1,6 +1,6 @@
 # Timed Effect Overlays — Implementation Plan
 
-> Status: proposed, awaiting decision confirmation
+> Status: implemented (phases 1–6 complete)
 > Scope: Blur, Callout, Spotlight and magnifier Zoom overlays as timed `fxOverlay` clips on a dedicated Effects track.
 > Baseline: `56fd626` (`feat(brand): replace the Kerf mark with the new logo`)
 
