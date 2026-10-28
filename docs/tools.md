@@ -68,31 +68,45 @@ report unavailable capabilities rather than fabricate results.
 | `readContext`      | Project and sequence summary, editor selection, playhead, analysis counts, active reference |
 | `readAssets`       | Footage list with duration, dimensions, stream flags, and analysis availability             |
 | `readAsset`        | One asset by ID or exact name, including transcript, scenes, and beat map                   |
-| `readTimeline`     | Tracks, clips, markers, timing, and effect counts in timeline order                         |
+| `readTimeline`     | Tracks, clips, overlays, markers, timing, and effect counts in timeline order               |
 | `readTranscript`   | Transcript segments and optional word timings for a frame window                            |
 | `findInTranscript` | Transcript and scene search hits with asset and frame ranges                                |
-| `renderFrame`      | One composited frame as a local PNG path                                                    |
+| `renderFrame`      | One composited frame, returned as a PNG path and an image result                            |
 | `readDuration`     | Sequence or asset duration in frames, seconds, and timecode                                 |
-| `listEffects`      | Supported effects, masks, blend modes, fits, and animatable properties                      |
+| `listEffects`      | Supported effects, overlays, masks, blend modes, fits, and animatable properties            |
+
+`renderFrame` returns both the frame metadata and the captured image, so a model
+can inspect what it just changed. MCP sends an image content block; the built-in
+agent receives the same bytes as a file part. Read-only inspection of the effect
+result therefore does not require a separate screenshot step.
 
 ### Edit
 
-| Tool              | What it does                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------- |
-| `insertClip`      | Insert a video or image asset on a visual track                                    |
-| `insertAudio`     | Insert an audio asset on an audio track                                            |
-| `insertText`      | Insert a styled text clip                                                          |
-| `editClip`        | Patch label, transform, effects, masks, keyframes, blend mode, fit, text, or style |
-| `moveClip`        | Move a clip to a new start frame, optionally to another track                      |
-| `trimClip`        | Extend or shorten a clip edge by a frame delta                                     |
-| `splitClip`       | Split one clip at an absolute sequence frame                                       |
-| `duplicateClip`   | Duplicate a clip, optionally on another track and offset                           |
-| `removeClips`     | Remove one or more clips as one undo step                                          |
-| `slipClip`        | Slip media inside its source without moving it on the timeline                     |
-| `setSpeedMap`     | Set constant speed and/or a time map as one undo step                              |
-| `animateProperty` | Set keyframes for transform, opacity, or volume                                    |
-| `markMoment`      | Add a marker or chapter point                                                      |
-| `applyBatch`      | Apply an ordered list of edits as one atomic undo step                             |
+| Tool              | What it does                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `insertClip`      | Insert a video or image asset on a visual track                                     |
+| `insertAudio`     | Insert an audio asset on an audio track                                             |
+| `insertText`      | Insert a styled text clip                                                           |
+| `editClip`        | Patch label, transform, effects, masks, keyframes, blend mode, fit, text, or style  |
+| `addOverlay`      | Add a blur, callout, spotlight, or zoom overlay, optionally linked to a clip        |
+| `updateOverlay`   | Patch an overlay's region, shape, timing, link, transitions, or kind-specific props |
+| `moveClip`        | Move a clip to a new start frame, optionally to another track                       |
+| `trimClip`        | Extend or shorten a clip edge by a frame delta                                      |
+| `splitClip`       | Split one clip at an absolute sequence frame                                        |
+| `duplicateClip`   | Duplicate a clip, optionally on another track and offset                            |
+| `removeClips`     | Remove one or more clips as one undo step                                           |
+| `slipClip`        | Slip media inside its source without moving it on the timeline                      |
+| `setSpeedMap`     | Set constant speed and/or a time map as one undo step                               |
+| `animateProperty` | Set keyframes for transform, opacity, or volume                                     |
+| `markMoment`      | Add a marker or chapter point                                                       |
+| `applyBatch`      | Apply an ordered list of edits as one atomic undo step                              |
+
+`addOverlay` links a new overlay to the first selected visual clip. If nothing
+visual is selected it uses an explicit `linkedItemId`, and failing that it
+creates an unlinked three-second overlay at the playhead. Regions and points are
+normalized to the canvas; blur radius and font sizes use 1080p-height units.
+`updateOverlay` patches the same discriminated `props` union the Inspector uses,
+so kind-specific fields remain type-checked.
 
 ### Macros
 

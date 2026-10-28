@@ -25,6 +25,31 @@ function clipRange(clip: Clip): OtioObject {
   return timeRange(0, clip.durationFrames, 1);
 }
 
+/**
+ * Overlays share one Kerf effects track but may overlap in time. OTIO tracks
+ * cannot overlap, so sort by start and place each overlay in the first lane
+ * whose previous clip has already ended.
+ */
+function packOverlayLanes(clips: readonly Clip[]): Clip[][] {
+  const lanes: Clip[][] = [];
+  const laneEnds: number[] = [];
+  const ordered = [...clips].sort(
+    (left, right) =>
+      left.startFrame - right.startFrame || left.id.localeCompare(right.id),
+  );
+  for (const clip of ordered) {
+    let lane = laneEnds.findIndex((end) => end <= clip.startFrame);
+    if (lane === -1) {
+      lane = lanes.length;
+      lanes.push([]);
+      laneEnds.push(0);
+    }
+    lanes[lane]!.push(clip);
+    laneEnds[lane] = clip.startFrame + clip.durationFrames;
+  }
+  return lanes;
+}
+
 function sourceRange(clip: Clip, sequence: Sequence): OtioObject | null {
   if (clip.type !== 'video' && clip.type !== 'audio') {
     return null;
@@ -89,6 +114,21 @@ function otioClip(
         ...(clip.type === 'text' ? { text: clip.text } : {}),
         ...(clip.type === 'caption' ? { text: clip.text } : {}),
         ...(clip.type === 'shape' ? { shape: clip.shape } : {}),
+        ...(clip.type === 'fxOverlay'
+          ? {
+              linkedItemId: clip.linkedItemId,
+              effectsTrackId: clip.trackId,
+              overlayKind: clip.props.kind,
+              region: clip.props.region,
+              shape: clip.props.shape,
+              transitions: {
+                inFrames: clip.props.transitionInFrames,
+                outFrames: clip.props.transitionOutFrames,
+              },
+              easing: clip.props.easing,
+              props: clip.props,
+            }
+          : {}),
       },
     },
   };
@@ -98,13 +138,15 @@ function otioTrack(
   sequence: Sequence,
   track: Sequence['tracks'][number],
   assets: ReadonlyMap<string, Asset>,
+  clips: readonly Clip[],
+  lane: number | null = null,
 ): OtioObject {
   const children: OtioObject[] = [];
   let cursor = 0;
-  const clips = [...track.clips].sort(
+  const ordered = [...clips].sort(
     (left, right) => left.startFrame - right.startFrame,
   );
-  for (const clip of clips) {
+  for (const clip of ordered) {
     if (clip.startFrame > cursor) {
       children.push({
         OTIO_SCHEMA: 'Gap.1',
@@ -124,20 +166,44 @@ function otioTrack(
 
   return {
     OTIO_SCHEMA: 'Track.1',
-    name: track.name,
+    name: lane === null ? track.name : `${track.name} · Lane ${lane + 1}`,
     kind: track.kind === 'audio' ? 'Audio' : 'Video',
     children,
     metadata: {
       kerf: {
-        id: track.id,
+        // Lanes of one effects track need distinct ids in OTIO, while
+        // `effectsTrackId` still points back to the Kerf track.
+        id: lane === null ? track.id : `${track.id}:lane:${lane + 1}`,
         kind: track.kind,
         order: track.order,
         muted: track.muted,
         hidden: track.hidden,
         locked: track.locked,
+        ...(lane === null ? {} : { lane: lane + 1, effectsTrackId: track.id }),
       },
     },
   };
+}
+
+/**
+ * Effects tracks are metadata-only and may hold overlapping overlays. Pack
+ * those into one OTIO track per lane; every other track maps one-to-one.
+ */
+function otioTracks(
+  sequence: Sequence,
+  track: Sequence['tracks'][number],
+  assets: ReadonlyMap<string, Asset>,
+): OtioObject[] {
+  if (track.kind !== 'effects' || track.clips.length === 0) {
+    return [otioTrack(sequence, track, assets, track.clips)];
+  }
+  const lanes = packOverlayLanes(track.clips);
+  if (lanes.length <= 1) {
+    return [otioTrack(sequence, track, assets, track.clips)];
+  }
+  return lanes.map((clips, lane) =>
+    otioTrack(sequence, track, assets, clips, lane),
+  );
 }
 
 /**
@@ -155,7 +221,10 @@ export function buildOtioTimeline(
   const duration = Math.max(
     0,
     ...sequence.tracks.flatMap((track) =>
-      track.clips.map((clip) => clip.startFrame + clip.durationFrames),
+      track.clips
+        // Overlays extend the timeline view but not the sequence runtime.
+        .filter((clip) => clip.type !== 'fxOverlay')
+        .map((clip) => clip.startFrame + clip.durationFrames),
     ),
   );
 
@@ -178,7 +247,7 @@ export function buildOtioTimeline(
       name: 'Tracks',
       children: [...sequence.tracks]
         .sort((left, right) => left.order - right.order)
-        .map((track) => otioTrack(sequence, track, assetsById)),
+        .flatMap((track) => otioTracks(sequence, track, assetsById)),
       metadata: {
         kerf: { sequenceId: sequence.id, fps },
       },

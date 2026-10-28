@@ -255,3 +255,25 @@ supported installer yet. Document the limitation in the README.
 
 **Consequence.** The source build is the supported path for now. Packaging and
 licence bundling must be revisited before a tagged release.
+
+## 21. Timed effects are clips on an effects track
+
+**Context.** Blur, callout, spotlight, and magnifier-zoom effects need their own
+timing, may overlap, and must survive edits to the footage beneath them. Storing
+them as properties of a source clip would tie their lifetime to that clip's trim
+and make an independent start or duration impossible.
+
+**Decision.** Model each overlay as an `fxOverlay` clip with a normalized canvas
+region and a discriminated `props` union, placed on a lazily created
+metadata-only effects track. Linked overlays follow their source through move,
+ripple, clone, split, delete, and track removal, but not trim, slip, speed, or
+time-map edits; dragging one fully off its source unlinks it. `props` patches
+deep-merge and keep `kind` immutable, so one drag is one undoable
+`clip.update`. The compositor draws overlays above footage and below text and
+captions. Export and single-frame captures use source media; previews use
+proxies except under an active zoom lens.
+
+**Consequence.** Overlays have independent timing, predictable link semantics,
+and one place in the timeline and Inspector. OTIO receives them as
+metadata-only clips that are lane-packed and excluded from sequence duration,
+so external editors preserve parameters without rendering the effect.

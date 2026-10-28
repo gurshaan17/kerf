@@ -177,9 +177,40 @@ were running when the app quit are recovered on the next start.
   falls back from a proxy to the source, and reports missing sources instead of
   throwing.
 
+When a timed overlay is active, the compositor switches to explicit phases:
+background, base clips, effects, deferred text and captions, then the selection
+outline. Text and captions are deferred so overlays can never blur or magnify
+them. A zoom lens repaints the backdrop beneath the lens before redrawing the
+non-text layers it intersects.
+
 The export renderer uses the same compositor at the target resolution. The
 renderer writes PNG frames in bounded batches, and the main process writes each
 batch and runs one `ffmpeg` pass for video plus the timeline audio mix.
+
+## Timed effect overlays
+
+Blur, callout, spotlight, and magnifier-zoom overlays are `fxOverlay` clips on
+a dedicated effects track rather than properties of a footage clip. Each overlay
+stores a normalized canvas region plus its own start frame and duration, so it
+can extend past its source and survive trimming.
+
+- The effects track is created lazily by the first overlay and is metadata-only:
+  it has no media and no runtime, and overlays do not extend the sequence
+  duration. The timeline's scroll extent does include them.
+- Regions and points are normalized to the canvas; absolute sizes such as blur
+  radius and font size are in 1080p-height units, so preview and export match at
+  any output resolution.
+- A linked overlay follows its source on move, ripple, remove, clone, split, and
+  track removal. Trim, slip, speed, and time-map edits do not move it; dragging
+  it fully off its source unlinks it in one undo step.
+- `props` is a discriminated union patched with deep merge. Dragging a handle
+  dispatches exactly one `clip.update` on pointer release, so a drag is one
+  history entry.
+- Preview uses proxies, but export and single-frame captures use source
+  quality. An active zoom lens also requests source quality in the preview.
+
+Text and captions always composite above overlays. Overlay handles live in an
+HTML layer above the preview canvas, so they never appear in rendered frames.
 
 ## Analysis
 
@@ -231,7 +262,10 @@ Export records survive restarts. The UI reports progress, the output path, and
 errors from the record rather than guessing.
 
 OpenTimelineIO export writes the timeline structure with explicit gaps and
-markers, using external references to the original media.
+markers, using external references to the original media. Overlays are exported
+as metadata-only `Clip.1` entries with missing references, and overlapping
+overlays are lane-packed into separate OTIO tracks. They are excluded from the
+exported duration, so an overlay that trails the sequence does not extend it.
 
 ## Testing
 
