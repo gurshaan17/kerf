@@ -120,7 +120,7 @@ test('creates, imports, cuts, captions and exports a project', async () => {
       },
     );
 
-    const clips = page.locator('.k-clip');
+    const clips = page.locator('.k-clip--video');
     await expect(clips).toHaveCount(1);
 
     const clipBox = await clips.first().boundingBox();
