@@ -11,6 +11,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import type { MediaPool } from './media-pool';
 import { renderFrame } from './render';
+import { overlayTransitionProgress } from './overlays';
 import { setScratchCanvasFactory } from './scratch';
 
 // Golden frames need a 2D canvas in Node. The compositor is duck-typed, so the
@@ -467,6 +468,30 @@ describe('overlay golden frames', () => {
     expect(at(sequence, 5)).toBeGreaterThan(base);
     expect(at(sequence, 9)).toBeGreaterThan(at(sequence, 5));
     expect(at(sequence, 20)).toBe(255);
+  });
+
+  it('interpolates zoom transitions instead of switching scale abruptly', () => {
+    const zoom = makeOverlaySequence([
+      {
+        kind: 'zoom',
+        props: {
+          zoom: 3,
+          transitionInFrames: 10,
+          transitionOutFrames: 10,
+          easing: 'linear',
+        },
+      },
+    ]).tracks.find((track) => track.kind === 'effects')?.clips[0];
+
+    if (!zoom || zoom.type !== 'fxOverlay') {
+      throw new Error('expected a zoom overlay');
+    }
+
+    expect(overlayTransitionProgress(zoom.props, 0, 100)).toBe(0);
+    expect(overlayTransitionProgress(zoom.props, 5, 100)).toBeCloseTo(5 / 9);
+    expect(overlayTransitionProgress(zoom.props, 10, 100)).toBe(1);
+    expect(overlayTransitionProgress(zoom.props, 95, 100)).toBeCloseTo(4 / 9);
+    expect(overlayTransitionProgress(zoom.props, 99, 100)).toBe(0);
   });
 });
 

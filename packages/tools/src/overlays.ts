@@ -52,6 +52,8 @@ export function defaultOverlayProps(kind: OverlayKind): OverlayProps {
   return overlayPropsSchema.parse({
     kind,
     region: DEFAULT_OVERLAY_REGIONS[kind],
+    transitionInFrames: 24,
+    transitionOutFrames: 24,
   });
 }
 

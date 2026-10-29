@@ -7,7 +7,11 @@ export {
   seekVideo,
 } from './media-pool';
 export type { MediaPoolOptions, MediaQuality, MediaSlot } from './media-pool';
-export { drawOverlay, overlayTransitionOpacity } from './overlays';
+export {
+  drawOverlay,
+  overlayTransitionOpacity,
+  overlayTransitionProgress,
+} from './overlays';
 export type { DrawLayer, OverlayDrawOptions } from './overlays';
 export { clipAtFrame, mediaSourceSeconds, renderFrame } from './render';
 export type { RenderFrameOptions, RenderStats } from './render';

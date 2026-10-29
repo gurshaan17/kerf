@@ -67,10 +67,10 @@ function easeProgress(easing: OverlayEasing, value: number): number {
 }
 
 /**
- * Transition alpha for an overlay. The model and engine clamp transitions, but
- * the renderer re-checks so a hand-built sequence cannot fade past 1 or 0.
+ * Transition progress for an overlay. The model and engine clamp transitions,
+ * but the renderer re-checks so a hand-built sequence stays within 0 and 1.
  */
-export function overlayTransitionOpacity(
+export function overlayTransitionProgress(
   props: OverlayProps,
   localFrame: number,
   durationFrames: number,
@@ -84,15 +84,28 @@ export function overlayTransitionOpacity(
     outFrames = Math.max(0, duration - inFrames);
   }
 
-  let opacity = 1;
+  const sampleProgress = (position: number, length: number): number =>
+    length <= 1 ? 1 : position / (length - 1);
+  let progress = 1;
   if (inFrames > 0 && frame < inFrames) {
-    opacity *= easeProgress(props.easing, frame / inFrames);
+    progress = easeProgress(props.easing, sampleProgress(frame, inFrames));
   }
   const outStart = duration - outFrames;
   if (outFrames > 0 && frame >= outStart) {
-    opacity *= easeProgress(props.easing, (duration - frame) / outFrames);
+    progress = easeProgress(
+      props.easing,
+      sampleProgress(duration - frame - 1, outFrames),
+    );
   }
-  return clamp01(opacity);
+  return clamp01(progress);
+}
+
+export function overlayTransitionOpacity(
+  props: OverlayProps,
+  localFrame: number,
+  durationFrames: number,
+): number {
+  return overlayTransitionProgress(props, localFrame, durationFrames);
 }
 
 function regionPixels(
@@ -373,6 +386,8 @@ function drawZoom(
   options: OverlayDrawOptions,
   opacity: number,
   frame: number,
+  localFrame: number,
+  durationFrames: number,
 ): void {
   const { width, height } = options;
   const unit = height / 1080;
@@ -389,7 +404,12 @@ function drawZoom(
 
   // The lens magnifies content around the focus point. Anything outside the
   // backed-out lens rectangle cannot be visible, so it is skipped.
-  const zoom = Math.max(0.01, props.zoom);
+  const transition = overlayTransitionProgress(
+    props,
+    localFrame,
+    durationFrames,
+  );
+  const zoom = Math.max(0.01, 1 + (props.zoom - 1) * transition);
   const contentRegion: PixelRegion = {
     x: focus.x - region.w / (2 * zoom) - 2,
     y: focus.y - region.h / (2 * zoom) - 2,
@@ -493,7 +513,16 @@ export function drawOverlay(
       opacity,
     );
   } else {
-    drawZoom(context, props, region, options, opacity, frame);
+    drawZoom(
+      context,
+      props,
+      region,
+      options,
+      opacity,
+      frame,
+      localFrame,
+      overlay.durationFrames,
+    );
   }
   return true;
 }
