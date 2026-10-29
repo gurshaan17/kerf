@@ -226,10 +226,18 @@ describe('beat tools', () => {
       assetId: video.id,
       density: 'dense',
     });
-    expect(result.cutCount).toBe(9);
-    expect(result.segmentCount).toBe(10);
+    expect(result.cutCount).toBe(18);
+    expect(result.segmentCount).toBe(20);
     const clips = test.snapshot().project.sequence.tracks[0]?.clips ?? [];
     expect(clips).toHaveLength(10);
+    const audioClips = test
+      .snapshot()
+      .project.sequence.tracks.flatMap((track) => track.clips)
+      .filter((clip) => clip.type === 'audio');
+    expect(audioClips).toHaveLength(10);
+    expect(audioClips.map((clip) => clip.startFrame)).toEqual(
+      clips.map((clip) => clip.startFrame),
+    );
     expect(clips.every((clip) => clip.startFrame % 24 === 0)).toBe(true);
     expect(sequenceDurationFrames(test.snapshot().project.sequence)).toBe(240);
   });

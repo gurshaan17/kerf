@@ -12,6 +12,7 @@ import {
   ensureEffectsTrackCommands,
   findClip,
   isClipCompatible,
+  mediaInsertCommand,
   rippleDeleteCommand,
   tracksInOrder,
 } from '@kerf/engine';
@@ -89,7 +90,7 @@ export function insertAssetCommand(
   sequence: Sequence,
   trackId: string,
   startFrame: number,
-): Extract<EditCommand, { type: 'clip.insert' }> | null {
+): EditCommand | null {
   const track = sequence.tracks.find((candidate) => candidate.id === trackId);
   if (!track || track.locked) {
     return null;
@@ -98,7 +99,7 @@ export function insertAssetCommand(
   if (!clip) {
     return null;
   }
-  return { type: 'clip.insert', clip };
+  return mediaInsertCommand(sequence, asset, clip);
 }
 
 export function preferredTrackForAsset(

@@ -3,6 +3,7 @@ export * from './compatibility';
 export * from './effects-track';
 export * from './errors';
 export * from './history';
+export * from './media-insert';
 export * from './queries';
 export * from './ranges';
 export * from './retime';

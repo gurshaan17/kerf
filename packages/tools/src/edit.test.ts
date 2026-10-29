@@ -181,8 +181,21 @@ describe('insertion tools', () => {
       startFrame: 0,
       clipDurationFrames: 240,
     });
-    expect(test.commands()[0]).toMatchObject({ type: 'clip.insert' });
-    expect(clipById(test.snapshot(), result.clipId).type).toBe('video');
+    expect(test.commands()[0]).toMatchObject({ type: 'batch' });
+    expect(clipById(test.snapshot(), result.clipId)).toMatchObject({
+      type: 'video',
+      volume: 0,
+    });
+    const audio = test
+      .snapshot()
+      .project.sequence.tracks.flatMap((track) => track.clips)
+      .find((clip) => clip.type === 'audio');
+    expect(audio).toMatchObject({
+      assetId,
+      startFrame: 0,
+      durationFrames: 240,
+      volume: 1,
+    });
   });
 
   it('inserts audio, text and reports sequence duration', async () => {

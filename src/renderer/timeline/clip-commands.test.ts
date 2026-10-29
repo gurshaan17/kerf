@@ -87,6 +87,72 @@ function audioAsset() {
 }
 
 describe('timeline clip commands', () => {
+  it('inserts separate synchronized video and audio in one undoable edit', () => {
+    const sequence = createSequence({ name: 'Split source audio' });
+    const video = { ...videoAsset(), hasAudio: true };
+    const track = preferredTrackForAsset(video, sequence)!;
+    const command = insertAssetCommand(video, sequence, track.id, 30)!;
+    const result = applyCommand(sequence, command);
+    const clips = result.sequence.tracks.flatMap((track) => track.clips);
+    expect(clips).toHaveLength(2);
+    expect(clips.find((clip) => clip.type === 'video')).toMatchObject({
+      assetId: video.id,
+      startFrame: 30,
+      durationFrames: 240,
+      volume: 0,
+    });
+    expect(clips.find((clip) => clip.type === 'audio')).toMatchObject({
+      assetId: video.id,
+      startFrame: 30,
+      durationFrames: 240,
+      volume: 1,
+      sourceInFrame: 0,
+    });
+    expect(applyCommand(result.sequence, result.inverse!).sequence).toEqual(
+      sequence,
+    );
+  });
+
+  it('creates an audio track when existing tracks are locked or occupied', () => {
+    const visual = createTrack({ kind: 'video', order: 0 });
+    const locked = createTrack({ kind: 'audio', order: 1, locked: true });
+    const occupied = createTrack({ kind: 'audio', order: 2 });
+    const existing = createClipForAsset(
+      audioAsset(),
+      occupied,
+      0,
+      FRAME_RATES.film,
+    )!;
+    const sequence = createSequence({
+      name: 'Full tracks',
+      tracks: [visual, locked, { ...occupied, clips: [existing] }],
+    });
+    const video = { ...videoAsset(), hasAudio: true };
+    const result = applyCommand(
+      sequence,
+      insertAssetCommand(video, sequence, visual.id, 0)!,
+    );
+    expect(result.sequence.tracks).toHaveLength(4);
+    expect(result.sequence.tracks[3]?.clips[0]).toMatchObject({
+      type: 'audio',
+      assetId: video.id,
+    });
+    expect(result.sequence.tracks[2]?.clips).toEqual([existing]);
+    expect(applyCommand(result.sequence, result.inverse!).sequence).toEqual(
+      sequence,
+    );
+  });
+
+  it('keeps silent videos and images as single clip inserts', () => {
+    const sequence = createSequence({ name: 'Silent footage' });
+    const track = sequence.tracks[0]!;
+    for (const asset of [{ ...videoAsset(), hasAudio: false }, imageAsset()]) {
+      expect(insertAssetCommand(asset, sequence, track.id, 0)?.type).toBe(
+        'clip.insert',
+      );
+    }
+  });
+
   it('maps an asset to the first compatible unlocked track', () => {
     const sequence = createSequence({ name: 'Test' });
     const video = videoAsset();

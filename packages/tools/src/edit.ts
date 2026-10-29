@@ -25,7 +25,12 @@ import {
   textStyleSchema,
   timeMapSchema,
 } from '@kerf/model';
-import { findClip, sequenceDurationFrames, tracksInOrder } from '@kerf/engine';
+import {
+  findClip,
+  mediaInsertCommand,
+  sequenceDurationFrames,
+  tracksInOrder,
+} from '@kerf/engine';
 import type { ToolContext, ToolEditResult } from './types';
 
 const FALLBACK_CLIP_SECONDS = 5;
@@ -183,7 +188,7 @@ function requireClip(sequence: Sequence, clipId: string) {
 export const insertClipTool = {
   name: 'insertClip',
   description:
-    'Insert a video or image asset onto a visual track. Defaults to the playhead and the first compatible unlocked track.',
+    'Insert a video or image asset onto a visual track, with video source audio on a separate audio track. Defaults to the playhead and the first compatible unlocked track.',
   input: z.object({
     assetId: assetIdSchema,
     trackId: trackIdSchema.optional(),
@@ -220,7 +225,7 @@ export const insertClipTool = {
       clip.fit = input.fit;
     }
     const result = context.apply(
-      { type: 'clip.insert', clip },
+      mediaInsertCommand(snapshot.project.sequence, asset, clip),
       { label: `Insert ${asset.name}` },
     );
     return {

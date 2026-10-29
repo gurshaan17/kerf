@@ -938,7 +938,13 @@ export function Timeline() {
     }
     const result = await apply(command, 'Insert footage');
     if (result) {
-      selectClip(command.clip.id);
+      const inserted =
+        command.type === 'batch'
+          ? command.commands.find((item) => item.type === 'clip.insert')
+          : command;
+      if (inserted?.type === 'clip.insert') {
+        selectClip(inserted.clip.id);
+      }
     }
   };
 

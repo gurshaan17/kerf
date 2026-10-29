@@ -243,7 +243,15 @@ describe('timing macros', () => {
     const video = test.snapshot().assets[0]!;
     const music = test.snapshot().assets[1]!;
     await call(test, 'insertClip', { assetId: video.id });
-    await call(test, 'insertAudio', { assetId: music.id });
+    const musicTrack = test
+      .snapshot()
+      .project.sequence.tracks.find(
+        (track) => track.kind === 'audio' && track.clips.length === 0,
+      )!;
+    await call(test, 'insertAudio', {
+      assetId: music.id,
+      trackId: musicTrack.id,
+    });
     const result = await call(test, 'duckUnderSpeech', {
       assetId: video.id,
       gain: 0.25,

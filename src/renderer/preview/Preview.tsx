@@ -25,6 +25,7 @@ import { IconButton, cn } from '@kerf/ui';
 import { useStudio, useStudioStoreApi } from '../state/StudioProvider';
 import { OverlayControls } from './OverlayControls';
 import { selectSelectedClip } from '../state/selectors';
+import { AudioPlayback } from './audio-playback';
 
 const HARD_SEEK_SECONDS = 0.75;
 const DRIFT_GAIN = 0.5;
@@ -71,7 +72,7 @@ function syncVideos(
     syncedClips.set(clip.assetId, clip.id);
 
     video.volume = Math.max(0, Math.min(1, clip.volume));
-    video.muted = !allowAudio || clip.volume <= 0;
+    video.muted = !allowAudio || track.muted || clip.volume <= 0;
     video.preservesPitch = true;
 
     if (video.seeking && !force && !clipChanged) {
@@ -201,6 +202,16 @@ export function Preview() {
   );
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const syncedClipsRef = useRef(new Map<string, string>());
+  const audioRef = useRef<AudioPlayback | null>(null);
+
+  useEffect(() => {
+    const audio = new AudioPlayback();
+    audioRef.current = audio;
+    return () => {
+      audio.dispose();
+      audioRef.current = null;
+    };
+  }, []);
 
   const assets = snapshot?.assets ?? [];
   const assetsRef = useRef(assets);
@@ -259,6 +270,7 @@ export function Preview() {
     }
     seekVideos(sequence, playhead, pool);
     pauseVideos(sequence, pool);
+    audioRef.current?.pause();
     syncedClipsRef.current.clear();
   }, [playhead, playing, pool, sequence]);
 
@@ -287,6 +299,7 @@ export function Preview() {
         current.setPlayhead(duration);
         current.setPlaying(false);
         pauseVideos(sequence, pool);
+        audioRef.current?.pause();
         return;
       }
       if (rounded !== lastRounded) {
@@ -294,14 +307,17 @@ export function Preview() {
         current.setPlayhead(rounded);
       }
       syncVideos(sequence, rounded, pool, true, syncedClipsRef.current);
+      audioRef.current?.sync(sequence, assetsRef.current, rounded);
       frameHandle = requestAnimationFrame(tick);
     };
     syncedClipsRef.current.clear();
     syncVideos(sequence, startFrame, pool, true, syncedClipsRef.current, true);
+    audioRef.current?.sync(sequence, assetsRef.current, startFrame, true);
     frameHandle = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(frameHandle);
       pauseVideos(sequence, pool);
+      audioRef.current?.pause();
       syncedClipsRef.current.clear();
     };
   }, [duration, playing, pool, sequence, store]);
