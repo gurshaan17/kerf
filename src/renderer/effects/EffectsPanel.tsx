@@ -90,7 +90,7 @@ function overlayClips(sequence: Sequence): FxOverlayClip[] {
 
 function linkedLabel(sequence: Sequence, overlay: FxOverlayClip): string {
   if (!overlay.linkedItemId) {
-    return 'Unlinked · follows the timeline';
+    return 'Unlinked';
   }
   const source = findClip(sequence, overlay.linkedItemId)?.clip;
   return source
@@ -258,15 +258,13 @@ export function EffectsPanel() {
                       <span className="k-effects__badge" data-kind={kind}>
                         {OVERLAY_LABELS[kind]}
                       </span>
-                      <span className="k-effects__meta">
-                        <span className="k-effects__title">
-                          {overlay.label || OVERLAY_LABELS[kind]}
-                        </span>
-                        <span className="k-effects__sub">
-                          {formatTimecode(overlay.startFrame, rate)} ·{' '}
-                          {formatDuration(overlay.durationFrames, rate)} ·{' '}
-                          {linkedLabel(sequence, overlay)}
-                        </span>
+                      <span className="k-effects__title">
+                        {overlay.label || OVERLAY_LABELS[kind]}
+                      </span>
+                      <span className="k-effects__sub">
+                        {formatTimecode(overlay.startFrame, rate)} ·{' '}
+                        {formatDuration(overlay.durationFrames, rate)} ·{' '}
+                        {linkedLabel(sequence, overlay)}
                       </span>
                     </button>
                     <span className="k-effects__actions">
