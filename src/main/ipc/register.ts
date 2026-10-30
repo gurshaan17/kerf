@@ -8,6 +8,8 @@ import {
   IMAGE_EXTENSIONS,
   VIDEO_EXTENSIONS,
   frameRateSchema,
+  narrationEditSchema,
+  narrationGenerateSchema,
   newId,
   type AssetKind,
 } from '@kerf/model';
@@ -314,6 +316,76 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   ipcMain.handle(KERF_IPC.analysis.run, (_event, request: unknown) =>
     analysis.run(analysisRunSchema.parse(request)),
   );
+  ipcMain.handle(KERF_IPC.narration.generate, (_event, request: unknown) =>
+    analysis.generateNarration(narrationGenerateSchema.parse(request)),
+  );
+  for (const type of [
+    'updateText',
+    'setTiming',
+    'split',
+    'merge',
+    'add',
+    'delete',
+    'undo',
+    'redo',
+    'review',
+  ] as const) {
+    ipcMain.handle(KERF_IPC.narration[type], (_event, request: unknown) => {
+      const fields = z.record(z.string(), z.unknown()).parse(request);
+      return analysis.editNarration(
+        narrationEditSchema.parse({ ...fields, type }),
+      );
+    });
+  }
+  const captionsRequest = z
+    .object({
+      transcriptId: z.string().min(1),
+      expectedRevision: z.number().int().nonnegative(),
+      confirm: z.boolean(),
+    })
+    .strict();
+  ipcMain.handle(
+    KERF_IPC.narration.captions,
+    async (_event, request: unknown) => {
+      const input = captionsRequest.parse(request);
+      const snapshot = projects.current();
+      const transcript = snapshot?.transcripts.find(
+        (t) => t.id === input.transcriptId,
+      );
+      if (
+        !snapshot ||
+        !transcript ||
+        transcript.source !== 'visual' ||
+        transcript.revision !== input.expectedRevision
+      )
+        throw new Error('Narration changed. Reload before creating captions.');
+      const existing = snapshot.project.sequence.tracks
+        .flatMap((track) => track.clips)
+        .filter(
+          (clip) =>
+            clip.type === 'caption' &&
+            clip.transcriptId === transcript.id &&
+            clip.generatedFromTranscript,
+        ).length;
+      const proposed = transcript.segments.length;
+      if (input.confirm) {
+        if (transcript.status !== 'reviewed')
+          throw new Error(
+            'Review the narration and mark it reviewed before creating captions.',
+          );
+        await tools.call(
+          'writeCaptions',
+          {
+            transcriptId: transcript.id,
+            preset: 'clean',
+            expectedRevision: input.expectedRevision,
+          },
+          'user',
+        );
+      }
+      return { existing, proposed };
+    },
+  );
   ipcMain.handle(KERF_IPC.analysis.status, () => analysis.status());
   ipcMain.handle(KERF_IPC.analysis.search, (_event, request: unknown) =>
     analysis.query(searchSchema.parse(request)),
@@ -582,6 +654,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       ...Object.values(KERF_IPC.jobs),
       ...Object.values(KERF_IPC.export),
       ...Object.values(KERF_IPC.analysis),
+      ...Object.values(KERF_IPC.narration),
       ...Object.values(KERF_IPC.motion),
       ...Object.values(KERF_IPC.mcp),
       ...Object.values(KERF_IPC.references),

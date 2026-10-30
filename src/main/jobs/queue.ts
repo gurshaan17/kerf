@@ -150,6 +150,11 @@ export class JobQueue {
       .all() as Array<{ id: string }>;
     this.database
       .prepare(
+        "UPDATE jobs SET status = 'failed', error = 'Visual narration was interrupted. Generate again explicitly to resume provider use.', finished_at = ?, updated_at = ? WHERE status = 'running' AND kind = 'analysis.visualNarration'",
+      )
+      .run(this.now(), this.now());
+    this.database
+      .prepare(
         `UPDATE jobs SET
           status = 'queued', stage = '', progress = 0, error = NULL,
           started_at = NULL, cancel_requested = 0, updated_at = ?
@@ -387,6 +392,7 @@ export class JobQueue {
     result?: unknown,
   ): void {
     const now = this.now();
+    const current = this.get(id);
     this.database
       .prepare(
         `UPDATE jobs SET
@@ -396,7 +402,11 @@ export class JobQueue {
       )
       .run(
         status,
-        status === 'succeeded' ? 'done' : status,
+        status === 'succeeded'
+          ? current?.kind === 'analysis.visualNarration'
+            ? current.stage
+            : 'done'
+          : status,
         status === 'succeeded' ? 1 : (this.get(id)?.progress ?? 0),
         error,
         result === undefined ? null : JSON.stringify(result),

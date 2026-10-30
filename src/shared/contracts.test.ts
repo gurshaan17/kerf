@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { KerfBridge } from './contracts';
+import { unusedNarrationBridge } from '../../test/helpers/narration-bridge';
 
 const bridge: KerfBridge = {
+  narration: unusedNarrationBridge,
   getVersions: () => ({ electron: '1', chrome: '2', node: '3' }),
   projects: {
     list: async () => [],

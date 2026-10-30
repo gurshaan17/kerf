@@ -13,6 +13,7 @@ import {
   referenceProfileSchema,
   sceneSchema,
   transcriptSegmentSchema,
+  transcriptSchema,
 } from '@kerf/model';
 import { openDatabase } from '../db';
 import type { DatabaseHandle } from '../db';
@@ -44,6 +45,39 @@ afterEach(() => {
 });
 
 describe('ProjectRepository', () => {
+  it('commits narration revisions atomically, rejects stale writes and persists undo states', () => {
+    const repository = makeRepository();
+    const bundle = repository.create({ name: 'Narration' });
+    const asset = repository.saveAsset(
+      createAsset({
+        projectId: bundle.project.id,
+        sourcePath: '/tmp/demo.mp4',
+        name: 'demo.mp4',
+        kind: 'video',
+      }),
+    );
+    const previous = transcriptSchema.parse({
+      ...createTranscript({ assetId: asset.id, segments: [] }),
+      source: 'visual',
+      status: 'draft',
+    });
+    repository.commitNarration(previous, null);
+    const next = transcriptSchema.parse({
+      ...previous,
+      revision: 1,
+      undoStates: [{ segments: [], status: 'draft' }],
+    });
+    repository.commitNarration(next, previous);
+    expect(() =>
+      repository.commitNarration({ ...next, revision: 2 }, previous),
+    ).toThrow(/changed/);
+    const reopened = repository.open(bundle.project.id)!;
+    expect(reopened.transcripts[0]).toMatchObject({
+      revision: 1,
+      undoStates: [{ segments: [], status: 'draft' }],
+    });
+    expect(reopened.assets[0]?.transcriptId).toBe(next.id);
+  });
   it('creates project folders and lists, opens, renames and deletes projects', () => {
     const repository = makeRepository();
     const bundle = repository.create({

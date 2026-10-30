@@ -82,8 +82,8 @@ export function GettingStarted({
     },
     {
       id: 'analyze',
-      label: 'Transcribe a clip',
-      detail: 'Select a clip and choose Transcribe in Footage.',
+      label: 'Add text to a clip',
+      detail: 'Choose Transcribe or Visual narration in Footage.',
       done: hasTranscript,
       icon: Captions,
     },

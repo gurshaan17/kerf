@@ -118,6 +118,19 @@ const bridge: KerfBridge = {
       invoke<WhisperModelInstall>(KERF_IPC.analysis.downloadModel, id),
     deleteModel: (id) => invoke<boolean>(KERF_IPC.analysis.deleteModel, id),
   },
+  narration: {
+    generate: (request) => invoke(KERF_IPC.narration.generate, request),
+    captions: (request) => invoke(KERF_IPC.narration.captions, request),
+    updateText: (request) => invoke(KERF_IPC.narration.updateText, request),
+    setTiming: (request) => invoke(KERF_IPC.narration.setTiming, request),
+    split: (request) => invoke(KERF_IPC.narration.split, request),
+    merge: (request) => invoke(KERF_IPC.narration.merge, request),
+    add: (request) => invoke(KERF_IPC.narration.add, request),
+    delete: (request) => invoke(KERF_IPC.narration.delete, request),
+    undo: (request) => invoke(KERF_IPC.narration.undo, request),
+    redo: (request) => invoke(KERF_IPC.narration.redo, request),
+    review: (request) => invoke(KERF_IPC.narration.review, request),
+  },
   motion: {
     save: (request: CompositionSaveRequest) =>
       invoke<CompositionSaveResult>(KERF_IPC.motion.save, request),

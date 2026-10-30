@@ -171,6 +171,26 @@ describe('JobQueue', () => {
     expect(queue.get(job.id)?.progress).toBe(1);
   });
 
+  it('does not automatically resume an interrupted visual provider job', () => {
+    const { queue, database } = makeQueue();
+    let calls = 0;
+    queue.registerHandler('analysis.visualNarration', () => {
+      calls++;
+    });
+    const job = queue.enqueue({
+      projectId: null,
+      kind: 'analysis.visualNarration',
+      payload: {},
+    });
+    database.connection
+      .prepare("UPDATE jobs SET status='running' WHERE id=?")
+      .run(job.id);
+    queue.start();
+    expect(queue.get(job.id)?.status).toBe('failed');
+    expect(calls).toBe(0);
+    expect(queue.get(job.id)?.error).toContain('explicitly');
+  });
+
   it('fails a job when no handler is registered', async () => {
     const { queue } = makeQueue();
     const job = queue.enqueue({

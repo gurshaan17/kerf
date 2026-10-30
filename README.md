@@ -150,6 +150,7 @@ under `.cache/e2e/` and ignored by git.
 - [Decisions](docs/decisions.md) — the choices that shape the editor.
 - [Tools](docs/tools.md) — the agent and MCP tool catalog.
 - [Performance](docs/performance.md) — measured targets and methodology.
+- [Visual narration](docs/visual-narration.md) — generate and review text from silent footage.
 - [Contributing](CONTRIBUTING.md) — setup, tests, and review expectations.
 - [Privacy](PRIVACY.md) — what stays local and when the network is used.
 - [Third-party notices](THIRD_PARTY_NOTICES.md) — bundled and invoked

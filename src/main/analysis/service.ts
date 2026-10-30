@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { statSync } from 'node:fs';
 import { z } from 'zod';
 import type { Asset, FrameRate, ReferenceProfile, Scene } from '@kerf/model';
 import { secondsToFrames } from '@kerf/model';
@@ -14,6 +15,17 @@ import { detectScenes } from './scenes';
 import { SearchService } from './search';
 import { transcribeAsset } from './transcribe';
 import { describeScenes } from './vision';
+import { generateVisualNarration } from './visual-narration';
+import {
+  narrationEditSchema,
+  narrationGenerateSchema,
+  editNarration,
+  regenerateNarration,
+  transcriptSchema,
+  createTranscript,
+  validateNarrationSegments,
+  type NarrationGenerateRequest,
+} from '@kerf/model';
 import {
   deleteModel,
   downloadModel,
@@ -47,6 +59,22 @@ const visionPayloadSchema = assetPayloadSchema.extend({
   onlyUndescribed: z.boolean().optional(),
 });
 const modelPayloadSchema = z.object({ modelId: z.string().min(1) });
+const narrationPayloadSchema = z
+  .object({
+    assetId: z.string().min(1),
+    request: narrationGenerateSchema,
+    sourceRevision: z.string(),
+    providerRevision: z.string(),
+  })
+  .strict();
+function narrationSourceRevision(asset: Asset): string {
+  return JSON.stringify([
+    asset.sourcePath,
+    asset.contentHash,
+    asset.fileSize,
+    asset.mtimeMs,
+  ]);
+}
 
 const ANALYSIS_KINDS: readonly AnalysisKind[] = [
   'transcript',
@@ -95,6 +123,15 @@ export class AnalysisService {
       now: this.now,
     });
     this.registerJobs();
+    this.projects.subscribe((event) => {
+      if (event.type === 'project.closed' || event.type === 'project.opened')
+        for (const job of this.jobs.list())
+          if (
+            job.kind === 'analysis.visualNarration' &&
+            (job.status === 'queued' || job.status === 'running')
+          )
+            this.jobs.cancel(job.id);
+    });
   }
 
   get providers(): ProviderStore {
@@ -161,6 +198,7 @@ export class AnalysisService {
       return {
         assetId: asset.id,
         transcript: transcript !== null,
+        transcriptSource: transcript?.source,
         sceneCount: scenes.length,
         descriptions: scenes.filter(
           (scene) => scene.description !== null && scene.description.length > 0,
@@ -363,6 +401,12 @@ export class AnalysisService {
       }
     }
     if (kind === 'transcript') {
+      if (
+        snapshot.transcripts.some(
+          (t) => t.assetId === asset.id && t.source === 'visual',
+        )
+      )
+        return 'Visual narration already exists. Audio transcription cannot replace it silently.';
       let binary: string | null = null;
       try {
         binary = findWhisperBinary();
@@ -383,6 +427,18 @@ export class AnalysisService {
   }
 
   private registerJobs(): void {
+    this.jobs.registerHandler(
+      'analysis.visualNarration',
+      (payload, context) => {
+        const parsed = narrationPayloadSchema.parse(payload);
+        return this.narrationJob(
+          parsed.request,
+          context,
+          parsed.sourceRevision,
+          parsed.providerRevision,
+        );
+      },
+    );
     this.jobs.registerHandler('analysis.transcript', (payload, context) =>
       this.transcriptJob(assetPayloadSchema.parse(payload), context),
     );
@@ -398,6 +454,254 @@ export class AnalysisService {
     this.jobs.registerHandler('model.download', (payload, context) =>
       this.modelDownloadJob(modelPayloadSchema.parse(payload), context),
     );
+  }
+
+  editNarration(request: unknown): ProjectSnapshot {
+    const parsed = narrationEditSchema.parse(request);
+    const snapshot = this.projects.current();
+    const previous = snapshot?.transcripts.find(
+      (t) => t.id === parsed.transcriptId,
+    );
+    if (!snapshot || !previous)
+      throw new Error('Open the project containing this narration.');
+    const { asset, rate } = this.projectContext(previous.assetId);
+    const next = editNarration(
+      previous,
+      parsed,
+      this.durationFrames(asset, rate),
+    );
+    this.repository.commitNarration(next, previous);
+    this.searchService.reindexProject(snapshot.project.id);
+    return this.projects.refresh('analysis');
+  }
+
+  generateNarration(
+    request: unknown,
+  ): import('../../shared/contracts').JobSummary {
+    const parsed = narrationGenerateSchema.parse(request);
+    const { asset, rate, projectId } = this.projectContext(parsed.assetId);
+    if (asset.kind !== 'video' || !asset.hasVideo || asset.status !== 'ready')
+      throw new Error('Choose a ready video asset.');
+    const duration = this.durationFrames(asset, rate);
+    if (
+      parsed.endFrame <= parsed.startFrame ||
+      parsed.endFrame > duration ||
+      ((parsed.endFrame - parsed.startFrame) * rate.denominator) /
+        rate.numerator >
+        1200
+    )
+      throw new Error('Choose a valid range up to 20 minutes.');
+    const provider = this.providerStore.find(parsed.providerId);
+    if (!provider?.enabled || !provider.visionConsent)
+      throw new Error('Choose an enabled vision provider with consent.');
+    const previous =
+      this.projects
+        .current()!
+        .transcripts.find((t) => t.assetId === asset.id) ?? null;
+    this.checkNarrationRevision(previous, parsed);
+    if (
+      this.jobs
+        .list(projectId)
+        .some(
+          (job) =>
+            job.kind === 'analysis.visualNarration' &&
+            job.targetId === asset.id &&
+            (job.status === 'running' || job.status === 'queued'),
+        )
+    )
+      throw new Error('Visual narration is already queued for this asset.');
+    return this.jobs.enqueue({
+      projectId,
+      kind: 'analysis.visualNarration',
+      payload: {
+        assetId: asset.id,
+        request: parsed,
+        sourceRevision: narrationSourceRevision(asset),
+        providerRevision: JSON.stringify([
+          provider.kind,
+          provider.model,
+          provider.baseUrl,
+        ]),
+      },
+    });
+  }
+
+  private checkNarrationRevision(
+    previous: import('@kerf/model').Transcript | null,
+    request: NarrationGenerateRequest,
+  ): void {
+    if ((previous?.revision ?? null) !== request.expectedRevision)
+      throw new Error('The transcript changed. Reload before generating.');
+    if (
+      previous &&
+      previous.source !== 'visual' &&
+      (previous.text.trim() ||
+        previous.segments.some((row) => row.text.trim()) ||
+        !request.replaceEmptySpeech)
+    )
+      throw new Error(
+        'A speech transcript exists. Nonempty speech cannot be replaced by visual narration. Empty speech output requires explicit replacement confirmation.',
+      );
+  }
+
+  private async narrationJob(
+    request: NarrationGenerateRequest,
+    context: JobContext,
+    sourceRevision: string,
+    providerRevision: string,
+  ): Promise<unknown> {
+    const { asset, rate, projectId, folder } = this.projectContext(
+      request.assetId,
+    );
+    if (context.job.projectId !== projectId)
+      throw new Error('The requested project is no longer open.');
+    if (narrationSourceRevision(asset) !== sourceRevision)
+      throw new Error(
+        'The source was replaced after this request was queued. Generate again for the current source.',
+      );
+    const previous =
+      this.projects
+        .current()!
+        .transcripts.find((t) => t.assetId === asset.id) ?? null;
+    this.checkNarrationRevision(previous, request);
+    const provider = this.providerStore.find(request.providerId);
+    if (!provider?.enabled || !provider.visionConsent)
+      throw new Error('Vision consent or provider is unavailable.');
+    const before = statSync(asset.sourcePath);
+    if (
+      asset.fileSize &&
+      (before.size !== asset.fileSize ||
+        Math.abs(before.mtimeMs - asset.mtimeMs) > 1)
+    )
+      throw new Error(
+        'The source file changed. Refresh or relink it before generating narration.',
+      );
+    const fingerprint = JSON.stringify([
+      provider.kind,
+      provider.model,
+      provider.baseUrl,
+    ]);
+    if (fingerprint !== providerRevision)
+      throw new Error(
+        'The selected vision model changed after queueing. Generate again to use the new settings.',
+      );
+    const checkProvider = () => {
+      const current = this.providerStore.find(provider.id);
+      if (
+        !current?.enabled ||
+        !current.visionConsent ||
+        JSON.stringify([current.kind, current.model, current.baseUrl]) !==
+          fingerprint
+      )
+        throw new Error(
+          'The chosen vision provider changed or consent was revoked.',
+        );
+    };
+    const secretForRedaction = this.providerStore.apiKey(provider.id);
+    const result = await generateVisualNarration({
+      path: asset.sourcePath,
+      ffmpeg: this.ffmpegPath(),
+      workRoot: join(folder, 'analysis', 'work'),
+      rate,
+      startFrame: request.startFrame,
+      endFrame: request.endFrame,
+      model: this.providerStore.model(provider),
+      width: provider.kind === 'google' ? 3 : 1,
+      signal: context.signal,
+      sceneCuts: this.projects
+        .current()!
+        .scenes.filter((s) => s.assetId === asset.id)
+        .map((s) => (s.startFrame * rate.denominator) / rate.numerator),
+      checkProvider,
+      progress: (progress, stage) => context.update(progress, stage),
+    }).catch((error) => {
+      const raw = error instanceof Error ? error.message : String(error);
+      const message = secretForRedaction
+        ? raw
+            .split(secretForRedaction)
+            .join('[redacted]')
+            .split(encodeURIComponent(secretForRedaction))
+            .join('[redacted]')
+        : raw;
+      throw new Error(message);
+    });
+    context.signal.throwIfAborted();
+    checkProvider();
+    const current = this.projects.current();
+    const after = statSync(asset.sourcePath);
+    const currentAsset = current?.assets.find((a) => a.id === asset.id);
+    if (
+      current?.project.id !== projectId ||
+      !currentAsset ||
+      currentAsset.sourcePath !== asset.sourcePath ||
+      currentAsset.contentHash !== asset.contentHash ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs
+    )
+      throw new Error(
+        'Project or source media changed while generating. No transcript was replaced.',
+      );
+    this.checkNarrationRevision(
+      current.transcripts.find((t) => t.assetId === asset.id) ?? null,
+      request,
+    );
+    if (!result.segments.length) {
+      context.update(
+        1,
+        'No useful visual changes found; prior transcript kept',
+      );
+      return { descriptions: 0 };
+    }
+    const duration = this.durationFrames(asset, rate);
+    const base =
+      previous?.source === 'visual'
+        ? previous
+        : transcriptSchema.parse({
+            ...createTranscript({
+              assetId: asset.id,
+              segments: [],
+              model: provider.model,
+            }),
+            ...(previous ? { id: previous.id } : {}),
+            source: 'visual',
+            status: 'draft',
+            revision: previous?.revision ?? 0,
+          });
+    const next =
+      previous?.source === 'visual'
+        ? regenerateNarration(
+            base,
+            result.segments,
+            request.startFrame,
+            request.endFrame,
+            request.replaceEdited,
+            duration,
+          )
+        : transcriptSchema.parse({
+            ...base,
+            segments: result.segments,
+            text: result.segments.map((s) => s.text).join(' '),
+            model: provider.model,
+            revision: previous ? previous.revision + 1 : 0,
+          });
+    next.model = provider.model;
+    validateNarrationSegments(next.segments, duration);
+    this.repository.commitNarration(next, previous);
+    try {
+      this.searchService.reindexProject(projectId);
+    } finally {
+      this.refresh(projectId);
+    }
+    context.update(
+      1,
+      `Draft ready: ${next.segments.length} rows. Review timing before captions.`,
+    );
+    return {
+      transcriptId: next.id,
+      descriptions: next.segments.length,
+      frames: result.sampleCount,
+      candidates: result.candidateCount,
+    };
   }
 
   private ffmpegPath(): string {
@@ -445,6 +749,16 @@ export class AnalysisService {
     context: JobContext,
   ): Promise<{ transcriptId: string }> {
     const { projectId, asset, folder } = this.projectContext(payload.assetId);
+    if (
+      this.projects
+        .current()!
+        .transcripts.some(
+          (t) => t.assetId === asset.id && t.source === 'visual',
+        )
+    )
+      throw new Error(
+        'Visual narration already exists; audio transcription was not run.',
+      );
     const binary = findWhisperBinary();
     if (!binary) {
       throw new WhisperUnavailableError('Whisper is not installed.');

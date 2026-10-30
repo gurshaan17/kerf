@@ -1,0 +1,18 @@
+{
+  "clips": [
+    { "kind": "screen", "path": "/path/to/screen-recording.mp4" },
+    { "kind": "camera", "path": "/path/to/camera.mp4" },
+    { "kind": "static", "path": "/path/to/static.mp4" },
+    { "kind": "long", "path": "/path/to/long.mp4" },
+    { "kind": "fast-ui", "path": "/path/to/fast-ui.mp4" }
+  ],
+  "provider": {
+    "kind": "ollama",
+    "model": "YOUR_VISION_MODEL",
+    "baseUrl": "http://127.0.0.1:11434/v1"
+  },
+  "resolutions": [768, 1280],
+  "widths": [1, 3],
+  "overlaps": [false, true],
+  "changeThreshold": 0.025
+}

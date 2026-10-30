@@ -10,7 +10,23 @@ import type {
   ReferenceProfile,
   Scene,
   Transcript,
+  NarrationEdit,
+  NarrationRequest,
+  NarrationGenerateRequest,
 } from '@kerf/model';
+
+export type NarrationBridge = {
+  generate(request: NarrationGenerateRequest): Promise<JobSummary>;
+  captions(request: {
+    transcriptId: string;
+    expectedRevision: number;
+    confirm: boolean;
+  }): Promise<{ existing: number; proposed: number }>;
+} & {
+  [K in NarrationEdit['type']]: (
+    request: NarrationRequest<K>,
+  ) => Promise<ProjectSnapshot>;
+};
 
 /** Serializable values the renderer may request from the main process. */
 export interface AppVersions {
@@ -158,6 +174,7 @@ export interface AnalysisRunResult {
 export interface AnalysisAssetStatus {
   readonly assetId: string;
   readonly transcript: boolean;
+  readonly transcriptSource?: 'speech' | 'visual';
   readonly sceneCount: number;
   readonly descriptions: number;
   readonly beatMap: boolean;
@@ -175,6 +192,7 @@ export type SearchMatchKind = 'transcript' | 'scene';
 export interface SearchResult {
   readonly id: string;
   readonly kind: SearchMatchKind;
+  readonly transcriptSource?: 'speech' | 'visual';
   readonly assetId: string;
   readonly assetName: string;
   readonly text: string;
@@ -571,6 +589,19 @@ export const KERF_IPC = {
     downloadModel: 'kerf:analysis:download-model',
     deleteModel: 'kerf:analysis:delete-model',
   },
+  narration: {
+    generate: 'kerf:narration:generate',
+    captions: 'kerf:narration:captions',
+    updateText: 'kerf:narration:update-text',
+    setTiming: 'kerf:narration:set-timing',
+    split: 'kerf:narration:split',
+    merge: 'kerf:narration:merge',
+    add: 'kerf:narration:add',
+    delete: 'kerf:narration:delete',
+    undo: 'kerf:narration:undo',
+    redo: 'kerf:narration:redo',
+    review: 'kerf:narration:review',
+  },
   motion: {
     save: 'kerf:motion:save',
     delete: 'kerf:motion:delete',
@@ -670,6 +701,7 @@ export interface KerfBridge {
     readonly downloadModel: (id: string) => Promise<WhisperModelInstall>;
     readonly deleteModel: (id: string) => Promise<boolean>;
   };
+  readonly narration: NarrationBridge;
   readonly motion: {
     readonly save: (
       request: CompositionSaveRequest,

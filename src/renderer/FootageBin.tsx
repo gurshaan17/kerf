@@ -25,6 +25,7 @@ import { Button, IconButton, Input, Panel, cn } from '@kerf/ui';
 import type { AnalysisAssetStatus, JobSummary } from '../shared/contracts';
 import { ASSET_DRAG_MIME } from './drag';
 import { GettingStarted } from './GettingStarted';
+import { VisualNarrationDialog } from './transcript/VisualNarration';
 
 export interface FootageBinProps {
   readonly assets: Asset[];
@@ -212,6 +213,7 @@ export function FootageBin({
 }: FootageBinProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [narrationOpen, setNarrationOpen] = useState(false);
 
   const pendingJobs = jobs.filter(
     (job) => job.status === 'queued' || job.status === 'running',
@@ -579,7 +581,10 @@ export function FootageBin({
                 onClick={() => onOpenTranscript(selected.id)}
                 className="inline-flex h-[18px] items-center gap-1 rounded-pill border border-ok/30 bg-ok/10 px-1.5 font-mono text-[8px] uppercase text-ok transition-colors duration-150 ease-k hover:border-ok/60 hover:bg-ok/15 focus-visible:outline-none"
               >
-                <Captions size={9} /> Transcript
+                <Captions size={9} />{' '}
+                {selectedAnalysis.transcriptSource === 'visual'
+                  ? 'Visual narration'
+                  : 'Transcript'}
               </button>
             ) : (
               <span className="inline-flex h-[18px] items-center gap-1 rounded-pill border border-line bg-surface-2 px-1.5 font-mono text-[8px] uppercase text-ink-faint">
@@ -652,6 +657,28 @@ export function FootageBin({
             <Button
               variant="secondary"
               size="sm"
+              disabled={
+                busy ||
+                selected.kind !== 'video' ||
+                selected.status !== 'ready' ||
+                jobs.some(
+                  (job) =>
+                    job.kind === 'analysis.visualNarration' &&
+                    job.targetId === selected.id &&
+                    (job.status === 'queued' || job.status === 'running'),
+                )
+              }
+              onClick={() =>
+                selectedAnalysis?.transcriptSource === 'visual'
+                  ? onOpenTranscript(selected.id)
+                  : setNarrationOpen(true)
+              }
+            >
+              Visual narration
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               leadingIcon={<ScanLine size={11} />}
               disabled={busy || selected.kind !== 'video'}
               onClick={() => void onAnalyze(selected.id, ['scenes'])}
@@ -703,6 +730,15 @@ export function FootageBin({
           </div>
         </div>
       ) : null}
+      {selected && (
+        <VisualNarrationDialog
+          key={selected.id}
+          open={narrationOpen}
+          onClose={() => setNarrationOpen(false)}
+          asset={selected}
+          onQueued={() => onOpenTranscript(selected.id)}
+        />
+      )}
     </Panel>
   );
 }

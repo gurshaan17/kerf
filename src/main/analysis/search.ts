@@ -168,8 +168,18 @@ export class SearchService {
       transcriptRows = lexical.transcripts;
       sceneRows = lexical.scenes;
     }
+    const sources = new Map<string, 'speech' | 'visual'>(
+      this.repository
+        .listTranscripts(projectId)
+        .map((t) => [t.assetId, t.source]),
+    );
     return {
-      results: this.fuse(assets, transcriptRows, sceneRows, limit),
+      results: this.fuse(assets, transcriptRows, sceneRows, limit).map(
+        (result) =>
+          result.kind === 'transcript'
+            ? { ...result, transcriptSource: sources.get(result.assetId) }
+            : result,
+      ),
       vectorSearch: this.vectorSearch,
     };
   }

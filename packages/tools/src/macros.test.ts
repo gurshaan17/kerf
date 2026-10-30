@@ -89,14 +89,20 @@ interface Harness {
   commands(): readonly EditCommand[];
 }
 
-function harness(): Harness {
+function harness(visual = false): Harness {
   const project = createProject({ name: 'Macro test', now: 1_000 });
   const video = asset(project, 'Interview.mp4', 'video');
   const music = asset(project, 'Music.mp3', 'audio');
   let snapshot: ToolSnapshot = {
     project,
     assets: [video, music],
-    transcripts: [transcriptFor(video.id)],
+    transcripts: [
+      {
+        ...transcriptFor(video.id),
+        source: visual ? 'visual' : 'speech',
+        status: 'reviewed',
+      },
+    ],
     scenes: [],
     beatMaps: [],
     referenceProfiles: [],
@@ -212,6 +218,85 @@ describe('caption macros', () => {
       .snapshot()
       .project.sequence.tracks.find((track) => track.kind === 'caption');
     expect(captionTrack?.clips).toHaveLength(3);
+  });
+  it('does not treat visual narration as speech for silence cutting', async () => {
+    const test = harness(true);
+    await expect(
+      call(test, 'cutSilences', {
+        assetId: test.snapshot().assets[0]!.id,
+        minSilenceFrames: 12,
+        paddingFrames: 2,
+      }),
+    ).rejects.toThrow(/speech transcript/);
+  });
+  it('maps visual source-frame timing to the timeline frame rate', async () => {
+    const test = harness(true);
+    const video = test.snapshot().assets[0]!;
+    video.frameRate = { numerator: 30, denominator: 1 };
+    await call(test, 'insertClip', { assetId: video.id });
+    await call(test, 'writeCaptions', { assetId: video.id, preset: 'clean' });
+    const captions = test
+      .snapshot()
+      .project.sequence.tracks.flatMap((t) => t.clips)
+      .filter((c) => c.type === 'caption');
+    expect(captions[0]).toMatchObject({ startFrame: 0, durationFrames: 38 });
+    expect(captions[1]).toMatchObject({ startFrame: 38, durationFrames: 39 });
+  });
+
+  it('keeps caption snapshots unchanged after narration edits; explicit update preserves manual clips', async () => {
+    const test = harness(true);
+    const transcript = test.snapshot().transcripts[0]!;
+    await call(test, 'insertClip', { assetId: transcript.assetId });
+    await call(test, 'writeCaptions', {
+      transcriptId: transcript.id,
+      preset: 'clean',
+      expectedRevision: 0,
+    });
+    const track = test
+      .snapshot()
+      .project.sequence.tracks.find((t) => t.kind === 'caption')!;
+    const original = track.clips[0]!;
+    if (original.type !== 'caption') throw new Error('Expected a caption');
+    const manual = {
+      ...original,
+      id: newId('clip'),
+      startFrame: 200,
+      durationFrames: 20,
+      text: 'Manual caption',
+      generatedFromTranscript: false,
+    };
+    test.context.apply({ type: 'clip.insert', clip: manual });
+    transcript.segments[0]!.text = 'User-reviewed new narration';
+    transcript.revision = 1;
+    expect(
+      test
+        .snapshot()
+        .project.sequence.tracks.flatMap((t) => t.clips)
+        .find((c) => c.id === original.id),
+    ).toMatchObject({ text: original.text, transcriptRevision: 0 });
+    await expect(
+      call(test, 'writeCaptions', {
+        transcriptId: transcript.id,
+        preset: 'clean',
+        expectedRevision: 0,
+      }),
+    ).rejects.toThrow(/changed/);
+    await call(test, 'writeCaptions', {
+      transcriptId: transcript.id,
+      preset: 'clean',
+      expectedRevision: 1,
+    });
+    const captions = test
+      .snapshot()
+      .project.sequence.tracks.flatMap((t) => t.clips)
+      .filter((c) => c.type === 'caption');
+    expect(captions.find((c) => c.id === manual.id)).toMatchObject({
+      text: 'Manual caption',
+    });
+    expect(captions.filter((c) => c.generatedFromTranscript)).toHaveLength(3);
+    expect(captions.some((c) => c.text === 'User-reviewed new narration')).toBe(
+      true,
+    );
   });
 });
 

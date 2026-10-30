@@ -158,6 +158,8 @@ export const captionClipSchema = z.object({
   type: z.literal('caption'),
   transcriptId: idSchema('transcript'),
   segmentId: idSchema('segment'),
+  generatedFromTranscript: z.boolean().optional(),
+  transcriptRevision: z.number().int().nonnegative().optional(),
   text: z.string().default(''),
   words: z.array(captionWordSchema).default([]),
   style: textStyleSchema.default(DEFAULT_TEXT_STYLE),

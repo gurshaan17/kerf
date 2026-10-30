@@ -187,14 +187,17 @@ export function probeDurationSeconds(path: string): number {
   return Number(value);
 }
 
-export async function launchKerf(): Promise<LaunchedKerf> {
+export async function launchKerf(
+  options: { whisper?: boolean } = {},
+): Promise<LaunchedKerf> {
   const workspace = mkdtempSync(join(tmpdir(), 'kerf-e2e-'));
   const userData = join(workspace, 'user-data');
   const projectsRoot = join(workspace, 'projects');
   const modelDirectory = join(userData, 'models', 'whisper');
   mkdirSync(modelDirectory, { recursive: true });
   mkdirSync(projectsRoot, { recursive: true });
-  symlinkSync(ensureWhisperModel(), join(modelDirectory, 'ggml-tiny.bin'));
+  if (options.whisper !== false)
+    symlinkSync(ensureWhisperModel(), join(modelDirectory, 'ggml-tiny.bin'));
 
   const app = await electron.launch({
     args: [repoRoot],
@@ -204,7 +207,9 @@ export async function launchKerf(): Promise<LaunchedKerf> {
       KERF_USER_DATA: userData,
       KERF_DATABASE_PATH: join(workspace, 'kerf.db'),
       KERF_PROJECTS_ROOT: projectsRoot,
-      KERF_WHISPER_PATH: executable('whisper-cli'),
+      ...(options.whisper === false
+        ? {}
+        : { KERF_WHISPER_PATH: executable('whisper-cli') }),
       KERF_FFMPEG_PATH: executable('ffmpeg'),
       KERF_FFPROBE_PATH: executable('ffprobe'),
     },

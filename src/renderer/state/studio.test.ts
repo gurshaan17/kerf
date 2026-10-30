@@ -7,6 +7,7 @@ import type {
   ProjectSummary,
 } from '../../shared/contracts';
 import { createStudioStore } from './studio';
+import { unusedNarrationBridge } from '../../../test/helpers/narration-bridge';
 
 function makeSnapshot(): ProjectSnapshot {
   const project = createProject({ name: 'Store test', now: 1 });
@@ -57,6 +58,7 @@ function makeBridge(snapshot: ProjectSnapshot) {
     }),
   );
   const bridge = {
+    narration: unusedNarrationBridge,
     getVersions: () => ({ electron: '', chrome: '', node: '' }),
     projects: {
       list: vi.fn(async () => [snapshot.summary]),

@@ -16,6 +16,8 @@ import {
   idSchema,
   newId,
   textStyleSchema,
+  framesToSeconds,
+  secondsToFrames,
 } from '@kerf/model';
 import {
   nextTrackOrder,
@@ -84,6 +86,10 @@ function findTranscript(
   if (!transcript) {
     throw new Error('No transcript is available. Transcribe an asset first.');
   }
+  if (transcript.source === 'visual')
+    throw new Error(
+      'This tool requires a speech transcript. Visual narration does not identify speech or silence.',
+    );
   return transcript;
 }
 
@@ -400,12 +406,13 @@ function assetClips(sequence: Sequence, assetId: string): Clip[] {
 export const writeCaptionsTool = {
   name: 'writeCaptions',
   description:
-    'Create caption clips from a transcript using the clean, bold or boxed preset. Existing captions for those transcripts are replaced.',
+    'Create caption clips from a transcript using the clean, bold or boxed preset. Visual narration must be reviewed and fit normal-speed timeline clips; only its linked generated captions are replaced, preserving manual clips.',
   input: z.object({
     assetId: assetIdSchema.optional(),
     transcriptId: transcriptIdSchema.optional(),
     preset: captionPresetSchema.default('clean'),
     trackId: visualTrackId.optional(),
+    expectedRevision: z.number().int().nonnegative().optional(),
   }),
   execute(
     context: ToolContext,
@@ -414,6 +421,7 @@ export const writeCaptionsTool = {
       transcriptId?: string;
       preset: CaptionPreset;
       trackId?: string;
+      expectedRevision?: number;
     },
   ) {
     const snapshot = requireSnapshot(context);
@@ -426,6 +434,15 @@ export const writeCaptionsTool = {
     );
     if (transcripts.length === 0) {
       throw new Error('No transcript matches that asset.');
+    }
+    for (const transcript of transcripts) {
+      if (transcript.source === 'visual' && transcript.status !== 'reviewed')
+        throw new Error('Review visual narration before creating captions.');
+      if (
+        input.expectedRevision !== undefined &&
+        transcript.revision !== input.expectedRevision
+      )
+        throw new Error('Narration changed before captions were applied.');
     }
     const sequence = snapshot.project.sequence;
     const requestedTrack = input.trackId
@@ -453,11 +470,25 @@ export const writeCaptionsTool = {
     const transcriptIds = new Set(
       transcripts.map((transcript) => transcript.id),
     );
-    for (const clip of track.clips) {
-      if (clip.type === 'caption' && transcriptIds.has(clip.transcriptId)) {
-        commands.push({ type: 'clip.remove', clipId: clip.id });
+    const visualIds = new Set(
+      transcripts.filter((t) => t.source === 'visual').map((t) => t.id),
+    );
+    for (const sourceTrack of sequence.tracks)
+      for (const clip of sourceTrack.clips) {
+        if (
+          clip.type === 'caption' &&
+          transcriptIds.has(clip.transcriptId) &&
+          (visualIds.has(clip.transcriptId)
+            ? clip.generatedFromTranscript
+            : sourceTrack.id === track.id)
+        ) {
+          if (sourceTrack.locked)
+            throw new Error(
+              'Unlock linked caption tracks before updating captions.',
+            );
+          commands.push({ type: 'clip.remove', clipId: clip.id });
+        }
       }
-    }
     const style = PRESET_STYLES[input.preset];
     let created = 0;
     let cursor = 0;
@@ -468,22 +499,42 @@ export const writeCaptionsTool = {
         if (!segment.text.trim() || segment.endFrame <= segment.startFrame) {
           continue;
         }
+        let toTimeline = (frame: number) =>
+          assetFrameToTimeline(sequence, transcript.assetId, frame);
+        if (transcript.source === 'visual') {
+          const asset = snapshot.assets.find(
+            (a) => a.id === transcript.assetId,
+          );
+          const sourceRate = asset?.frameRate ?? sequence.frameRate;
+          const normalized = (frame: number) =>
+            secondsToFrames(
+              framesToSeconds(frame, sourceRate),
+              sequence.frameRate,
+            );
+          const match = sequence.tracks
+            .flatMap((t) => t.clips)
+            .find(
+              (clip) =>
+                (clip.type === 'video' || clip.type === 'audio') &&
+                clip.assetId === transcript.assetId &&
+                clip.speed === 1 &&
+                clip.timeMap.length === 0 &&
+                normalized(segment.startFrame) >= clip.sourceInFrame &&
+                normalized(segment.endFrame) <=
+                  clip.sourceInFrame + clip.durationFrames,
+            );
+          if (!match || (match.type !== 'video' && match.type !== 'audio'))
+            throw new Error(
+              'Place each narration range on a normal-speed timeline clip before creating captions. Rows crossing a trim or retime need adjustment.',
+            );
+          toTimeline = (frame) =>
+            match.startFrame + normalized(frame) - match.sourceInFrame;
+        }
         const startFrame = Math.max(
-          assetFrameToTimeline(
-            snapshot.project.sequence,
-            transcript.assetId,
-            segment.startFrame,
-          ),
-          cursor,
+          toTimeline(segment.startFrame),
+          transcript.source === 'visual' ? 0 : cursor,
         );
-        const endFrame = Math.max(
-          startFrame + 1,
-          assetFrameToTimeline(
-            snapshot.project.sequence,
-            transcript.assetId,
-            segment.endFrame,
-          ),
-        );
+        const endFrame = Math.max(startFrame + 1, toTimeline(segment.endFrame));
         const clip: Clip = clipSchema.parse({
           id: newId('clip'),
           trackId: track.id,
@@ -493,25 +544,13 @@ export const writeCaptionsTool = {
           type: 'caption',
           transcriptId: transcript.id,
           segmentId: segment.id,
+          generatedFromTranscript: true,
+          transcriptRevision: transcript.revision,
           text: segment.text,
           words: segment.words.map((word) => ({
             ...word,
-            startFrame: Math.max(
-              0,
-              assetFrameToTimeline(
-                snapshot.project.sequence,
-                transcript.assetId,
-                word.startFrame,
-              ) - startFrame,
-            ),
-            endFrame: Math.max(
-              1,
-              assetFrameToTimeline(
-                snapshot.project.sequence,
-                transcript.assetId,
-                word.endFrame,
-              ) - startFrame,
-            ),
+            startFrame: Math.max(0, toTimeline(word.startFrame) - startFrame),
+            endFrame: Math.max(1, toTimeline(word.endFrame) - startFrame),
           })),
           style,
         });

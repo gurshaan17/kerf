@@ -630,6 +630,39 @@ export class ProjectRepository {
       .run(assetId).changes;
   }
 
+  commitNarration(next: Transcript, expected: Transcript | null): Transcript {
+    return this.database.transaction(() => {
+      const rows = this.database
+        .prepare('SELECT * FROM transcripts WHERE asset_id = ?')
+        .all(next.assetId) as ChildRow[];
+      const current = rows[0] ? transcriptFromRow(rows[0]) : null;
+      if (
+        rows.length > 1 ||
+        current?.id !== expected?.id ||
+        (current?.revision ?? null) !== (expected?.revision ?? null)
+      )
+        throw new Error('Narration changed. Reload and reapply your edit.');
+      const parsed = transcriptSchema.parse(next);
+      if (
+        parsed.source !== 'visual' ||
+        parsed.revision !== (expected ? expected.revision + 1 : 0) ||
+        (expected && parsed.id !== expected.id)
+      )
+        throw new Error(
+          'Narration revisions must advance monotonically with a stable transcript ID.',
+        );
+      this.saveTranscript(parsed);
+      const asset = this.findAsset(next.assetId);
+      if (!asset) throw new Error('The source asset no longer exists.');
+      this.saveAsset({
+        ...asset,
+        transcriptId: parsed.id,
+        updatedAt: this.now(),
+      });
+      return parsed;
+    })();
+  }
+
   deleteScenesForAsset(assetId: string): number {
     return this.database
       .prepare('DELETE FROM scenes WHERE asset_id = ?')

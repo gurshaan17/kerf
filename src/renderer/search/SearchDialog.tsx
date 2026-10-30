@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Captions, Loader2, ScanLine, Search } from 'lucide-react';
-import { formatTimecode, type Asset } from '@kerf/model';
+import {
+  formatTimecode,
+  framesToSeconds,
+  secondsToFrames,
+  type Asset,
+} from '@kerf/model';
 import { Button, Dialog, Input, cn } from '@kerf/ui';
 import type { SearchResponse, SearchResult } from '../../shared/contracts';
 import { useStudio } from '../state/StudioProvider';
@@ -70,7 +75,13 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   }, [open, query]);
 
   const choose = (result: SearchResult) => {
-    revealAssetFrame(result.assetId, result.startFrame);
+    const sourceRate = assets.get(result.assetId)?.frameRate ?? rate;
+    revealAssetFrame(
+      result.assetId,
+      result.transcriptSource === 'visual'
+        ? secondsToFrames(framesToSeconds(result.startFrame, sourceRate), rate)
+        : result.startFrame,
+    );
     onOpenChange(false);
   };
 
@@ -162,6 +173,11 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-[11px] font-medium text-ink">
                         {result.assetName}
+                        {result.transcriptSource === 'visual' && (
+                          <span className="ml-2 text-ink-faint">
+                            Visual narration
+                          </span>
+                        )}
                       </span>
                       <span className="shrink-0 font-mono text-[9px] text-ink-faint">
                         {formatTimecode(result.startFrame, assetRate)}

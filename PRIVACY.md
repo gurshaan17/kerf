@@ -30,8 +30,9 @@ You can add OpenAI, Anthropic, Google Gemini, xAI, Ollama, or an
 OpenAI-compatible endpoint in **AI settings**. Each account has two independent
 consent flags:
 
-- **Vision** — allows selected keyframes and a description prompt to be sent
-  for scene descriptions.
+- **Vision** — allows selected frames and a description prompt to be sent
+  for scene descriptions or explicitly requested visual narration. Narration
+  requests also send limited descriptions from preceding chunks for context.
 - **Chat** — allows the conversation and the tool context needed to answer it
   to be sent to the chat provider.
 
@@ -39,6 +40,12 @@ Only the provider you enable and consent to is used. Kerf does not proxy
 requests through its own server, log prompts or responses, or fall back to a
 different provider. The provider's own privacy policy applies to what it
 receives.
+
+Visual narration asks you to choose the provider and source range before
+sending images. Temporary provider images are removed after the job; the
+generated draft, evidence timestamps and narration edit history stay in the
+local project database. Failed requests do not switch providers or retry
+automatically.
 
 Ollama and OpenAI-compatible endpoints can point at a local server such as
 `http://127.0.0.1:11434/v1`, in which case no traffic leaves the machine.

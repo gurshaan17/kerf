@@ -74,6 +74,9 @@ function transcriptSummary(transcript: Transcript) {
     language: transcript.language,
     text: transcript.text,
     model: transcript.model,
+    source: transcript.source,
+    status: transcript.status,
+    revision: transcript.revision,
     segmentCount: transcript.segments.length,
     wordCount: transcript.segments.reduce(
       (count, segment) => count + segment.words.length,
@@ -341,6 +344,8 @@ export const readTranscriptTool = {
         startFrame: segment.startFrame,
         endFrame: segment.endFrame,
         text: segment.text,
+        origin: segment.origin,
+        evidenceFrames: segment.evidenceFrames,
         words: input.includeWords
           ? segment.words.filter(
               (word) =>

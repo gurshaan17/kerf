@@ -20,6 +20,8 @@ export const transcriptSegmentSchema = z
     endFrame: z.number().int().nonnegative(),
     text: z.string(),
     words: z.array(transcriptWordSchema).default([]),
+    origin: z.enum(['generated', 'edited', 'manual']).default('generated'),
+    evidenceFrames: z.array(z.number().int().nonnegative()).default([]),
   })
   .refine((segment) => segment.endFrame >= segment.startFrame, {
     message: 'A segment cannot end before it starts',
@@ -33,6 +35,27 @@ export const transcriptSchema = z.object({
   segments: z.array(transcriptSegmentSchema).default([]),
   model: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
+  source: z.enum(['speech', 'visual']).default('speech'),
+  status: z.enum(['draft', 'reviewed']).default('reviewed'),
+  revision: z.number().int().nonnegative().default(0),
+  undoStates: z
+    .array(
+      z.object({
+        segments: z.array(transcriptSegmentSchema),
+        status: z.enum(['draft', 'reviewed']),
+      }),
+    )
+    .max(30)
+    .default([]),
+  redoStates: z
+    .array(
+      z.object({
+        segments: z.array(transcriptSegmentSchema),
+        status: z.enum(['draft', 'reviewed']),
+      }),
+    )
+    .max(30)
+    .default([]),
 });
 
 export type TranscriptWord = z.infer<typeof transcriptWordSchema>;
@@ -41,7 +64,7 @@ export type Transcript = z.infer<typeof transcriptSchema>;
 
 export interface CreateTranscriptInput {
   assetId: AssetId;
-  segments: TranscriptSegment[];
+  segments: z.input<typeof transcriptSegmentSchema>[];
   text?: string;
   language?: string;
   model?: string | null;

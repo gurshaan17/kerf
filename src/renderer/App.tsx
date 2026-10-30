@@ -212,6 +212,8 @@ export default function App() {
         transcript: transcripts.some(
           (transcript) => transcript.assetId === asset.id,
         ),
+        transcriptSource: transcripts.find((t) => t.assetId === asset.id)
+          ?.source,
         sceneCount: assetScenes.length,
         descriptions: assetScenes.filter(
           (scene) => scene.description !== null && scene.description.length > 0,
