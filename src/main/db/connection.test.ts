@@ -69,6 +69,84 @@ function tableNames(connection: Database.Database): Set<string> {
 }
 
 describe('openDatabase', () => {
+  it('backfills only speech-linked audio from version 7 and remains stable on reopen', () => {
+    const filename = tempDatabasePath();
+    const old = openDatabase({
+      filename,
+      migrations: DATABASE_MIGRATIONS.filter(
+        (migration) => migration.version <= 7,
+      ),
+      logger: captureLogger().logger,
+    });
+    try {
+      insertProject(old.connection);
+      const insertAsset = old.connection.prepare(
+        `INSERT INTO assets (id, project_id, kind, name, path, metadata_json, payload_json, created_at) VALUES (?, 'project-1', ?, ?, ?, '{}', ?, 1)`,
+      );
+      for (const [id, kind] of [
+        ['tts-audio', 'audio'],
+        ['imported-audio', 'audio'],
+        ['linked-video', 'video'],
+        ['imported-video', 'video'],
+      ] as const) {
+        insertAsset.run(
+          id,
+          kind,
+          id,
+          `/tmp/${id}`,
+          JSON.stringify({ id, kind, name: id, preserved: 'original' }),
+        );
+      }
+      old.connection
+        .prepare(
+          `INSERT INTO transcripts (id, asset_id, language, text, words_json, payload_json, created_at) VALUES ('transcript-1', 'imported-video', 'en', 'Hello', '[]', '{}', 1)`,
+        )
+        .run();
+      const insertTake = old.connection.prepare(
+        `INSERT INTO tts_takes (id, project_id, transcript_id, segment_id, payload_json) VALUES (?, 'project-1', 'transcript-1', 'segment-1', ?)`,
+      );
+      insertTake.run('take-1', JSON.stringify({ assetId: 'tts-audio' }));
+      // Even a legacy malformed linkage must not hide video from the Footage bin.
+      insertTake.run('take-2', JSON.stringify({ assetId: 'linked-video' }));
+      expect(old.connection.pragma('user_version', { simple: true })).toBe(7);
+    } finally {
+      old.close();
+    }
+
+    const payloads = (connection: Database.Database) =>
+      connection
+        .prepare('SELECT id, payload_json FROM assets ORDER BY id')
+        .all() as Array<{ id: string; payload_json: string }>;
+    const migrated = openDatabase({ filename, logger: captureLogger().logger });
+    let afterMigration: Array<{ id: string; payload_json: string }>;
+    try {
+      afterMigration = payloads(migrated.connection);
+      for (const row of afterMigration) {
+        const payload = JSON.parse(row.payload_json);
+        expect(payload.generatedBy).toBe(
+          row.id === 'tts-audio' ? 'tts' : undefined,
+        );
+        expect(payload.preserved).toBe('original');
+        expect(payload.name).toBe(row.id);
+      }
+      expect(migrated.connection.pragma('user_version', { simple: true })).toBe(
+        LATEST_DATABASE_VERSION,
+      );
+    } finally {
+      migrated.close();
+    }
+    const logs = captureLogger();
+    const reopened = openDatabase({ filename, logger: logs.logger });
+    try {
+      expect(payloads(reopened.connection)).toEqual(afterMigration!);
+      expect(
+        logs.info.some((entry) => entry.message.includes('database migration')),
+      ).toBe(false);
+    } finally {
+      reopened.close();
+    }
+  });
+
   it('migrates a fresh database and configures SQLite', () => {
     const { logger, info } = captureLogger();
     const handle = openDatabase({

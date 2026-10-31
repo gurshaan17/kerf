@@ -191,7 +191,7 @@ function AssetPreview({ asset }: { asset: Asset }) {
 }
 
 export function FootageBin({
-  assets,
+  assets: projectAssets,
   jobs,
   busy,
   error,
@@ -211,6 +211,10 @@ export function FootageBin({
   onOpenReferences,
   onOpenExport,
 }: FootageBinProps) {
+  const assets = useMemo(
+    () => projectAssets.filter((asset) => asset.generatedBy !== 'tts'),
+    [projectAssets],
+  );
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [narrationOpen, setNarrationOpen] = useState(false);

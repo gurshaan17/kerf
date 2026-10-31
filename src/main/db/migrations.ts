@@ -283,4 +283,15 @@ export const DATABASE_MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 8,
+    name: 'mark generated speech assets',
+    up(connection) {
+      connection.exec(`
+        UPDATE assets SET payload_json = json_set(payload_json, '$.generatedBy', 'tts')
+        WHERE id IN (SELECT json_extract(payload_json, '$.assetId') FROM tts_takes)
+          AND kind = 'audio';
+      `);
+    },
+  },
 ];

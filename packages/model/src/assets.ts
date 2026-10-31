@@ -61,6 +61,7 @@ export const assetSchema = z.object({
   projectId: idSchema('project'),
   name: z.string().min(1),
   kind: assetKindSchema,
+  generatedBy: z.literal('tts').optional(),
   status: assetStatusSchema.default('queued'),
   sourcePath: z.string().min(1),
   fileSize: z.number().int().nonnegative().default(0),

@@ -191,6 +191,7 @@ export class MediaImportService {
   async importFiles(
     projectId: string,
     paths: readonly string[],
+    options: { readonly generatedBy?: 'tts' } = {},
   ): Promise<Asset[]> {
     if (paths.length === 0) {
       return [];
@@ -243,6 +244,7 @@ export class MediaImportService {
       const sameContent = existing.find(
         (asset) =>
           asset.contentHash === contentHash &&
+          asset.generatedBy === options.generatedBy &&
           asset.fileSize === file.fileSize &&
           asset.sourcePath !== file.sourcePath,
       );
@@ -276,6 +278,7 @@ export class MediaImportService {
             mtimeMs: file.mtimeMs,
           }),
           contentHash,
+          generatedBy: options.generatedBy,
         });
       }
 

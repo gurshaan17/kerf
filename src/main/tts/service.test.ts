@@ -14,6 +14,7 @@ import {
   clipSchema,
   createAsset,
   createTranscript,
+  createTrack,
   newId,
   transcriptSchema,
   transcriptSegmentSchema,
@@ -144,7 +145,7 @@ function fixture() {
       }),
     });
   };
-  const addTake = (duration = 2, text = segment.text) => {
+  const addTake = (duration = 2, text = segment.text, row = segment) => {
     const path = join(root, `${newId('asset')}.mp3`);
     writeFileSync(path, 'audio');
     const audio = repository.saveAsset(
@@ -167,7 +168,7 @@ function fixture() {
       id: `take_${audio.id}`,
       projectId: snapshot.project.id,
       transcriptId: transcript.id,
-      segmentId: segment.id,
+      segmentId: row.id,
       text,
       providerId: provider.id,
       voice: 'test',
@@ -288,6 +289,11 @@ describe('TTS service', () => {
       expect.any(AbortSignal),
     );
     expect(importer).toHaveBeenCalledOnce();
+    expect(importer).toHaveBeenCalledWith(
+      f.source.projectId,
+      [expect.stringContaining(join('assets', 'voiceover'))],
+      { generatedBy: 'tts' },
+    );
     const takes = f.service.takes(f.transcript.id);
     expect(takes).toHaveLength(1);
     expect(takes[0]).toMatchObject({
@@ -476,5 +482,94 @@ describe('TTS service', () => {
       .project.sequence.tracks.flatMap((t) => t.clips)
       .filter((c) => c.type === 'audio');
     expect(audio).toHaveLength(1);
+  });
+
+  it('places different narration rows on one dedicated Voice-over track and leaves regular audio tracks empty', () => {
+    const f = fixture();
+    f.addVideo();
+    const secondRow = {
+      ...f.segment,
+      id: newId('segment'),
+      startFrame: 168,
+      endFrame: 240,
+      text: 'Save your changes.',
+    };
+    f.repository.saveTranscript({
+      ...f.transcript,
+      segments: [f.segment, secondRow],
+    });
+    f.projects.refresh('analysis');
+    const first = f.addTake();
+    const second = f.addTake(2, secondRow.text, secondRow);
+    f.service.place({ takeId: first.id, expectedRevision: 0 });
+    f.service.place({ takeId: second.id, expectedRevision: 0 });
+    const tracks = f.projects.current()!.project.sequence.tracks;
+    const dedicated = tracks.filter(
+      (track) => track.kind === 'audio' && track.name === 'Voice-over',
+    );
+    expect(dedicated).toHaveLength(1);
+    expect(dedicated[0]!.clips.map((clip) => clip.startFrame)).toEqual([
+      130, 280,
+    ]);
+    expect(
+      tracks
+        .filter(
+          (track) => track.kind === 'audio' && track.name !== 'Voice-over',
+        )
+        .every((track) => track.clips.length === 0),
+    ).toBe(true);
+  });
+
+  it('requires unlocking the existing empty Voice-over track instead of creating another', () => {
+    const f = fixture();
+    f.addVideo();
+    const track = createTrack({
+      kind: 'audio',
+      name: 'Voice-over',
+      order: 4,
+      locked: true,
+    });
+    f.projects.apply({ type: 'track.add', track });
+    const take = f.addTake();
+    const before = f.projects.current()!.project.sequence;
+    expect(() =>
+      f.service.place({ takeId: take.id, expectedRevision: 0 }),
+    ).toThrow(/Unlock the Voice-over track/);
+    expect(f.projects.current()!.project.sequence).toEqual(before);
+    expect(
+      before.tracks.filter((candidate) => candidate.name === 'Voice-over'),
+    ).toHaveLength(1);
+  });
+
+  it('preserves unrelated audio when it overlaps the requested Voice-over placement', () => {
+    const f = fixture();
+    f.addVideo();
+    const take = f.addTake();
+    const track = createTrack({ kind: 'audio', name: 'Voice-over', order: 4 });
+    const unrelated = clipSchema.parse({
+      type: 'audio',
+      id: newId('clip'),
+      trackId: track.id,
+      assetId: take.assetId,
+      startFrame: 140,
+      durationFrames: 30,
+      label: 'Manually placed audio',
+    });
+    f.projects.apply({
+      type: 'batch',
+      label: 'Manual audio',
+      commands: [
+        { type: 'track.add', track },
+        { type: 'clip.insert', clip: unrelated },
+      ],
+    });
+    const before = f.projects.current()!.project.sequence;
+    expect(() =>
+      f.service.place({ takeId: take.id, expectedRevision: 0 }),
+    ).toThrow(/already has audio in this interval/);
+    expect(f.projects.current()!.project.sequence).toEqual(before);
+    expect(
+      before.tracks.find((candidate) => candidate.id === track.id)!.clips,
+    ).toEqual([unrelated]);
   });
 });

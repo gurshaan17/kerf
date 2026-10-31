@@ -40,11 +40,13 @@ Each row becomes one `narration.tts` job using the existing persistent queue. Re
 
 Synthesis has a 120-second deadline, a 30 MiB response limit, and a conservative 2,800 UTF-8 byte limit per row in addition to the narration text limit. Long rows must be split. Generation does not automatically retry or choose another provider, avoiding surprise duplicate charges.
 
-Audio is written under `assets/voiceover/` in the project folder, validated with ffprobe, and passed through ordinary media import for playback and waveform support. Files that fail before import are removed. If work is invalidated after import starts, an unused imported asset can remain in Footage; it is never silently placed on the timeline.
+Audio is written under `assets/voiceover/` in the project folder, validated with ffprobe, and passed through ordinary media import for playback and waveform support. Generated assets carry `generatedBy: "tts"` and are hidden from Footage, including its search, counts and empty state. Previews and saved takes remain under Visual narration → Generate voice. User-imported audio stays visible even when it has identical bytes. Files that fail before import are removed. If work is invalidated after import starts, an unused asset can remain in project storage; it is never silently placed on the timeline.
 
 ## Persistence and stale takes
 
 SQLite migration 7 adds `tts_accounts` for encrypted account configuration and `tts_takes` for generated-take metadata. Each take records its project, transcript, segment, exact text, provider ID, voice, model, speed, audio asset ID, creation time, and placement linkage. Foreign keys delete take metadata with its owning project or transcript. Ordinary project media persists independently of provider-account deletion.
+
+Migration 8 marks existing take-linked audio assets as TTS-generated, so earlier takes also disappear from Footage after restarting. The marker persists in the asset JSON and survives processing, relinking and reopening.
 
 A text change marks older takes stale; placement checks exact text again in main. Timing edits retain reusable speech, but placement checks its duration against the current interval. Provider changes leave previous takes playable and do not alter their audio. The current implementation records voice settings for reference but does not automatically regenerate old takes when a provider changes.
 
@@ -52,7 +54,7 @@ A text change marks older takes stale; placement checks exact text again in main
 
 Source row frames are converted through seconds into sequence frames. Kerf uses the first matching normal-speed video occurrence that fully contains the narration interval. Rows spanning a trim, a speed change, or a time map need manual timing adjustment. Repeated source occurrences are not independently selectable yet.
 
-The imported audio must be ready. Speech must fit the current interval; overflow blocks placement with an actionable error. Kerf never truncates speech or shifts later footage to make it fit. Placement reuses an unlocked Voice-over audio track with space, or creates one. Updating removes previously linked row clips and inserts the chosen take in one undoable batch. Locked previous tracks block updates. Other audio remains available for manual editing and mixing through the existing editor.
+The imported audio must be ready. Speech must fit the current interval; overflow blocks placement with an actionable error. Kerf never truncates speech or shifts later footage to make it fit. Placement creates a dedicated Voice-over audio track if absent, then reuses it for subsequent rows. A locked Voice-over track or conflicting audio blocks placement rather than creating additional tracks. Updating removes previously linked row clips and inserts the chosen take in one undoable batch. Other audio remains available for manual editing and mixing through the existing editor.
 
 ## Acceptance and verification
 

@@ -371,6 +371,16 @@ test('silent video generates editable narration, protects edits on regeneration 
     const preview = page.getByLabel(`Voice-over: ${spokenRow.text}`);
     await expect(preview).toBeVisible({ timeout: 120000 });
     await expect(preview).toHaveAttribute('src', /kerfmedia:\/\/asset\//);
+    const generatedAudio = await page.evaluate(async () =>
+      (await window.kerf.assets.list()).filter(
+        (asset) => asset.generatedBy === 'tts',
+      ),
+    );
+    expect(generatedAudio).toHaveLength(1);
+    await expect(
+      page.locator(`button[title="${generatedAudio[0]!.name}"]`),
+    ).toHaveCount(0);
+    await expect(card).toBeVisible();
     await page.getByRole('button', { name: 'Add / update voice-over' }).click();
     await expect
       .poll(async () =>
@@ -382,6 +392,16 @@ test('silent video generates editable narration, protects edits on regeneration 
         ),
       )
       .toBe(1);
+    const voiceoverTracks = await page.evaluate(async () =>
+      (await window.kerf.projects.active())!.project.sequence.tracks.filter(
+        (track) => track.name === 'Voice-over',
+      ),
+    );
+    expect(voiceoverTracks).toHaveLength(1);
+    expect(voiceoverTracks[0]!.clips[0]).toMatchObject({
+      type: 'audio',
+      assetId: generatedAudio[0]!.id,
+    });
     await page.evaluate(async () => window.kerf.edits.undo());
     await expect
       .poll(async () =>

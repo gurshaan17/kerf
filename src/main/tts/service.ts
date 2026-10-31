@@ -281,6 +281,7 @@ export class TtsService {
       const assets = await this.options.imports.importFiles(
         initial.snapshot.project.id,
         [path],
+        { generatedBy: 'tts' },
       );
       imported = true;
       check();
@@ -389,17 +390,21 @@ export class TtsService {
       }
     const startFrame = video.startFrame + first - video.sourceInFrame;
     const reusable = sequence.tracks.find(
-      (track) =>
-        track.kind === 'audio' &&
-        track.name === 'Voice-over' &&
-        !track.locked &&
-        track.clips.every(
-          (clip) =>
-            ids.has(clip.id) ||
-            clip.startFrame + clip.durationFrames <= startFrame ||
-            clip.startFrame >= startFrame + duration,
-        ),
+      (track) => track.kind === 'audio' && track.name === 'Voice-over',
     );
+    if (reusable?.locked)
+      throw new Error('Unlock the Voice-over track before placing speech.');
+    if (
+      reusable?.clips.some(
+        (clip) =>
+          !ids.has(clip.id) &&
+          clip.startFrame < startFrame + duration &&
+          clip.startFrame + clip.durationFrames > startFrame,
+      )
+    )
+      throw new Error(
+        'The Voice-over track already has audio in this interval. Move that audio or adjust narration timing before placing speech.',
+      );
     const track =
       reusable ??
       createTrack({

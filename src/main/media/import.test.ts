@@ -9,6 +9,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { Asset } from '@kerf/model';
 import { openDatabase } from '../db';
 import type { DatabaseHandle } from '../db';
 import { JobQueue } from '../jobs';
@@ -43,7 +44,9 @@ interface ImportContext {
 
 const contexts: ImportContext[] = [];
 
-function makeContext(): ImportContext {
+function makeContext(
+  onAssetsChanged?: (assets: readonly Asset[]) => void,
+): ImportContext {
   const root = makeTempDirectory();
   const database = openDatabase({ filename: join(root, 'kerf.db') });
   let now = 1_000;
@@ -66,6 +69,8 @@ function makeContext(): ImportContext {
     now: clock,
     ffmpegPath: tools?.ffmpeg,
     ffprobePath: tools?.ffprobe,
+    onAssetsChanged: (projectId) =>
+      onAssetsChanged?.(repository.listAssets(projectId)),
   });
   const bundle = repository.create({ name: 'Import test', now: clock() });
   const context: ImportContext = {
@@ -111,6 +116,68 @@ async function waitFor(
 const integration = tools ? it : it.skip;
 
 describe('MediaImportService', () => {
+  it('persists generated speech provenance before notifying asset observers', async () => {
+    const notifications: Array<readonly Asset[]> = [];
+    const context = makeContext((assets) => notifications.push(assets));
+    const file = join(context.root, 'generated.wav');
+    writeFileSync(file, 'speech fixture bytes');
+    const [generated] = await context.importer.importFiles(
+      context.projectId,
+      [file],
+      { generatedBy: 'tts' },
+    );
+    expect(generated?.generatedBy).toBe('tts');
+    expect(context.repository.findAsset(generated!.id)?.generatedBy).toBe(
+      'tts',
+    );
+    expect(notifications.length).toBeGreaterThan(0);
+    for (const assets of notifications) {
+      expect(
+        assets.find((asset) => asset.id === generated!.id)?.generatedBy,
+      ).toBe('tts');
+    }
+    // Read through a fresh repository to prove the marker is in SQLite, not an in-memory update.
+    const reloaded = new ProjectRepository({
+      database: context.database.connection,
+      projectsRoot: join(context.root, 'projects'),
+    });
+    expect(reloaded.findAsset(generated!.id)?.generatedBy).toBe('tts');
+  });
+
+  it.each([true, false])(
+    'keeps identical generated and imported audio distinct (generated first: %s)',
+    async (generatedFirst) => {
+      const context = makeContext();
+      const generatedFile = join(context.root, 'generated.wav');
+      const importedFile = join(context.root, 'imported.wav');
+      writeFileSync(generatedFile, 'identical speech bytes');
+      writeFileSync(importedFile, 'identical speech bytes');
+      const generated = () =>
+        context.importer.importFiles(context.projectId, [generatedFile], {
+          generatedBy: 'tts',
+        });
+      const imported = () =>
+        context.importer.importFiles(context.projectId, [importedFile]);
+      const [first] = await (generatedFirst ? generated() : imported());
+      const [second] = await (generatedFirst ? imported() : generated());
+      expect(first?.id).not.toBe(second?.id);
+      expect(first?.contentHash).toBe(second?.contentHash);
+      expect(first?.generatedBy).toBe(generatedFirst ? 'tts' : undefined);
+      expect(second?.generatedBy).toBe(generatedFirst ? undefined : 'tts');
+      expect(context.repository.listAssets(context.projectId)).toHaveLength(2);
+      // Deduplication still works within each provenance category.
+      const duplicate = join(context.root, 'generated-copy.wav');
+      writeFileSync(duplicate, 'identical speech bytes');
+      const [deduped] = await context.importer.importFiles(
+        context.projectId,
+        [duplicate],
+        { generatedBy: 'tts' },
+      );
+      expect(deduped?.id).toBe(generatedFirst ? first?.id : second?.id);
+      expect(context.repository.listAssets(context.projectId)).toHaveLength(2);
+    },
+  );
+
   it('hashes files consistently', async () => {
     const directory = makeTempDirectory();
     const file = join(directory, 'sample.bin');
