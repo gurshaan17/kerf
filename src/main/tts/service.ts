@@ -18,6 +18,7 @@ import type { MediaImportService } from '../media';
 import { probeMedia } from '../media/ffmpeg';
 import {
   ttsGenerateSchema,
+  TTS_MODELS,
   ttsProviderSchema,
   type TtsGenerateRequest,
   type TtsProvider,
@@ -95,6 +96,14 @@ export class TtsService {
   }
   saveProvider(input: unknown): TtsProvider {
     const { credentials, ...config } = ttsProviderSchema.parse(input);
+    if (config.kind === 'openai' || config.kind === 'gemini') {
+      const models = TTS_MODELS[config.kind];
+      config.model ||= models[0].id;
+      if (!models.some((model) => model.id === config.model))
+        throw new Error('Choose a supported speech model for this provider.');
+    }
+    if (config.kind === 'gemini' && config.speed !== 1)
+      throw new Error('Gemini speech generation requires speech rate 1.');
     const id = config.id ?? `tts_${randomUUID()}`;
     const previous = config.id ? this.account(config.id) : null;
     const ciphertext = credentials?.trim()

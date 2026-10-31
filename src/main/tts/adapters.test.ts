@@ -31,6 +31,253 @@ afterEach(() => {
 });
 
 describe('speech provider adapters', () => {
+  it.each([
+    'gpt-4o-mini-tts',
+    'gpt-4o-mini-tts-2025-12-15',
+    'tts-1',
+    'tts-1-hd',
+    '',
+  ])(
+    'uses native OpenAI authentication and fixed endpoint for model %s',
+    async (model) => {
+      const fetch = mockFetch(new Response('mp3'));
+      const result = await synthesizeSpeech(
+        provider({
+          kind: 'openai',
+          model,
+          endpoint: 'https://evil.example/steal',
+        }),
+        'openai-key',
+        'Hello',
+        signal(),
+      );
+      const [url, request] = fetch.mock.calls[0]!;
+      expect(url).toBe('https://api.openai.com/v1/audio/speech');
+      expect(request?.headers).toMatchObject({
+        Authorization: 'Bearer openai-key',
+      });
+      expect(JSON.parse(String(request?.body))).toEqual({
+        input: 'Hello',
+        voice: 'alloy',
+        response_format: 'mp3',
+        speed: 1,
+        model: model || 'gpt-4o-mini-tts',
+      });
+      expect(result.extension).toBe('mp3');
+    },
+  );
+
+  function geminiResponse(
+    data: Buffer,
+    mimeType = 'audio/L16;codec=pcm;rate=24000',
+  ): Response {
+    return Response.json({
+      candidates: [
+        {
+          finishReason: 'STOP',
+          content: {
+            parts: [
+              { inlineData: { data: data.toString('base64'), mimeType } },
+            ],
+          },
+        },
+      ],
+    });
+  }
+
+  it.each(['gemini-3.1-flash-tts-preview', 'gemini-2.5-pro-preview-tts'])(
+    'wraps Gemini preview PCM as mono 16-bit WAV for %s',
+    async (model) => {
+      const pcm = Buffer.from([1, 0, 255, 127]);
+      const fetch = mockFetch(geminiResponse(pcm));
+      const result = await synthesizeSpeech(
+        provider({
+          kind: 'gemini',
+          model,
+          voice: 'Kore',
+          endpoint: 'https://evil.example/steal',
+        }),
+        'gemini-key',
+        'Hello',
+        signal(),
+      );
+      const [url, request] = fetch.mock.calls[0]!;
+      expect(url).toBe(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      );
+      expect(request?.headers).toMatchObject({
+        'x-goog-api-key': 'gemini-key',
+      });
+      expect(request?.headers).not.toHaveProperty('Authorization');
+      expect(JSON.parse(String(request?.body))).toEqual({
+        contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          },
+        },
+      });
+      expect(result.extension).toBe('wav');
+      expect(result.bytes.toString('ascii', 0, 4)).toBe('RIFF');
+      expect(result.bytes.readUInt16LE(22)).toBe(1);
+      expect(result.bytes.readUInt32LE(24)).toBe(24000);
+      expect(result.bytes.readUInt16LE(34)).toBe(16);
+      expect(result.bytes.subarray(44)).toEqual(pcm);
+    },
+  );
+
+  it.each(['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', ''])(
+    'preserves Gemini 3.8 WAV and uses its native voice contract for %s',
+    async (model) => {
+      const wav = Buffer.alloc(46);
+      wav.write('RIFF', 0);
+      wav.write('WAVE', 8);
+      const fetch = mockFetch(geminiResponse(wav, 'audio/wav'));
+      const result = await synthesizeSpeech(
+        provider({ kind: 'gemini', model, voice: 'Kore' }),
+        'gemini-key',
+        'Hello',
+        signal(),
+      );
+      expect(fetch.mock.calls[0]![0]).toBe(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-3.8-flash-tts'}:generateContent`,
+      );
+      expect(
+        JSON.parse(String(fetch.mock.calls[0]![1]?.body)).generationConfig
+          .speechConfig.voiceConfig,
+      ).toEqual({ voice: 'Kore' });
+      expect(result.bytes).toEqual(wav);
+    },
+  );
+
+  it.each([
+    {},
+    {
+      promptFeedback: {
+        blockReason: 'SAFETY',
+        blockReasonMessage: 'secret-provider-message',
+      },
+    },
+    { candidates: [{ finishReason: 'SAFETY' }] },
+    {
+      candidates: [
+        { content: { parts: [{ text: 'secret-provider-message' }] } },
+      ],
+    },
+    { candidates: [{ content: { parts: [] } }] },
+    {
+      candidates: [
+        {
+          content: {
+            parts: [{ inlineData: { data: 'AAAA', mimeType: 'audio/mp3' } }],
+          },
+        },
+      ],
+    },
+    {
+      candidates: [
+        {
+          content: {
+            parts: [{ inlineData: { data: '????', mimeType: 'audio/wav' } }],
+          },
+        },
+      ],
+    },
+  ])(
+    'rejects missing, blocked, nonaudio or malformed Gemini output without exposing its contents',
+    async (response) => {
+      mockFetch(Response.json(response));
+      await expect(
+        synthesizeSpeech(
+          provider({ kind: 'gemini', model: 'gemini-3.8-flash-tts' }),
+          'gemini-key',
+          'Hello',
+          signal(),
+        ),
+      ).rejects.toThrow(
+        /^Gemini returned no complete, unambiguous speech audio\./,
+      );
+    },
+  );
+
+  it.each([
+    'audio/L16',
+    'audio/L16;rate=0',
+    'audio/L16;rate=100000',
+    'audio/L16;rate=24000;channels=2',
+  ])('rejects PCM with unsupported parameters: %s', async (mime) => {
+    mockFetch(geminiResponse(Buffer.from([0, 0]), mime));
+    await expect(
+      synthesizeSpeech(
+        provider({ kind: 'gemini', model: 'gemini-3.1-flash-tts-preview' }),
+        'key',
+        'Hello',
+        signal(),
+      ),
+    ).rejects.toThrow('no complete');
+  });
+
+  it('rejects truncated PCM rather than writing an invalid WAV', async () => {
+    mockFetch(geminiResponse(Buffer.from([0, 0, 0])));
+    await expect(
+      synthesizeSpeech(
+        provider({ kind: 'gemini', model: 'gemini-3.1-flash-tts-preview' }),
+        'key',
+        'Hello',
+        signal(),
+      ),
+    ).rejects.toThrow('invalid or oversized PCM');
+  });
+
+  it('rejects multiple Gemini audio alternatives', async () => {
+    const candidate = {
+      content: {
+        parts: [
+          { inlineData: { data: 'AAAA', mimeType: 'audio/L16;rate=24000' } },
+        ],
+      },
+    };
+    mockFetch(Response.json({ candidates: [candidate, candidate] }));
+    await expect(
+      synthesizeSpeech(
+        provider({ kind: 'gemini', model: 'gemini-3.1-flash-tts-preview' }),
+        'key',
+        'Hello',
+        signal(),
+      ),
+    ).rejects.toThrow('no complete');
+  });
+
+  it('rejects Gemini speed changes before sending a paid request', async () => {
+    const fetch = mockFetch(new Response('unused'));
+    await expect(
+      synthesizeSpeech(
+        provider({ kind: 'gemini', model: 'gemini-3.8-flash-tts', speed: 1.2 }),
+        'key',
+        'Hello',
+        signal(),
+      ),
+    ).rejects.toThrow('requires speech speed 1');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each(['openai', 'gemini'] as const)(
+    'rejects unsupported native %s models before sending credentials',
+    async (kind) => {
+      const fetch = mockFetch(new Response('unused'));
+      await expect(
+        synthesizeSpeech(
+          provider({ kind, model: '../steal-key' }),
+          'key',
+          'Hello',
+          signal(),
+        ),
+      ).rejects.toThrow('supported');
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
   it('signs AWS requests with region, scope and temporary credentials', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-31T12:34:56Z'));

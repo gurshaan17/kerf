@@ -312,6 +312,35 @@ test('silent video generates editable narration, protects edits on regeneration 
       .click();
     await page
       .getByLabel('Speech service', { exact: true })
+      .selectOption('gemini');
+    await expect(page.getByLabel('Speech model')).toHaveValue(
+      'gemini-3.8-flash-tts',
+    );
+    await page
+      .getByLabel('Speech model')
+      .selectOption('gemini-3.8-flash-lite-tts');
+    await expect(page.getByLabel('Speech model')).toHaveValue(
+      'gemini-3.8-flash-lite-tts',
+    );
+    await expect(page.getByLabel('Voice ID', { exact: true })).toHaveValue(
+      'Kore',
+    );
+    await expect(page.getByLabel('Speech rate', { exact: true })).toHaveCount(
+      0,
+    );
+    await page
+      .getByLabel('Speech service', { exact: true })
+      .selectOption('openai');
+    await expect(page.getByLabel('Speech model')).toHaveValue(
+      'gpt-4o-mini-tts',
+    );
+    await page.getByLabel('Speech model').selectOption('tts-1-hd');
+    await expect(page.getByLabel('Speech model')).toHaveValue('tts-1-hd');
+    await expect(page.getByLabel('Voice ID', { exact: true })).toHaveValue(
+      'alloy',
+    );
+    await page
+      .getByLabel('Speech service', { exact: true })
       .selectOption('openai-compatible');
     await page
       .getByLabel('Speech provider name', { exact: true })

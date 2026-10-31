@@ -7,9 +7,12 @@ import {
   type Transcript,
 } from '@kerf/model';
 import type { TtsProvider, TtsProviderSave, TtsTake } from '../../shared/tts';
+import { TTS_MODELS } from '../../shared/tts';
 import { useStudio } from '../state/StudioProvider';
 
 const providersByKind: { value: TtsProvider['kind']; label: string }[] = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'gemini', label: 'Gemini' },
   { value: 'aws-polly', label: 'AWS Polly' },
   { value: 'google-cloud', label: 'Google Cloud TTS' },
   { value: 'smallest', label: 'Smallest.ai' },
@@ -238,7 +241,22 @@ export function Voiceover({
                 aria-label="Speech service"
                 value={draft.kind}
                 onChange={(e) => {
-                  update('kind', e.target.value as TtsProvider['kind']);
+                  const kind = e.target.value as TtsProvider['kind'];
+                  setDraft((previous) => ({
+                    ...previous,
+                    kind,
+                    model:
+                      kind === 'openai' || kind === 'gemini'
+                        ? TTS_MODELS[kind][0].id
+                        : '',
+                    voice:
+                      kind === 'openai'
+                        ? 'alloy'
+                        : kind === 'gemini'
+                          ? 'Kore'
+                          : '',
+                    speed: 1,
+                  }));
                   setCredentials('');
                 }}
                 disabled={Boolean(draft.id)}
@@ -277,18 +295,41 @@ export function Voiceover({
               {draft.kind !== 'google-cloud' && draft.kind !== 'lemonfox' && (
                 <label className="grid gap-1">
                   Model / engine
-                  <Input
-                    value={draft.model ?? ''}
-                    placeholder={
-                      draft.kind === 'aws-polly'
-                        ? 'neural'
-                        : draft.kind === 'smallest'
-                          ? 'lightning_v3.1'
-                          : 'Provider model ID'
-                    }
-                    maxLength={200}
-                    onChange={(e) => update('model', e.target.value)}
-                  />
+                  {draft.kind === 'openai' || draft.kind === 'gemini' ? (
+                    <select
+                      className={selectClass}
+                      aria-label="Speech model"
+                      value={draft.model || TTS_MODELS[draft.kind][0].id}
+                      onChange={(e) => update('model', e.target.value)}
+                    >
+                      {draft.model &&
+                        !TTS_MODELS[draft.kind].some(
+                          (model) => model.id === draft.model,
+                        ) && (
+                          <option value={draft.model}>
+                            {draft.model} · saved model
+                          </option>
+                        )}
+                      {TTS_MODELS[draft.kind].map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.label} ({model.id})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      value={draft.model ?? ''}
+                      placeholder={
+                        draft.kind === 'aws-polly'
+                          ? 'neural'
+                          : draft.kind === 'smallest'
+                            ? 'lightning_v3.1'
+                            : 'Provider model ID'
+                      }
+                      maxLength={200}
+                      onChange={(e) => update('model', e.target.value)}
+                    />
+                  )}
                 </label>
               )}
               <label className="grid gap-1">
@@ -308,25 +349,44 @@ export function Voiceover({
                   />
                 </label>
               )}
-              <label className="grid gap-1">
-                Language code
-                <Input
-                  value={draft.language ?? ''}
-                  onChange={(e) => update('language', e.target.value)}
-                />
-              </label>
-              <label className="grid gap-1">
-                Speech rate
-                <Input
-                  type="number"
-                  min={0.5}
-                  max={2}
-                  step={0.1}
-                  value={draft.speed ?? 1}
-                  onChange={(e) => update('speed', Number(e.target.value))}
-                />
-              </label>
+              {draft.kind !== 'openai' && draft.kind !== 'gemini' && (
+                <label className="grid gap-1">
+                  Language code
+                  <Input
+                    value={draft.language ?? ''}
+                    onChange={(e) => update('language', e.target.value)}
+                  />
+                </label>
+              )}
+              {draft.kind !== 'gemini' && (
+                <label className="grid gap-1">
+                  Speech rate
+                  <Input
+                    type="number"
+                    min={0.5}
+                    max={2}
+                    step={0.1}
+                    value={draft.speed ?? 1}
+                    onChange={(e) => update('speed', Number(e.target.value))}
+                  />
+                </label>
+              )}
             </div>
+            {draft.kind === 'openai' && (
+              <p className="text-ink-muted">
+                Enter a built-in voice such as alloy, nova, or shimmer. Speech
+                follows the narration language. These Speech API models are
+                scheduled to retire January 6, 2027.
+              </p>
+            )}
+            {draft.kind === 'gemini' && (
+              <p className="text-ink-muted">
+                Use your Gemini API key from Google AI Studio and a voice such
+                as Kore, Puck, or Zephyr. Language follows the narration text.
+                Gemini uses its default speech pace; numeric speech rate is
+                unavailable.
+              </p>
+            )}
             {draft.kind === 'aws-polly' && (
               <p className="text-ink-muted">
                 Default engine: neural. Choose a voice available in your region

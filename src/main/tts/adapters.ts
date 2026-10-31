@@ -1,5 +1,6 @@
 import { createHash, createHmac, createSign } from 'node:crypto';
 import type { TtsProvider } from '../../shared/tts';
+import { TTS_MODELS } from '../../shared/tts';
 
 const MAX_RESPONSE_BYTES = 30 * 1024 * 1024;
 type SpeechAudio = { bytes: Buffer; extension: 'mp3' | 'wav' };
@@ -281,6 +282,135 @@ function parseJson(bytes: Buffer): Record<string, unknown> {
   throw new Error('The speech provider returned an invalid JSON response.');
 }
 
+function nativeModel(kind: 'openai' | 'gemini', value: string): string {
+  const models = TTS_MODELS[kind];
+  const model = value || models[0].id;
+  if (!models.some((entry) => entry.id === model))
+    throw new Error(
+      `Choose a supported ${kind === 'openai' ? 'OpenAI' : 'Gemini'} speech model.`,
+    );
+  return model;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Gemini preview models return signed 16-bit little-endian mono PCM. */
+function pcmWav(pcm: Buffer, sampleRate: number): Buffer {
+  if (!pcm.length || pcm.length % 2 || pcm.length > MAX_RESPONSE_BYTES - 44)
+    throw new Error('Gemini returned invalid or oversized PCM audio.');
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(pcm.length + 36, 4);
+  header.write('WAVEfmt ', 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+async function gemini(
+  config: TtsProvider,
+  credentials: string,
+  text: string,
+  signal: AbortSignal,
+): Promise<SpeechAudio> {
+  if (config.speed !== 1)
+    throw new Error('Gemini TTS requires speech speed 1.');
+  const model = nativeModel('gemini', config.model);
+  const modernVoice = model.startsWith('gemini-3.8-');
+  const body = JSON.stringify({
+    contents: [{ role: 'user', parts: [{ text }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: modernVoice
+          ? { voice: config.voice }
+          : { prebuiltVoiceConfig: { voiceName: config.voice } },
+      },
+    },
+  });
+  const result = parseJson(
+    await post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      body,
+      {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': required(credentials, 'API key'),
+      },
+      signal,
+    ),
+  );
+  const invalid = () =>
+    new Error(
+      'Gemini returned no complete, unambiguous speech audio. Check the voice, model, and safety restrictions.',
+    );
+  if (
+    record(result.promptFeedback)?.blockReason ||
+    !Array.isArray(result.candidates) ||
+    result.candidates.length !== 1
+  )
+    throw invalid();
+  const candidate = record(result.candidates[0]);
+  if (
+    !candidate ||
+    (candidate.finishReason !== undefined && candidate.finishReason !== 'STOP')
+  )
+    throw invalid();
+  const parts = record(candidate.content)?.parts;
+  if (!Array.isArray(parts) || parts.length !== 1) throw invalid();
+  const part = record(parts[0]);
+  const inline = record(part?.inlineData);
+  if (
+    !inline ||
+    part?.text !== undefined ||
+    typeof inline.data !== 'string' ||
+    typeof inline.mimeType !== 'string'
+  )
+    throw invalid();
+  // Buffer.from silently accepts malformed base64; reject it before decoding.
+  if (
+    !inline.data ||
+    inline.data.length % 4 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(inline.data)
+  )
+    throw invalid();
+  const bytes = Buffer.from(inline.data, 'base64');
+  if (
+    !bytes.length ||
+    bytes.length > MAX_RESPONSE_BYTES ||
+    bytes.toString('base64') !== inline.data
+  )
+    throw invalid();
+  const mime = inline.mimeType.toLowerCase();
+  if (mime === 'audio/wav' || mime === 'audio/x-wav') {
+    if (
+      bytes.length < 44 ||
+      bytes.toString('ascii', 0, 4) !== 'RIFF' ||
+      bytes.toString('ascii', 8, 12) !== 'WAVE'
+    )
+      throw invalid();
+    return { bytes, extension: 'wav' };
+  }
+  if (!/^audio\/l16(?:;|$)/.test(mime)) throw invalid();
+  const rate = /(?:^|;)\s*rate=(\d+)(?:;|$)/.exec(mime);
+  const sampleRate = Number(rate?.[1]);
+  if (!Number.isInteger(sampleRate) || sampleRate < 8000 || sampleRate > 96000)
+    throw invalid();
+  if (/channels=/.test(mime) && !/(?:^|;)\s*channels=1(?:;|$)/.test(mime))
+    throw invalid();
+  return { bytes: pcmWav(bytes, sampleRate), extension: 'wav' };
+}
+
 /** Dedicated vendor adapters normalize responses to project-importable audio. */
 export async function synthesizeSpeech(
   config: TtsProvider,
@@ -299,6 +429,8 @@ export async function synthesizeSpeech(
     return polly(config, credentials, text, signal);
   if (config.kind === 'google-cloud')
     return google(config, credentials, text, signal);
+  if (config.kind === 'gemini')
+    return gemini(config, credentials, text, signal);
   const headers = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${required(credentials, 'API key')}`,
@@ -328,7 +460,9 @@ export async function synthesizeSpeech(
   const endpoint =
     config.kind === 'lemonfox'
       ? 'https://api.lemonfox.ai/v1/audio/speech'
-      : customEndpoint(config.endpoint);
+      : config.kind === 'openai'
+        ? 'https://api.openai.com/v1/audio/speech'
+        : customEndpoint(config.endpoint);
   const body = JSON.stringify({
     input: text,
     voice: config.voice,
@@ -336,7 +470,12 @@ export async function synthesizeSpeech(
     speed: config.speed,
     ...(config.kind === 'lemonfox'
       ? { language: config.language.toLowerCase() }
-      : { model: config.model }),
+      : {
+          model:
+            config.kind === 'openai'
+              ? nativeModel('openai', config.model)
+              : config.model,
+        }),
   });
   return {
     bytes: await post(endpoint, body, headers, signal),

@@ -208,6 +208,47 @@ function fixture() {
 }
 
 describe('TTS service', () => {
+  it.each([
+    ['openai', 'gpt-4o-mini-tts', 'alloy'],
+    ['gemini', 'gemini-3.8-flash-tts', 'Kore'],
+  ] as const)(
+    'saves native %s accounts with a usable default model and no secret exposure',
+    (kind, model, voice) => {
+      const f = fixture();
+      const saved = f.service.saveProvider({
+        kind,
+        label: kind,
+        voice,
+        credentials: 'native-test-key',
+      });
+      expect(saved).toMatchObject({ kind, model, hasCredentials: true });
+      expect(JSON.stringify(f.service.providers())).not.toContain(
+        'native-test-key',
+      );
+      const { hasCredentials: _hasCredentials, ...settings } = saved;
+      const edited = f.service.saveProvider(settings);
+      expect(edited.model).toBe(model);
+    },
+  );
+  it('rejects unsupported native models and unsupported Gemini speed before saving credentials', () => {
+    const f = fixture();
+    const config = {
+      kind: 'gemini',
+      label: 'Gemini',
+      voice: 'Kore',
+      credentials: 'native-test-key',
+    };
+    expect(() =>
+      f.service.saveProvider({
+        ...config,
+        model: 'gemini-3.8-flash-lite-tts',
+        speed: 1.2,
+      }),
+    ).toThrow(/speech rate 1/);
+    expect(() =>
+      f.service.saveProvider({ ...config, model: 'a-chat-model' }),
+    ).toThrow(/supported speech model/);
+  });
   it('runs a queued request, validates and imports audio, then persists the take across reopening', async () => {
     const f = fixture();
     synthesize.mockResolvedValue({

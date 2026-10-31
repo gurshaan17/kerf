@@ -8,10 +8,12 @@ Generated takes remain available after project reopening. Listen to each take, c
 
 ## Provider contract
 
-Each saved account has a label, adapter kind, model or engine where applicable, voice, language, speed, region, and optional custom endpoint. Multiple configurations of the same vendor are supported. Voices and model identifiers are entered explicitly; Kerf does not assume one vendor's identifiers work with another vendor.
+Each saved account has a label, adapter kind, model or engine where applicable, voice, language, speed, region, and optional custom endpoint. Multiple configurations of the same vendor are supported. OpenAI and Gemini models are selected from curated dropdowns; other vendors use explicit model identifiers. Voices are entered using the selected vendor's identifiers.
 
 | Adapter                     | Credentials                                                                 | Configuration                                                     | Output |
 | --------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------ |
+| OpenAI                      | API key                                                                     | Select a Speech API model and enter a built-in voice              | MP3    |
+| Gemini                      | Gemini API key from Google AI Studio                                        | Select a Gemini TTS model and enter a voice such as `Kore`        | WAV    |
 | AWS Polly                   | JSON containing `accessKeyId`, `secretAccessKey`, optional `sessionToken`   | AWS region, voice ID, language code, engine (`neural` by default) | MP3    |
 | Google Cloud Text-to-Speech | API key or service-account JSON containing `client_email` and `private_key` | Full voice name and matching language; voice selects the model    | MP3    |
 | Smallest.ai                 | API key                                                                     | Voice ID, model (`lightning_v3.1` by default), language           | WAV    |
@@ -19,6 +21,10 @@ Each saved account has a label, adapter kind, model or engine where applicable, 
 | OpenAI-compatible           | API key                                                                     | Full speech endpoint URL, model and voice                         | MP3    |
 
 AWS credentials require Polly synthesis permission. Service-account Google authentication exchanges a signed JWT for a short-lived OAuth access token. Provider support for voices, engines and speaking rates varies; API errors explain whether credentials, quota, or configuration needs attention. AWS generative voices require speed 1 in this implementation.
+
+OpenAI model options are `gpt-4o-mini-tts`, `gpt-4o-mini-tts-2025-12-15`, `tts-1`, and `tts-1-hd`. OpenAI currently schedules these Speech API models to retire January 6, 2027; availability depends on the account. OpenAI's native entry uses its fixed speech endpoint and requires no custom URL.
+
+Gemini options are `gemini-3.8-flash-tts`, `gemini-3.8-flash-lite-tts`, `gemini-3.1-flash-tts-preview`, and `gemini-2.5-pro-preview-tts`. The default is Gemini 3.8 Flash TTS. Gemini 3.8 WAV responses are saved directly; preview-model PCM responses are wrapped in a WAV header for normal project import. Gemini uses its default pace (speed 1); it has no numeric speed control here. Native OpenAI and Gemini infer language from the narration text.
 
 Custom endpoints must accept the synchronous JSON speech contract `{input, model, voice, response_format: "mp3", speed}`, Bearer authentication, and return audio bytes directly. HTTPS is required except for HTTP on loopback. URL credentials, queries, fragments, and redirects are rejected. An arbitrary vendor key works only through a matching adapter or this compatible contract. Async polling APIs and streaming playback need additional adapters.
 
@@ -51,7 +57,7 @@ The imported audio must be ready. Speech must fit the current interval; overflow
 ## Acceptance and verification
 
 - Account credentials persist encrypted, are retained on blank edits, and never appear in public responses.
-- All five adapters produce the documented native request and normalize audio responses.
+- All seven adapters produce the documented native request and normalize audio responses.
 - Provider failures, redirects, oversized bodies, and insecure custom endpoints fail safely.
 - Stale revisions, duplicate row jobs, changed provider settings, and project closure prevent invalid commits.
 - Takes preview as normal audio assets; outdated text and duration overflow prevent placement.
@@ -62,6 +68,9 @@ Focused adapter and service tests cover these mechanics with local fixtures and 
 The Electron desktop journey covers visual narration generation, editing, captions, provider configuration through the UI, speech requests to a local fixture, real ffmpeg audio import, preview availability, timeline placement, and Undo.
 
 ## Provider references
+
+- [OpenAI speech API and model availability](https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create)
+- [Gemini TTS models and response formats](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation)
 
 - [AWS SynthesizeSpeech](https://docs.aws.amazon.com/polly/latest/APIReference/API_SynthesizeSpeech.html) and [SigV4 signing](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html)
 - [Google voice parameters](https://docs.cloud.google.com/text-to-speech/docs/reference/rest/v1/VoiceSelectionParams) and [service-account authentication](https://developers.google.com/identity/protocols/oauth2/service-account)

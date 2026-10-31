@@ -1,10 +1,31 @@
 import { z } from 'zod';
 
+/** Curated synchronous speech models; availability still depends on the account. */
+export const TTS_MODELS = {
+  openai: [
+    { id: 'gpt-4o-mini-tts', label: 'GPT-4o mini TTS' },
+    { id: 'gpt-4o-mini-tts-2025-12-15', label: 'GPT-4o mini TTS · 2025-12-15' },
+    { id: 'tts-1', label: 'TTS-1 · speed' },
+    { id: 'tts-1-hd', label: 'TTS-1 HD · quality' },
+  ],
+  gemini: [
+    { id: 'gemini-3.8-flash-tts', label: 'Gemini 3.8 Flash TTS' },
+    { id: 'gemini-3.8-flash-lite-tts', label: 'Gemini 3.8 Flash-Lite TTS' },
+    {
+      id: 'gemini-3.1-flash-tts-preview',
+      label: 'Gemini 3.1 Flash TTS · Preview',
+    },
+    { id: 'gemini-2.5-pro-preview-tts', label: 'Gemini 2.5 Pro TTS · Preview' },
+  ],
+} as const;
+
 export const ttsProviderSchema = z
   .object({
     id: z.string().min(1).optional(),
     label: z.string().trim().min(1).max(80),
     kind: z.enum([
+      'openai',
+      'gemini',
       'aws-polly',
       'google-cloud',
       'smallest',
