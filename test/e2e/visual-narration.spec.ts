@@ -25,11 +25,31 @@ test('silent video generates editable narration, protects edits on regeneration 
     source,
   ]);
   let calls = 0;
+  const speechAudio = execFileSync('ffmpeg', [
+    '-nostdin',
+    '-v',
+    'error',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=440:duration=0.15',
+    '-f',
+    'mp3',
+    'pipe:1',
+  ]);
+  const speechRequests: { input: string; model: string; voice: string }[] = [];
   const server = createServer((request, response) => {
     const parts: Buffer[] = [];
     request.on('data', (data) => parts.push(data));
     request.on('end', () => {
       const body = JSON.parse(Buffer.concat(parts).toString());
+      if (request.url === '/v1/audio/speech') {
+        expect(request.headers.authorization).toBe('Bearer fixture-speech-key');
+        speechRequests.push(body);
+        response.writeHead(200, { 'content-type': 'audio/mpeg' });
+        response.end(speechAudio);
+        return;
+      }
       const texts = body.messages.flatMap((message: { content: unknown }) =>
         Array.isArray(message.content) ? message.content : [],
       );
@@ -284,6 +304,66 @@ test('silent video generates editable narration, protects edits on regeneration 
         ),
       )
       .toBe(true);
+    // Configure through the visible narration controls, then generate real
+    // importable audio through the local provider without paid API calls.
+    await page.getByText('Generate voice', { exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Add provider', exact: true })
+      .click();
+    await page
+      .getByLabel('Speech service', { exact: true })
+      .selectOption('openai-compatible');
+    await page
+      .getByLabel('Speech provider name', { exact: true })
+      .fill('Local speech fixture');
+    await page.getByLabel('Voice ID', { exact: true }).fill('fixture-voice');
+    await page
+      .getByLabel('Model / engine', { exact: true })
+      .fill('fixture-tts');
+    await page
+      .getByPlaceholder('https://your-provider.example/v1/audio/speech')
+      .fill(`http://127.0.0.1:${address.port}/v1/audio/speech`);
+    await page
+      .getByLabel('Speech credentials', { exact: true })
+      .fill('fixture-speech-key');
+    await page.getByRole('button', { name: 'Save voice settings' }).click();
+    const finalTranscript = await read();
+    const spokenRow = finalTranscript.segments[0]!;
+    await page.getByLabel('Narration to generate').selectOption(spokenRow.id);
+    await page
+      .getByRole('button', { name: 'Send text and generate voice' })
+      .click();
+    await expect.poll(() => speechRequests.length).toBe(1);
+    expect(speechRequests[0]).toMatchObject({
+      input: spokenRow.text,
+      model: 'fixture-tts',
+      voice: 'fixture-voice',
+    });
+    const preview = page.getByLabel(`Voice-over: ${spokenRow.text}`);
+    await expect(preview).toBeVisible({ timeout: 120000 });
+    await expect(preview).toHaveAttribute('src', /kerfmedia:\/\/asset\//);
+    await page.getByRole('button', { name: 'Add / update voice-over' }).click();
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          async () =>
+            (await window.kerf.projects.active())!.project.sequence.tracks
+              .flatMap((t) => t.clips)
+              .filter((c) => c.type === 'audio').length,
+        ),
+      )
+      .toBe(1);
+    await page.evaluate(async () => window.kerf.edits.undo());
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          async () =>
+            (await window.kerf.projects.active())!.project.sequence.tracks
+              .flatMap((t) => t.clips)
+              .filter((c) => c.type === 'audio').length,
+        ),
+      )
+      .toBe(0);
     await page.screenshot({
       path: join(cacheRoot, 'visual-narration-review.png'),
     });

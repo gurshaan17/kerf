@@ -9,6 +9,7 @@ Kerf can turn a silent video into a timestamped, editable visual narration draft
 3. Review the draft alongside Source Preview. **View evidence** and **Evidence timestamps** seek to the source images used for each description. These evidence times are separate from the editable narration interval.
 4. Save text or timing changes, split at the source playhead, select consecutive rows to merge, add manual rows, or delete rows. Splitting divides text approximately by its position in the interval; it does not infer word timings. Undo/redo restores the last 30 committed narration states and survives project reopening. The narration controls have separate history from timeline Undo.
 5. Choose **Mark reviewed** after checking all rows. Add the source video to the timeline, then use **Create / update captions**. The preview reports how many generated caption clips will be replaced. Confirm to apply one undoable timeline batch.
+6. To add spoken narration, expand **Generate voice**, configure a TTS provider with your own credentials, and choose one row or all rows. Use **Send text and generate voice**, preview the generated audio, then **Add / update voice-over** to place it on the timeline. Speech must fit the narration interval; adjust the text, speed, or timing if it runs long. See [TTS setup and provider details](text-to-speech.md).
 
 Save or clear pending text/timing edits before reviewing, regenerating, or updating captions. Editing and regeneration return a draft to unreviewed status. Existing caption clips stay unchanged until you explicitly update them; manual caption clips are preserved. Updating linked generated clips replaces changes made directly to those clips.
 
@@ -21,6 +22,8 @@ Writes carry the transcript revision and stale writes are rejected. Source media
 A nonempty speech transcript blocks visual generation, including questionable nonempty Whisper output. Empty speech output can be replaced only with explicit confirmation. Visual narration is never used as speech evidence by silence-cutting, speech-ducking or spoken rough-cut tools.
 
 ## Current limits
+
+Visual narration also supports configurable voice-over generation and preview. See [Text-to-speech](text-to-speech.md) for supported providers, credentials, timing and placement behavior.
 
 - Up to 600 unique primary frames per request, with chronological boundary frames repeated between chunks. Sampling follows visual change at a 4 fps probe rate, periodic context, and existing scene-cut hints. A full-frame 1280px image is used; changed-region crops are not included.
 - Requests use deterministic waves (three concurrent chunks for Google; one for other adapters), previous-wave text context, and a context-only overlap image. Frame-index references are validated; no retries or provider fallback are used.

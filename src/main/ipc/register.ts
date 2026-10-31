@@ -35,6 +35,7 @@ import {
   type RendererResponse,
 } from '../../shared/contracts';
 import { suggestedExportName } from '../../shared/export-plan';
+import type { TtsService } from '../tts/service';
 
 function exportFrameBytes(data: unknown): Uint8Array {
   const bytes =
@@ -154,6 +155,7 @@ const MEDIA_EXTENSIONS = [
 ];
 
 export interface ProjectIpcOptions {
+  readonly tts?: TtsService;
   readonly projects: ProjectService;
   readonly repository: ProjectRepository;
   readonly jobs: JobQueue;
@@ -189,6 +191,26 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
+  const tts = () => {
+    if (!options.tts) throw new Error('TTS is unavailable.');
+    return options.tts;
+  };
+  ipcMain.handle(KERF_IPC.tts.providers, () => tts().providers());
+  ipcMain.handle(KERF_IPC.tts.saveProvider, (_event, request: unknown) =>
+    tts().saveProvider(request),
+  );
+  ipcMain.handle(KERF_IPC.tts.deleteProvider, (_event, id: unknown) =>
+    tts().deleteProvider(z.string().min(1).parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.tts.generate, (_event, request: unknown) =>
+    tts().generate(request),
+  );
+  ipcMain.handle(KERF_IPC.tts.takes, (_event, id: unknown) =>
+    tts().takes(z.string().min(1).parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.tts.place, (_event, request: unknown) =>
+    tts().place(request),
+  );
   const {
     projects,
     repository,
@@ -655,6 +677,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       ...Object.values(KERF_IPC.export),
       ...Object.values(KERF_IPC.analysis),
       ...Object.values(KERF_IPC.narration),
+      ...Object.values(KERF_IPC.tts),
       ...Object.values(KERF_IPC.motion),
       ...Object.values(KERF_IPC.mcp),
       ...Object.values(KERF_IPC.references),

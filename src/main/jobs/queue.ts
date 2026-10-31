@@ -155,6 +155,11 @@ export class JobQueue {
       .run(this.now(), this.now());
     this.database
       .prepare(
+        "UPDATE jobs SET status = 'failed', error = 'Speech generation was interrupted. Generate again explicitly to resume provider use.', finished_at = ?, updated_at = ? WHERE status = 'running' AND kind = 'narration.tts'",
+      )
+      .run(this.now(), this.now());
+    this.database
+      .prepare(
         `UPDATE jobs SET
           status = 'queued', stage = '', progress = 0, error = NULL,
           started_at = NULL, cancel_requested = 0, updated_at = ?

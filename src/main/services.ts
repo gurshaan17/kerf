@@ -13,8 +13,10 @@ import { RendererBridge } from './renderer-bridge';
 import { ToolService } from './tools/service';
 import { McpService } from './mcp/service';
 import type { KerfEvent } from '../shared/contracts';
+import { TtsService } from './tts/service';
 
 export interface KerfServices {
+  readonly tts: TtsService;
   readonly database: DatabaseHandle;
   readonly repository: ProjectRepository;
   readonly projects: ProjectService;
@@ -74,6 +76,14 @@ export function createKerfServices(
       },
     });
     const exportService = new ExportService({ repository, projects });
+    const tts = new TtsService({
+      database: database.connection,
+      secrets: electronSecrets,
+      projects,
+      repository,
+      jobs,
+      imports,
+    });
     const analysis = new AnalysisService({
       database,
       repository,
@@ -111,6 +121,7 @@ export function createKerfServices(
       tools,
     });
     return {
+      tts,
       database,
       repository,
       projects,
@@ -123,6 +134,7 @@ export function createKerfServices(
       agent,
       mcp,
       dispose() {
+        tts.dispose();
         agent.abort();
         mcp.dispose();
         renderer.dispose();

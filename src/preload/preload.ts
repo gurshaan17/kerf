@@ -47,6 +47,14 @@ const invoke = <Result>(channel: string, ...args: unknown[]): Promise<Result> =>
 // Keep the renderer sandboxed: expose only the specific operations the UI
 // needs instead of handing over Node.js or the whole `electron` module.
 const bridge: KerfBridge = {
+  tts: {
+    providers: () => invoke(KERF_IPC.tts.providers),
+    saveProvider: (request) => invoke(KERF_IPC.tts.saveProvider, request),
+    deleteProvider: (id) => invoke(KERF_IPC.tts.deleteProvider, id),
+    generate: (request) => invoke(KERF_IPC.tts.generate, request),
+    takes: (id) => invoke(KERF_IPC.tts.takes, id),
+    place: (request) => invoke(KERF_IPC.tts.place, request),
+  },
   getVersions: () => ({
     electron: process.versions.electron,
     chrome: process.versions.chrome,

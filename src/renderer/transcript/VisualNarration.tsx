@@ -11,6 +11,7 @@ import {
 } from '@kerf/model';
 import type { ProviderAccount, ProjectSnapshot } from '../../shared/contracts';
 import { useStudio, useStudioStoreApi } from '../state/StudioProvider';
+import { Voiceover } from './Voiceover';
 
 export function VisualNarrationDialog({
   open,
@@ -573,6 +574,12 @@ export function VisualNarrationEditor({
         need adjustment. Caption clips change only when you explicitly update
         them.
       </p>
+      <Voiceover
+        transcript={transcript}
+        asset={asset}
+        rate={rate}
+        disabled={pending || unsaved}
+      />
       <div className="mb-3 flex flex-wrap gap-1">
         <Button
           size="sm"

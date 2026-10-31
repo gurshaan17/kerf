@@ -73,6 +73,7 @@ if (!hasSingleInstanceLock) {
     }
     installMediaProtocol(startedServices.repository);
     unregisterIpc = registerProjectIpc({
+      tts: services.tts,
       projects: services.projects,
       repository: services.repository,
       jobs: services.jobs,

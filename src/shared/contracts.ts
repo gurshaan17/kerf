@@ -536,6 +536,14 @@ export interface RendererEditorContext {
 export type KerfEvent = ProjectEvent | JobEvent | ExportEvent | ChatEvent;
 
 export const KERF_IPC = {
+  tts: {
+    providers: 'kerf:tts:providers',
+    saveProvider: 'kerf:tts:save-provider',
+    deleteProvider: 'kerf:tts:delete-provider',
+    generate: 'kerf:tts:generate',
+    takes: 'kerf:tts:takes',
+    place: 'kerf:tts:place',
+  },
   app: {
     versions: 'kerf:app:versions',
   },
@@ -639,6 +647,7 @@ export interface KerfEventEnvelope {
 
 /** The complete surface exposed on `window.kerf`. Keep this allowlist small. */
 export interface KerfBridge {
+  readonly tts?: import('./tts').TtsBridge;
   readonly getVersions: () => AppVersions;
   readonly projects: {
     readonly list: () => Promise<ProjectSummary[]>;

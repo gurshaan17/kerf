@@ -261,4 +261,26 @@ export const DATABASE_MIGRATIONS: readonly Migration[] = [
       connection.exec(CHAT_MODEL_SCHEMA);
     },
   },
+  {
+    version: 7,
+    name: 'tts accounts and narration takes',
+    up(connection) {
+      connection.exec(`
+        CREATE TABLE tts_accounts (
+          id TEXT PRIMARY KEY,
+          config_json TEXT NOT NULL,
+          credentials_ciphertext BLOB
+        );
+        CREATE TABLE tts_takes (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          transcript_id TEXT NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
+          segment_id TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          clip_id TEXT
+        );
+        CREATE INDEX tts_takes_transcript_idx ON tts_takes(transcript_id);
+      `);
+    },
+  },
 ];
