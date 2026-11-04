@@ -60,6 +60,15 @@ function makeBridge(snapshot: ProjectSnapshot) {
   );
   const bridge = {
     narration: unusedNarrationBridge,
+    screenPolish: {
+      generate: async () => {
+        throw new Error('unused');
+      },
+      proposal: async () => null,
+      apply: async () => {
+        throw new Error('unused');
+      },
+    },
     autoCut: unusedAutoCutBridge,
     getVersions: () => ({ electron: '', chrome: '', node: '' }),
     projects: {

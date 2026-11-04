@@ -145,6 +145,11 @@ export class JobQueue {
     this.running = true;
     this.stopping = false;
 
+    this.database
+      .prepare(
+        "UPDATE jobs SET status = 'failed', error = 'Screen polish was interrupted. Analyse again explicitly to resume provider use.', finished_at = ?, updated_at = ? WHERE kind = 'analysis.screenPolish' AND status IN ('running', 'queued')",
+      )
+      .run(this.now(), this.now());
     const interrupted = this.database
       .prepare("SELECT id FROM jobs WHERE status = 'running'")
       .all() as Array<{ id: string }>;

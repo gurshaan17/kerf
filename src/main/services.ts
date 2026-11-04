@@ -13,10 +13,12 @@ import { RendererBridge } from './renderer-bridge';
 import { ToolService } from './tools/service';
 import { McpService } from './mcp/service';
 import type { KerfEvent } from '../shared/contracts';
+import { ScreenPolishService } from './analysis/screen-polish-service';
 import { AutoCutService } from './analysis/auto-cut-service';
 import { TtsService } from './tts/service';
 
 export interface KerfServices {
+  readonly screenPolish: ScreenPolishService;
   readonly autoCut: AutoCutService;
   readonly tts: TtsService;
   readonly database: DatabaseHandle;
@@ -94,6 +96,12 @@ export function createKerfServices(
       userData: app.getPath('userData'),
       secrets: electronSecrets,
     });
+    const screenPolish = new ScreenPolishService({
+      projects,
+      repository,
+      jobs,
+      providers: analysis.providers,
+    });
     const autoCut = new AutoCutService({
       projects,
       repository,
@@ -130,6 +138,7 @@ export function createKerfServices(
       tools,
     });
     return {
+      screenPolish,
       autoCut,
       tts,
       database,
@@ -144,6 +153,7 @@ export function createKerfServices(
       agent,
       mcp,
       dispose() {
+        screenPolish.dispose();
         autoCut.dispose();
         tts.dispose();
         agent.abort();

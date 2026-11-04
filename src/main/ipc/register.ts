@@ -1,3 +1,8 @@
+import type { ScreenPolishService } from '../analysis/screen-polish-service';
+import {
+  polishGenerateSchema,
+  polishApplySchema,
+} from '../../shared/screen-polish';
 import { idSchema } from '@kerf/model';
 import type { AutoCutService } from '../analysis/auto-cut-service';
 import {
@@ -161,6 +166,7 @@ const MEDIA_EXTENSIONS = [
 ];
 
 export interface ProjectIpcOptions {
+  readonly screenPolish: ScreenPolishService;
   readonly autoCut: AutoCutService;
   readonly tts?: TtsService;
   readonly projects: ProjectService;
@@ -198,6 +204,15 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
+  ipcMain.handle(KERF_IPC.screenPolish.generate, (_event, request: unknown) =>
+    options.screenPolish.generate(polishGenerateSchema.parse(request)),
+  );
+  ipcMain.handle(KERF_IPC.screenPolish.proposal, (_event, id: unknown) =>
+    options.screenPolish.proposal(idSchema('job').parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.screenPolish.apply, (_event, request: unknown) =>
+    options.screenPolish.apply(polishApplySchema.parse(request)),
+  );
   ipcMain.handle(KERF_IPC.autoCut.generate, (_event, request: unknown) =>
     options.autoCut.generate(autoCutGenerateSchema.parse(request)),
   );
@@ -686,6 +701,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   return () => {
     unsubscribe();
     for (const channel of [
+      ...Object.values(KERF_IPC.screenPolish),
       ...Object.values(KERF_IPC.autoCut),
       ...Object.values(KERF_IPC.projects),
       ...Object.values(KERF_IPC.edits),

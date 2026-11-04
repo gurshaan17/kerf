@@ -16,6 +16,10 @@ export interface PolishFocus {
   y: number;
   kind: 'zoom' | 'spotlight' | 'callout';
   text: string;
+  width?: number;
+  height?: number;
+  zoom?: number;
+  transitionFrames?: number;
 }
 
 /** Timing cues only: flattened recordings do not provide click positions. */
@@ -84,13 +88,25 @@ export function screenPolishCommand(
       throw new Error('Keep the effect timing inside its source clip.');
     const transition = Math.min(
       Math.floor(focus.durationFrames / 2),
-      Math.round(secondsToFrames(0.25, sequence.frameRate)),
+      focus.transitionFrames ??
+        Math.round(secondsToFrames(0.25, sequence.frameRate)),
     );
+    const w = focus.width ?? 0.4;
+    const h = focus.height ?? 0.3;
+    if (
+      !Number.isFinite(w) ||
+      !Number.isFinite(h) ||
+      w < 0.02 ||
+      w > 1 ||
+      h < 0.02 ||
+      h > 1
+    )
+      throw new Error('Focus size must be between 2% and 100%.');
     const region = {
-      x: Math.min(0.6, Math.max(0, focus.x - 0.2)),
-      y: Math.min(0.7, Math.max(0, focus.y - 0.15)),
-      w: 0.4,
-      h: 0.3,
+      x: Math.min(1 - w, Math.max(0, focus.x - w / 2)),
+      y: Math.min(1 - h, Math.max(0, focus.y - h / 2)),
+      w,
+      h,
     };
     const props = overlayPropsSchema.parse({
       kind: focus.kind,
@@ -98,7 +114,7 @@ export function screenPolishCommand(
       transitionInFrames: transition,
       transitionOutFrames: transition,
       ...(focus.kind === 'zoom'
-        ? { focus: { x: focus.x, y: focus.y }, zoom: 2 }
+        ? { focus: { x: focus.x, y: focus.y }, zoom: focus.zoom ?? 2 }
         : {}),
       ...(focus.kind === 'callout'
         ? {

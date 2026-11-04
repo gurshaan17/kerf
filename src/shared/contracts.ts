@@ -536,6 +536,11 @@ export interface RendererEditorContext {
 export type KerfEvent = ProjectEvent | JobEvent | ExportEvent | ChatEvent;
 
 export const KERF_IPC = {
+  screenPolish: {
+    generate: 'kerf:screen-polish:generate',
+    proposal: 'kerf:screen-polish:proposal',
+    apply: 'kerf:screen-polish:apply',
+  },
   autoCut: {
     generate: 'kerf:auto-cut:generate',
     proposal: 'kerf:auto-cut:proposal',
@@ -652,6 +657,7 @@ export interface KerfEventEnvelope {
 
 /** The complete surface exposed on `window.kerf`. Keep this allowlist small. */
 export interface KerfBridge {
+  readonly screenPolish: import('./screen-polish').ScreenPolishBridge;
   readonly autoCut: import('./auto-cut').AutoCutBridge;
   readonly tts?: import('./tts').TtsBridge;
   readonly getVersions: () => AppVersions;

@@ -5,6 +5,15 @@ import { unusedNarrationBridge } from '../../test/helpers/narration-bridge';
 
 const bridge: KerfBridge = {
   narration: unusedNarrationBridge,
+  screenPolish: {
+    generate: async () => {
+      throw new Error('unused');
+    },
+    proposal: async () => null,
+    apply: async () => {
+      throw new Error('unused');
+    },
+  },
   autoCut: unusedAutoCutBridge,
   getVersions: () => ({ electron: '1', chrome: '2', node: '3' }),
   projects: {
