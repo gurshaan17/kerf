@@ -436,7 +436,11 @@ function MarkerMenu({
   );
 }
 
-export function Timeline() {
+export function Timeline({
+  onAutoCut,
+}: {
+  onAutoCut: (clipId: string) => void;
+}) {
   const sequence = useStudio(
     (state) => state.snapshot?.project.sequence ?? null,
   );
@@ -1017,6 +1021,23 @@ export function Timeline() {
             disabled={selectedIds.length === 0}
             onClick={() => remove()}
           />
+          <span className="k-timeline__divider" aria-hidden="true" />
+          <Button
+            size="sm"
+            leadingIcon={<Wand2 size={13} />}
+            disabled={
+              selection.clipIds.length !== 1 ||
+              findClip(sequence, selection.clipIds[0] ?? '')?.clip.type !==
+                'video'
+            }
+            title="Select one video clip, then review automatic cuts"
+            onClick={() => {
+              const id = selection.clipIds[0];
+              if (id) onAutoCut(id);
+            }}
+          >
+            Auto cut
+          </Button>
           <span className="k-timeline__divider" aria-hidden="true" />
           <IconButton
             label="Snapping"

@@ -20,6 +20,11 @@ agent edits, and MCP edits share one undo history.
 - **Timeline.** Video, audio, caption, and text tracks with drag and drop,
   move, trim, split, ripple delete, snapping, markers, and undo/redo. The tool
   catalog adds slip, speed maps, and batched edits.
+- **Auto cut.** Select one normal-speed video clip and choose **Auto cut** in
+  the timeline toolbar. Analyse visual activity and speech, review proposed
+  removals, preview the edit, and apply it as one undo step. Requires an
+  explicitly configured vision provider; video with audio also needs local
+  transcription. See [Auto cut](docs/auto-cut.md) for limits.
 - **Preview.** A canvas compositor renders transforms, effects, masks, blend
   modes, fades, keyframes, text, captions, and saved motion compositions.
 - **Analysis.** Local transcription through `whisper.cpp`, scene detection,
@@ -150,6 +155,7 @@ under `.cache/e2e/` and ignored by git.
 - [Decisions](docs/decisions.md) — the choices that shape the editor.
 - [Tools](docs/tools.md) — the agent and MCP tool catalog.
 - [Performance](docs/performance.md) — measured targets and methodology.
+- [Auto cut](docs/auto-cut.md) — analyse and review useful-content edits.
 - [Visual narration](docs/visual-narration.md) — generate and review text from silent footage.
 - [Contributing](CONTRIBUTING.md) — setup, tests, and review expectations.
 - [Privacy](PRIVACY.md) — what stays local and when the network is used.

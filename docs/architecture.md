@@ -300,3 +300,15 @@ production preload surface.
 - Add a panel: compose primitives from `@kerf/ui` and keep state in the studio
   store or a local hook. Do not open SQLite or the filesystem from the
   renderer.
+
+## Auto cut
+
+`AutoCutService` in the main process coordinates explicit background requests,
+local transcription and sampled-frame analysis through the existing provider
+store. Proposals live in job results and remain separate from project edits.
+The preload exposes only generation, scoped proposal retrieval and application.
+The renderer reviews immutable source-frame removals and previews them using
+local source media. Apply checks the source/timeline fingerprint, resolves only
+stored removal IDs, and uses the pure engine's `autoCutCommand` to create one
+ordinary reversible batch. There is no separate editing engine or cloud fallback.
+See [Auto cut](auto-cut.md) for the user flow and supported timeline shapes.

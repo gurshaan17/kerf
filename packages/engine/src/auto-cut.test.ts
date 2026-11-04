@@ -4,6 +4,7 @@ import { newId } from '@kerf/model';
 import { applyCommand } from './apply';
 import {
   makeAudioClip,
+  makeFxOverlayClip,
   makeSequence,
   makeTextClip,
   makeTrack,
@@ -99,5 +100,47 @@ describe('Auto cut command', () => {
       sequence.tracks[0]!.clips[0] = video;
       expect(() => autoCutContext(sequence, video.id)).toThrow();
     }
+  });
+  it('moves later linked overlays once regardless of track order and rejects followers of the cut clip', () => {
+    const { video, later, sequence } = fixture();
+    const effects = makeTrack('effects', 2);
+    const overlay = makeFxOverlayClip({
+      trackId: effects.id,
+      linkedItemId: later.id,
+      startFrame: 185,
+      durationFrames: 20,
+    });
+    sequence.tracks.unshift(withClips(effects, [overlay]));
+    const result = applyCommand(
+      sequence,
+      autoCutCommand(sequence, video.id, [{ startFrame: 130, endFrame: 160 }]),
+    );
+    expect(result.sequence.tracks[0]!.clips[0]!.startFrame).toBe(155);
+    expect(applyCommand(result.sequence, result.inverse!).sequence).toEqual(
+      sequence,
+    );
+    sequence.tracks[0]!.clips = [{ ...overlay, linkedItemId: video.id }];
+    expect(() => autoCutContext(sequence, video.id)).toThrow('linked overlays');
+  });
+  it('reduces two minutes to ninety seconds by removing only the chosen source ranges', () => {
+    const track = makeTrack('video', 0);
+    const clip = makeVideoClip({ trackId: track.id, durationFrames: 120 * 24 });
+    const sequence = makeSequence([withClips(track, [clip])]);
+    const result = applyCommand(
+      sequence,
+      autoCutCommand(sequence, clip.id, [
+        { startFrame: 20 * 24, endFrame: 35 * 24 },
+        { startFrame: 80 * 24, endFrame: 95 * 24 },
+      ]),
+    );
+    expect(
+      result.sequence.tracks[0]!.clips.reduce(
+        (sum, c) => sum + c.durationFrames,
+        0,
+      ),
+    ).toBe(90 * 24);
+    expect(applyCommand(result.sequence, result.inverse!).sequence).toEqual(
+      sequence,
+    );
   });
 });

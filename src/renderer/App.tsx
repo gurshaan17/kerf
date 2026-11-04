@@ -21,6 +21,7 @@ import { AnalysisSettingsDialog } from './analysis/AnalysisSettingsDialog';
 import { SearchDialog } from './search/SearchDialog';
 import { MotionDialog } from './motion/MotionDialog';
 import { ReferencesDialog } from './references/ReferencesDialog';
+import { AutoCutDialog } from './auto-cut/AutoCutDialog';
 import { AboutDialog } from './AboutDialog';
 import { createCompositionSandbox } from './motion/sandbox';
 import { RendererRequestHost } from './tools/RendererRequestHost';
@@ -61,6 +62,7 @@ export default function App() {
     (state) => state.clearCompositionTrees,
   );
 
+  const [autoCutClipId, setAutoCutClipId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -179,6 +181,7 @@ export default function App() {
 
   useEffect(() => {
     setAnalysisView(null);
+    setAutoCutClipId(null);
   }, [snapshot?.project.id]);
 
   useGlobalShortcuts({
@@ -188,6 +191,7 @@ export default function App() {
     onOpenSearch: openSearch,
     enabled:
       Boolean(snapshot) &&
+      !autoCutClipId &&
       !paletteOpen &&
       !shortcutsOpen &&
       !exportOpen &&
@@ -270,7 +274,7 @@ export default function App() {
         toasts={toasts}
         onDismissToast={dismissToast}
         stage={<Preview />}
-        timeline={<Timeline />}
+        timeline={<Timeline onAutoCut={setAutoCutClipId} />}
         inspector={
           analysisView ? (
             analysisView.kind === 'transcript' ? (
@@ -339,6 +343,16 @@ export default function App() {
         onOpenAbout={openAbout}
         exporting={exporting}
       />
+      {autoCutClipId && (
+        <AutoCutDialog
+          clipId={autoCutClipId}
+          onClose={() => setAutoCutClipId(null)}
+          onOpenSettings={() => {
+            setAutoCutClipId(null);
+            openAnalysis();
+          }}
+        />
+      )}
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}

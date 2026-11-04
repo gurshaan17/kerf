@@ -5,6 +5,28 @@ removals from visual evidence and speech in context, keeps uncertain material,
 and lets the editor review the result before applying one undoable edit.
 Duration is an outcome, not a quota.
 
+## Using Auto cut
+
+1. Select exactly one video clip on the timeline and click **Auto cut** in the
+   timeline toolbar. A clip up to five minutes long can be analysed.
+2. Optionally describe what to keep. Choose a vision-capable provider with both
+   Vision and Chat consent enabled. The dialog explains what will be sent.
+3. Choose **Analyse clip**. Progress and cancellation are available; closing the
+   dialog cancels unfinished analysis. No cuts happen during this step.
+4. Review the original/result duration and reasons for each proposed removal.
+   Uncheck a section to keep it. **View section** plays the source at that point;
+   **Preview edit** plays source footage while skipping checked removals. This
+   source preview does not render timeline effects or mix other audio tracks.
+5. Choose **Apply cuts**. Matching source audio is cut with video, later clips
+   and markers shift, and one timeline Undo restores the entire edit.
+
+If nothing is clearly irrelevant, the full clip stays and Apply is disabled.
+If the timeline, speech evidence or source changes, analyse again. Failed,
+cancelled and interrupted requests can be explicitly retried; no other provider
+is chosen automatically. Use **Change purpose or analyse again** to revise a
+completed proposal. Closing a completed review leaves its result in the local
+job queue; the UI starts a fresh request when reopened.
+
 ## Implementation phases
 
 1. **Cut planning:** build source-frame evidence units without splitting speech
@@ -60,3 +82,19 @@ stop generation; a changed timeline or source requires fresh analysis. Apply
 accepts only IDs from the stored proposal, never model-generated edit commands
 or renderer-provided timestamps. Queued/running jobs are cancelled on project
 switch and require explicit re-analysis after an application restart.
+
+## Verification
+
+Model/engine tests cover evidence validation, uncertain decisions, speech
+boundaries, source offsets, matching audio, head/tail cuts, a 120-second to
+90-second edit, later linked overlays, marker ripple, and full undo/redo.
+Service tests cover consent, source/timeline changes, cancellation, project
+scope, restart behaviour and error redaction. Electron journeys use a controlled
+local provider with real frame sampling, real Whisper transcription and actual
+review/apply playback paths. They exercise restore, cancellation, invalid output,
+empty output, stale review, smaller windows, audio sync and undo/redo.
+
+These integration tests prove the editing path, not the editorial judgement of
+any particular model. Real-provider quality should be evaluated on representative
+talking-head, silent demonstration and repeated-take footage before relying on
+its suggestions. Sampling can miss brief actions; review remains required.

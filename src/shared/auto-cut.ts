@@ -66,5 +66,5 @@ export interface AutoCutProposal {
 export interface AutoCutBridge {
   generate(request: AutoCutGenerateRequest): Promise<JobSummary>;
   proposal(jobId: string): Promise<AutoCutProposal | null>;
-  apply(request: z.infer<typeof autoCutApplySchema>): Promise<EditResult>;
+  apply(request: z.input<typeof autoCutApplySchema>): Promise<EditResult>;
 }

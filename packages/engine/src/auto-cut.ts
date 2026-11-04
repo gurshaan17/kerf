@@ -29,8 +29,21 @@ export function autoCutContext(sequence: Sequence, clipId: string) {
   if (companions.length > 1)
     throw new Error('Auto cut found multiple matching audio clips.');
   const ids = new Set([clip.id, ...companions.map((c) => c.id)]);
+  const allClips = sequence.tracks.flatMap((track) => track.clips);
   for (const track of sequence.tracks)
     for (const other of track.clips) {
+      if (other.type === 'fxOverlay' && other.linkedItemId) {
+        const owner = allClips.find(
+          (candidate) => candidate.id === other.linkedItemId,
+        );
+        if (
+          ids.has(other.linkedItemId) ||
+          (owner && owner.startFrame >= end && other.startFrame < end)
+        )
+          throw new Error(
+            'Auto cut cannot safely retime these linked overlays.',
+          );
+      }
       if (
         !ids.has(other.id) &&
         other.startFrame < end &&
@@ -107,10 +120,24 @@ export function autoCutCommand(
     }
   }
   const end = clipEndFrame(clip);
+  const laterIds = new Set(
+    sequence.tracks
+      .flatMap((track) => track.clips)
+      .filter((candidate) => candidate.startFrame >= end)
+      .map((candidate) => candidate.id),
+  );
   for (const track of sequence.tracks)
     for (const later of [...track.clips].sort(
       (a, b) => a.startFrame - b.startFrame,
     )) {
+      // Moving the owner shifts its linked overlays; moving both would depend
+      // on track ordering and could shift followers twice.
+      if (
+        later.type === 'fxOverlay' &&
+        later.linkedItemId &&
+        laterIds.has(later.linkedItemId)
+      )
+        continue;
       if (later.startFrame >= end)
         commands.push({
           type: 'clip.move',
