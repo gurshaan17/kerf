@@ -229,6 +229,25 @@ test('keeps linked overlays in sync and matches exported frames', async () => {
 
     await page.getByRole('button', { name: 'Effects', exact: true }).click();
     await page
+      .getByRole('button', { name: 'Suggest polish', exact: true })
+      .click();
+    await expect(
+      page.getByRole('button', { name: 'Review suggestion 1', exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole('combobox', { name: 'Effect 1', exact: true })
+      .selectOption('spotlight');
+    await page
+      .getByRole('button', { name: 'Apply screen polish', exact: true })
+      .click();
+    await expect(page.locator('.k-clip--fxOverlay')).toHaveCount(1);
+    await expect(
+      page.getByText('Screen polish · spotlight', { exact: true }).first(),
+    ).toBeVisible();
+    await page.screenshot({ path: 'test-results/screen-polish.png' });
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(page.locator('.k-clip--fxOverlay')).toHaveCount(0);
+    await page
       .getByRole('button', { name: 'Add Spotlight', exact: true })
       .click();
 
