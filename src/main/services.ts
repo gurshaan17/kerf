@@ -13,9 +13,11 @@ import { RendererBridge } from './renderer-bridge';
 import { ToolService } from './tools/service';
 import { McpService } from './mcp/service';
 import type { KerfEvent } from '../shared/contracts';
+import { AutoCutService } from './analysis/auto-cut-service';
 import { TtsService } from './tts/service';
 
 export interface KerfServices {
+  readonly autoCut: AutoCutService;
   readonly tts: TtsService;
   readonly database: DatabaseHandle;
   readonly repository: ProjectRepository;
@@ -92,6 +94,13 @@ export function createKerfServices(
       userData: app.getPath('userData'),
       secrets: electronSecrets,
     });
+    const autoCut = new AutoCutService({
+      projects,
+      repository,
+      jobs,
+      providers: analysis.providers,
+      userData: app.getPath('userData'),
+    });
     const renderer = new RendererBridge({
       framesDir: join(app.getPath('userData'), 'tool-frames'),
     });
@@ -121,6 +130,7 @@ export function createKerfServices(
       tools,
     });
     return {
+      autoCut,
       tts,
       database,
       repository,
@@ -134,6 +144,7 @@ export function createKerfServices(
       agent,
       mcp,
       dispose() {
+        autoCut.dispose();
         tts.dispose();
         agent.abort();
         mcp.dispose();

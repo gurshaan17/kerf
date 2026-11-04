@@ -204,7 +204,7 @@ export async function visualWaves<T>(
   return completed.flat();
 }
 
-async function sampleVideo(
+export async function sampleVideo(
   ffmpeg: string,
   path: string,
   start: number,

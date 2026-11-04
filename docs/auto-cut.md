@@ -28,3 +28,35 @@ Duration is an outcome, not a quota.
 - Later timeline content moves together to preserve relative timing.
 - Analysis is a proposal. No edit is applied until the user selects Apply.
 - No forced target duration, automatic publishing, or cloud fallback.
+
+## Analysis service
+
+The main-process AutoCutService owns generation, proposal retrieval and apply.
+Its narrow preload API is `autoCut.generate`, `autoCut.proposal` and
+`autoCut.apply`. Results are persisted in the existing job result, scoped to the
+open project; no additional database or dependency is introduced.
+
+Clips up to five minutes are sampled for temporal coverage and visual change.
+Up to approximately 120 evidence frames are sent in one contextual request to
+the selected vision-capable model. Providers with smaller image/context limits
+may reject the request; there is no retry or automatic provider switch.
+Previously detected scene boundaries are included when available; new scene
+detection is not required to notice changes inside a continuous shot.
+
+Video with audio requires a local Whisper installation/model unless a speech
+transcript already exists. Only the selected source range is transcribed when
+needed. This transient transcript does not replace stored speech or visual
+narration. Speech timings are converted into the sequence frame rate and
+sentence/pause boundaries are reconstructed from word timings before proposing
+cuts. Units without speech remain eligible for contextual visual decisions.
+
+Only clear removal decisions survive validation. Adjacent cuts are merged,
+150 ms breathing margins are retained at interior boundaries, and removals
+under 750 ms are discarded. A proposal that deletes all footage is rejected.
+
+Generation and application check source file metadata and a fingerprint of the
+project timeline, speech evidence and source identity. Consent/provider changes
+stop generation; a changed timeline or source requires fresh analysis. Apply
+accepts only IDs from the stored proposal, never model-generated edit commands
+or renderer-provided timestamps. Queued/running jobs are cancelled on project
+switch and require explicit re-analysis after an application restart.

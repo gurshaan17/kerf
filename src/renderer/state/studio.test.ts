@@ -1,3 +1,4 @@
+import { unusedAutoCutBridge } from '../../../test/helpers/auto-cut-bridge';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProject } from '@kerf/model';
 import type {
@@ -59,6 +60,7 @@ function makeBridge(snapshot: ProjectSnapshot) {
   );
   const bridge = {
     narration: unusedNarrationBridge,
+    autoCut: unusedAutoCutBridge,
     getVersions: () => ({ electron: '', chrome: '', node: '' }),
     projects: {
       list: vi.fn(async () => [snapshot.summary]),

@@ -536,6 +536,11 @@ export interface RendererEditorContext {
 export type KerfEvent = ProjectEvent | JobEvent | ExportEvent | ChatEvent;
 
 export const KERF_IPC = {
+  autoCut: {
+    generate: 'kerf:auto-cut:generate',
+    proposal: 'kerf:auto-cut:proposal',
+    apply: 'kerf:auto-cut:apply',
+  },
   tts: {
     providers: 'kerf:tts:providers',
     saveProvider: 'kerf:tts:save-provider',
@@ -647,6 +652,7 @@ export interface KerfEventEnvelope {
 
 /** The complete surface exposed on `window.kerf`. Keep this allowlist small. */
 export interface KerfBridge {
+  readonly autoCut: import('./auto-cut').AutoCutBridge;
   readonly tts?: import('./tts').TtsBridge;
   readonly getVersions: () => AppVersions;
   readonly projects: {

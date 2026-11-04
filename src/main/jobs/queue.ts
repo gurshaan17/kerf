@@ -160,6 +160,11 @@ export class JobQueue {
       .run(this.now(), this.now());
     this.database
       .prepare(
+        "UPDATE jobs SET status = 'failed', error = 'Auto cut was interrupted. Analyse again explicitly to resume provider use.', finished_at = ?, updated_at = ? WHERE kind = 'analysis.autoCut' AND status IN ('running', 'queued')",
+      )
+      .run(this.now(), this.now());
+    this.database
+      .prepare(
         `UPDATE jobs SET
           status = 'queued', stage = '', progress = 0, error = NULL,
           started_at = NULL, cancel_requested = 0, updated_at = ?
@@ -233,6 +238,15 @@ export class JobQueue {
       .prepare('SELECT * FROM jobs WHERE id = ?')
       .get(id) as JobRow | undefined;
     return row ? summaryFromRow(row) : null;
+  }
+
+  result(id: string): unknown {
+    const row = this.database
+      .prepare(
+        "SELECT result_json FROM jobs WHERE id = ? AND status = 'succeeded'",
+      )
+      .get(id) as { result_json: string | null } | undefined;
+    return parseJson(row?.result_json ?? null);
   }
 
   cancel(id: string): boolean {

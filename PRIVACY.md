@@ -31,10 +31,11 @@ OpenAI-compatible endpoint in **AI settings**. Each account has two independent
 consent flags:
 
 - **Vision** — allows selected frames and a description prompt to be sent
-  for scene descriptions or explicitly requested visual narration. Narration
+  for scene descriptions, explicitly requested visual narration, or Auto cut. Narration
   requests also send limited descriptions from preceding chunks for context.
 - **Chat** — allows the conversation and the tool context needed to answer it
-  to be sent to the chat provider.
+  to be sent to the chat provider. Auto cut also requires this consent to send
+  speech text alongside visual evidence.
 
 Only the provider you enable and consent to is used. Kerf does not proxy
 requests through its own server, log prompts or responses, or fall back to a
@@ -46,6 +47,15 @@ sending images. Temporary provider images are removed after the job; the
 generated draft, evidence timestamps and narration edit history stay in the
 local project database. Failed requests do not switch providers or retry
 automatically.
+
+Auto cut sends sampled frames, timestamped speech text, scene boundaries and
+an optional editing purpose to the provider you explicitly select. It requires
+both Vision and Chat consent. Speech transcription runs locally; original audio
+and full video files are not sent. Temporary audio and image evidence are
+removed after analysis. Cut proposals and their reasons are stored locally in
+the job queue, including when no cuts are suggested. Analysis does not change
+the timeline until you apply the reviewed proposal. Interrupted Auto cut jobs
+require a new explicit request rather than resuming provider use on restart.
 
 Ollama and OpenAI-compatible endpoints can point at a local server such as
 `http://127.0.0.1:11434/v1`, in which case no traffic leaves the machine.

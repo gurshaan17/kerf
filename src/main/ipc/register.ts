@@ -1,3 +1,9 @@
+import { idSchema } from '@kerf/model';
+import type { AutoCutService } from '../analysis/auto-cut-service';
+import {
+  autoCutGenerateSchema,
+  autoCutApplySchema,
+} from '../../shared/auto-cut';
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { OpenDialogOptions } from 'electron';
 import { writeFileSync } from 'node:fs';
@@ -155,6 +161,7 @@ const MEDIA_EXTENSIONS = [
 ];
 
 export interface ProjectIpcOptions {
+  readonly autoCut: AutoCutService;
   readonly tts?: TtsService;
   readonly projects: ProjectService;
   readonly repository: ProjectRepository;
@@ -191,6 +198,15 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
+  ipcMain.handle(KERF_IPC.autoCut.generate, (_event, request: unknown) =>
+    options.autoCut.generate(autoCutGenerateSchema.parse(request)),
+  );
+  ipcMain.handle(KERF_IPC.autoCut.proposal, (_event, id: unknown) =>
+    options.autoCut.proposal(idSchema('job').parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.autoCut.apply, (_event, request: unknown) =>
+    options.autoCut.apply(autoCutApplySchema.parse(request)),
+  );
   const tts = () => {
     if (!options.tts) throw new Error('TTS is unavailable.');
     return options.tts;
@@ -670,6 +686,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   return () => {
     unsubscribe();
     for (const channel of [
+      ...Object.values(KERF_IPC.autoCut),
       ...Object.values(KERF_IPC.projects),
       ...Object.values(KERF_IPC.edits),
       ...Object.values(KERF_IPC.assets),
