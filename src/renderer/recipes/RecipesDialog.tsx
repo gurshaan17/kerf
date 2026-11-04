@@ -4,6 +4,8 @@ import type { BrandKit, Recipe } from '@kerf/model';
 import { recipeCommand } from '@kerf/engine';
 import type { RecipeSectionInput } from '@kerf/engine';
 import { Button, Dialog, Input, Select } from '@kerf/ui';
+import { readLibrary, writeLibrary } from './library';
+import type { RecipeLibrary } from './library';
 import { useStudio } from '../state/StudioProvider';
 
 export function RecipesDialog({
@@ -23,6 +25,51 @@ export function RecipesDialog({
   const [logo, setLogo] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [library, setLibrary] = useState<RecipeLibrary>(() => {
+    try {
+      return readLibrary(localStorage);
+    } catch {
+      return { version: 1, recipes: [], kits: [] };
+    }
+  });
+  const [savedName, setSavedName] = useState('');
+  const [notice, setNotice] = useState('');
+  const recipes = [...STARTER_RECIPES, ...library.recipes];
+  const kits = [...STARTER_BRAND_KITS, ...library.kits];
+  const save = () => {
+    try {
+      // Re-read first: preserve changes saved by another window and refuse to overwrite damaged data.
+      const current = readLibrary(localStorage);
+      const name = savedName.trim();
+      if (!name)
+        throw new Error('Name your recipe and brand kit before saving.');
+      if (
+        kits.some((k) => k.name === name) ||
+        recipes.some((r) => r.name === name)
+      )
+        throw new Error('Choose a new name to save a separate copy.');
+      const next: RecipeLibrary = {
+        version: 1,
+        recipes: [
+          ...current.recipes,
+          {
+            ...recipe,
+            id: crypto.randomUUID(),
+            name,
+            sections: sections.map((s) => s.text),
+          },
+        ],
+        kits: [...current.kits, { ...kit, name }],
+      };
+      writeLibrary(localStorage, next);
+      setLibrary(next);
+      setSavedName('');
+      setNotice('Saved locally. Choose this recipe and kit in any project.');
+      setError('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
   const media =
     snapshot?.assets.filter(
       (a) => a.status === 'ready' && ['image', 'video'].includes(a.kind),
@@ -76,14 +123,12 @@ export function RecipesDialog({
           <Select
             aria-label="Recipe"
             value={recipe.id}
-            options={STARTER_RECIPES.map((r) => ({
+            options={recipes.map((r) => ({
               value: r.id,
               label: r.name,
             }))}
             onChange={(e) => {
-              const next = STARTER_RECIPES.find(
-                (r) => r.id === e.target.value,
-              )!;
+              const next = recipes.find((r) => r.id === e.target.value)!;
               setRecipe(next);
               setSections(next.sections.map((text) => ({ text })));
               setError('');
@@ -96,15 +141,88 @@ export function RecipesDialog({
           <Select
             aria-label="Brand kit"
             value={kit.name}
-            options={STARTER_BRAND_KITS.map((k) => ({
+            options={kits.map((k) => ({
               value: k.name,
               label: k.name,
             }))}
             onChange={(e) =>
-              setKit(STARTER_BRAND_KITS.find((k) => k.name === e.target.value)!)
+              setKit(kits.find((k) => k.name === e.target.value)!)
             }
           />
         </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="grid gap-2 text-sm">
+            Text color
+            <Input
+              aria-label="Text color"
+              type="color"
+              value={kit.style.foreground}
+              onChange={(e) =>
+                setKit({
+                  ...kit,
+                  style: {
+                    ...kit.style,
+                    foreground: e.target.value,
+                    captionColor: e.target.value,
+                  },
+                })
+              }
+            />
+          </label>
+          <label className="grid gap-2 text-sm">
+            Background
+            <Input
+              aria-label="Background color"
+              type="color"
+              value={kit.style.background}
+              onChange={(e) =>
+                setKit({
+                  ...kit,
+                  style: {
+                    ...kit.style,
+                    background: e.target.value,
+                    captionBackground: e.target.value,
+                  },
+                })
+              }
+            />
+          </label>
+          <label className="grid gap-2 text-sm">
+            Accent
+            <Input
+              aria-label="Accent color"
+              type="color"
+              value={kit.style.accent}
+              onChange={(e) =>
+                setKit({
+                  ...kit,
+                  style: { ...kit.style, accent: e.target.value },
+                })
+              }
+            />
+          </label>
+          <label className="grid gap-2 text-sm">
+            Font
+            <Select
+              aria-label="Brand font"
+              value={kit.style.displayFontFamily}
+              options={['Instrument Sans', 'Fraunces', 'JetBrains Mono'].map(
+                (value) => ({ value, label: value }),
+              )}
+              onChange={(e) =>
+                setKit({
+                  ...kit,
+                  style: {
+                    ...kit.style,
+                    displayFontFamily: e.target.value,
+                    fontFamily: e.target.value,
+                    captionFontFamily: e.target.value,
+                  },
+                })
+              }
+            />
+          </label>
+        </div>
         <div
           className="rounded-sm p-5 text-center"
           style={{
@@ -156,6 +274,18 @@ export function RecipesDialog({
                   }
                 />
               </label>
+              <Button
+                disabled={sections.length <= 2}
+                onClick={() => {
+                  setSections(sections.filter((_, i) => i !== index));
+                  setRecipe({
+                    ...recipe,
+                    sections: recipe.sections.filter((_, i) => i !== index),
+                  });
+                }}
+              >
+                Remove section {index + 1}
+              </Button>
               <Select
                 aria-label={`Section ${index + 1} footage`}
                 value={section.assetId ?? ''}
@@ -170,6 +300,18 @@ export function RecipesDialog({
             </div>
           ))}
         </div>
+        <Button
+          disabled={sections.length >= 12}
+          onClick={() => {
+            setSections([...sections, { text: 'Next step' }]);
+            setRecipe({
+              ...recipe,
+              sections: [...recipe.sections, 'Next step'],
+            });
+          }}
+        >
+          Add section
+        </Button>
         <label className="grid gap-2 text-sm">
           Outro
           <Input
@@ -191,6 +333,28 @@ export function RecipesDialog({
             onChange={(e) => setLogo(e.target.value)}
           />
         </label>
+        <div className="grid gap-2 border-t border-line pt-4">
+          <label className="grid gap-2 text-sm">
+            Save a reusable copy
+            <Input
+              aria-label="Saved recipe name"
+              maxLength={80}
+              value={savedName}
+              onChange={(e) => setSavedName(e.target.value)}
+              placeholder="e.g. Acme feature launch"
+            />
+          </label>
+          <Button onClick={save}>Save recipe & kit</Button>
+          <p className="text-xs text-ink-muted">
+            Saves structure, timing, wording and branding. Choose footage and a
+            project logo again when reusing it.
+          </p>
+          {notice && (
+            <p role="status" className="text-sm text-ink">
+              {notice}
+            </p>
+          )}
+        </div>
         <p className="text-xs text-ink-muted">
           Uses the current canvas and frame rate. Video starts at its beginning
           and is shortened to fit; shorter clips shorten their section. Existing

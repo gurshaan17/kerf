@@ -449,7 +449,7 @@ export function CommandPalette({
       {
         id: 'recipes.open',
         label: 'Recipes & brand kits',
-        keywords: 'look grade palette rhythm pacing style transfer',
+        keywords: 'templates branding draft tutorial demo launch',
         icon: <Palette size={14} />,
         disabled: !hasSequence,
         run: onOpenRecipes,

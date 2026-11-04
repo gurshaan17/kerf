@@ -11,6 +11,8 @@ agent edits, and MCP edits share one undo history.
 
 ## What works
 
+- **Recipes and brand kits.** Ten offline starter recipes, three brand kits, customizable sections and footage, saved reusable copies, and one-step undo for generated drafts. See [Recipes](docs/recipes.md).
+
 - **Projects.** Create, open, rename, delete, and reveal projects from a
   project browser. Project documents, assets, jobs, and the edit log live in
   SQLite.
