@@ -14,3 +14,5 @@ export * from './style';
 export * from './time';
 export * from './transcript';
 export * from './narration';
+
+export * from './auto-cut';

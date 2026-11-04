@@ -10,3 +10,5 @@ export * from './retime';
 export * from './ripple';
 export * from './snapping';
 export * from './source';
+
+export * from './auto-cut';
