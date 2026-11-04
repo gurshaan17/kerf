@@ -30,6 +30,8 @@ import { Button, IconButton, Panel } from '@kerf/ui';
 import { useStudio } from '../state/StudioProvider';
 import { selectSelectedClip } from '../state/selectors';
 
+import { ScreenPolish } from './ScreenPolish';
+
 const FALLBACK_OVERLAY_SECONDS = 3;
 
 const OVERLAY_LABELS: Record<OverlayKind, string> = {
@@ -190,6 +192,7 @@ export function EffectsPanel() {
       }
     >
       <div className="k-effects">
+        <ScreenPolish key={sequence.id} sequence={sequence} />
         <section>
           <div className="k-effects__section-title">Add an overlay</div>
           <div className="k-effects__grid">
