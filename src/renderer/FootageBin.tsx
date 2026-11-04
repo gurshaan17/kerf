@@ -288,8 +288,8 @@ export function FootageBin({
             onClick={onOpenSearch}
           />
           <IconButton
-            label="Recipes & brand kits"
-            tooltip="Recipes & brand kits"
+            label="Blueprints & brand kits"
+            tooltip="Blueprints & brand kits"
             tooltipSide="bottom"
             size="sm"
             icon={<Clapperboard size={14} />}

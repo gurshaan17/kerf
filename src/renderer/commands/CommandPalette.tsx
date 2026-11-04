@@ -448,7 +448,7 @@ export function CommandPalette({
       },
       {
         id: 'recipes.open',
-        label: 'Recipes & brand kits',
+        label: 'Blueprints & brand kits',
         keywords: 'templates branding draft tutorial demo launch',
         icon: <Palette size={14} />,
         disabled: !hasSequence,

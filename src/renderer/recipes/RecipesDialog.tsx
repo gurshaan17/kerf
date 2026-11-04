@@ -42,7 +42,7 @@ export function RecipesDialog({
       const current = readLibrary(localStorage);
       const name = savedName.trim();
       if (!name)
-        throw new Error('Name your recipe and brand kit before saving.');
+        throw new Error('Name your blueprint and brand kit before saving.');
       if (
         kits.some((k) => k.name === name) ||
         recipes.some((r) => r.name === name)
@@ -64,7 +64,7 @@ export function RecipesDialog({
       writeLibrary(localStorage, next);
       setLibrary(next);
       setSavedName('');
-      setNotice('Saved locally. Choose this recipe and kit in any project.');
+      setNotice('Saved locally. Choose this blueprint and kit in any project.');
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -92,7 +92,7 @@ export function RecipesDialog({
         logo || undefined,
       );
       const result = await apply(command, `Apply ${recipe.name}`);
-      if (!result) throw new Error('Could not apply the recipe. Try again.');
+      if (!result) throw new Error('Could not apply the blueprint. Try again.');
       onOpenChange(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -106,7 +106,7 @@ export function RecipesDialog({
       onOpenChange={(value) => {
         if (!busy) onOpenChange(value);
       }}
-      title="Recipes & brand kits"
+      title="Blueprints & brand kits"
       description="Build an editable draft from your footage. Everything stays on your machine."
       footer={
         <Button
@@ -119,9 +119,9 @@ export function RecipesDialog({
     >
       <fieldset disabled={busy} className="grid min-w-0 gap-5 border-0 p-4">
         <label className="grid gap-2 text-sm">
-          Recipe
+          Blueprint
           <Select
-            aria-label="Recipe"
+            aria-label="Blueprint"
             value={recipe.id}
             options={recipes.map((r) => ({
               value: r.id,
@@ -337,14 +337,14 @@ export function RecipesDialog({
           <label className="grid gap-2 text-sm">
             Save a reusable copy
             <Input
-              aria-label="Saved recipe name"
+              aria-label="Saved blueprint name"
               maxLength={80}
               value={savedName}
               onChange={(e) => setSavedName(e.target.value)}
               placeholder="e.g. Acme feature launch"
             />
           </label>
-          <Button onClick={save}>Save recipe & kit</Button>
+          <Button onClick={save}>Save blueprint & kit</Button>
           <p className="text-xs text-ink-muted">
             Saves structure, timing, wording and branding. Choose footage and a
             project logo again when reusing it.
