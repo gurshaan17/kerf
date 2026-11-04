@@ -12,3 +12,5 @@ export * from './snapping';
 export * from './source';
 
 export * from './auto-cut';
+
+export * from './recipes';

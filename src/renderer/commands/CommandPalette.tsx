@@ -62,6 +62,7 @@ export interface CommandPaletteProps {
   readonly onOpenAnalysis: () => void;
   readonly onOpenSequenceSettings: () => void;
   readonly onOpenMotion: () => void;
+  readonly onOpenRecipes: () => void;
   readonly onOpenReferences: () => void;
   readonly onOpenAbout: () => void;
 }
@@ -80,6 +81,7 @@ export function CommandPalette({
   onOpenSequenceSettings,
   onOpenMotion,
   onOpenReferences,
+  onOpenRecipes,
   onOpenAbout,
 }: CommandPaletteProps) {
   const commands = useEditorCommands();
@@ -445,6 +447,14 @@ export function CommandPalette({
         run: onOpenReferences,
       },
       {
+        id: 'recipes.open',
+        label: 'Recipes & brand kits',
+        keywords: 'look grade palette rhythm pacing style transfer',
+        icon: <Palette size={14} />,
+        disabled: !hasSequence,
+        run: onOpenRecipes,
+      },
+      {
         id: 'motion.open',
         label: 'Compositions',
         keywords: 'motion scene tree sandbox title lower third',
@@ -502,6 +512,7 @@ export function CommandPalette({
     onOpenSequenceSettings,
     onOpenMotion,
     onOpenReferences,
+    onOpenRecipes,
     onOpenSearch,
     onOpenTranscript,
     onOpenScenes,

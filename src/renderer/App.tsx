@@ -22,6 +22,7 @@ import { SearchDialog } from './search/SearchDialog';
 import { MotionDialog } from './motion/MotionDialog';
 import { ReferencesDialog } from './references/ReferencesDialog';
 import { AutoCutDialog } from './auto-cut/AutoCutDialog';
+import { RecipesDialog } from './recipes/RecipesDialog';
 import { AboutDialog } from './AboutDialog';
 import { createCompositionSandbox } from './motion/sandbox';
 import { RendererRequestHost } from './tools/RendererRequestHost';
@@ -75,6 +76,7 @@ export default function App() {
   const [sequenceSettingsOpen, setSequenceSettingsOpen] = useState(false);
   const [motionOpen, setMotionOpen] = useState(false);
   const [referencesOpen, setReferencesOpen] = useState(false);
+  const [recipesOpen, setRecipesOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
@@ -199,7 +201,8 @@ export default function App() {
       !analysisOpen &&
       !motionOpen &&
       !referencesOpen &&
-      !aboutOpen,
+      !aboutOpen &&
+      !recipesOpen,
   });
 
   const analysis: AnalysisAssetStatus[] = useMemo(() => {
@@ -262,6 +265,11 @@ export default function App() {
   return (
     <>
       <RendererRequestHost />
+      <RecipesDialog
+        key={project.id}
+        open={recipesOpen}
+        onOpenChange={setRecipesOpen}
+      />
       <StudioShell
         projectName={project.name}
         sequenceLabel={sequenceLabel(
@@ -327,6 +335,7 @@ export default function App() {
             onOpenAnalysis={openAnalysis}
             onOpenMotion={openMotion}
             onOpenReferences={openReferences}
+            onOpenRecipes={() => setRecipesOpen(true)}
             onOpenExport={openExport}
           />
         }
@@ -367,6 +376,7 @@ export default function App() {
         onOpenSequenceSettings={openSequenceSettings}
         onOpenMotion={openMotion}
         onOpenReferences={openReferences}
+        onOpenRecipes={() => setRecipesOpen(true)}
         onOpenAbout={openAbout}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />

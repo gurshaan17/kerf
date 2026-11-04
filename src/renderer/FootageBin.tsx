@@ -48,6 +48,7 @@ export interface FootageBinProps {
   readonly onOpenSearch: () => void;
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
+  readonly onOpenRecipes: () => void;
   readonly onOpenReferences: () => void;
   readonly onOpenExport: () => void;
 }
@@ -209,6 +210,7 @@ export function FootageBin({
   onOpenAnalysis,
   onOpenMotion,
   onOpenReferences,
+  onOpenRecipes,
   onOpenExport,
 }: FootageBinProps) {
   const assets = useMemo(
@@ -284,6 +286,14 @@ export function FootageBin({
             size="sm"
             icon={<Search size={14} />}
             onClick={onOpenSearch}
+          />
+          <IconButton
+            label="Recipes & brand kits"
+            tooltip="Recipes & brand kits"
+            tooltipSide="bottom"
+            size="sm"
+            icon={<Clapperboard size={14} />}
+            onClick={onOpenRecipes}
           />
           <IconButton
             label="References"
