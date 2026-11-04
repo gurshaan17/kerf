@@ -229,7 +229,7 @@ test('keeps linked overlays in sync and matches exported frames', async () => {
 
     await page.getByRole('button', { name: 'Effects', exact: true }).click();
     await page
-      .getByRole('button', { name: 'Suggest polish', exact: true })
+      .getByRole('button', { name: 'Add manual suggestions', exact: true })
       .click();
     await expect(
       page.getByRole('button', { name: 'Review suggestion 1', exact: true }),

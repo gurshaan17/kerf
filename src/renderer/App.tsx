@@ -314,7 +314,7 @@ export default function App() {
             <Inspector onOpenSequenceSettings={openSequenceSettings} />
           )
         }
-        effectsPanel={<EffectsPanel />}
+        effectsPanel={<EffectsPanel onOpenSettings={openAnalysis} />}
         leftPanel={
           <FootageBin
             assets={assets}

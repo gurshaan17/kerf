@@ -100,7 +100,11 @@ function linkedLabel(sequence: Sequence, overlay: FxOverlayClip): string {
     : 'Linked clip missing';
 }
 
-export function EffectsPanel() {
+export function EffectsPanel({
+  onOpenSettings,
+}: {
+  onOpenSettings: () => void;
+}) {
   const sequence = useStudio((state) => state.snapshot?.project.sequence);
   const selected = useStudio(selectSelectedClip);
   const playhead = useStudio((state) => state.playhead);
@@ -192,7 +196,11 @@ export function EffectsPanel() {
       }
     >
       <div className="k-effects">
-        <ScreenPolish key={sequence.id} sequence={sequence} />
+        <ScreenPolish
+          key={sequence.id}
+          sequence={sequence}
+          onOpenSettings={onOpenSettings}
+        />
         <section>
           <div className="k-effects__section-title">Add an overlay</div>
           <div className="k-effects__grid">
