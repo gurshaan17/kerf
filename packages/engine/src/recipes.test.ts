@@ -87,6 +87,24 @@ describe('recipe draft', () => {
         );
       }
   });
+  it('creates only populated tracks for a title-only draft', () => {
+    const original = makeSequence([]);
+    const result = applyCommand(
+      original,
+      recipeCommand(
+        original,
+        [],
+        recipe,
+        kit,
+        recipe.sections.map((text) => ({ text })),
+      ),
+    );
+    expect(result.sequence.tracks).toHaveLength(1);
+    expect(result.sequence.tracks[0]!.clips.length).toBeGreaterThan(0);
+    expect(applyCommand(result.sequence, result.inverse!).sequence).toEqual(
+      original,
+    );
+  });
   it('rejects missing sources and invalid section content before applying', () => {
     const sequence = makeSequence([]);
     expect(() =>

@@ -34,6 +34,9 @@ test('customizes, saves and applies a reusable blueprint', async () => {
       .click();
     await expect(dialog).not.toBeVisible();
     await expect(
+      page.locator('.k-clip__label').filter({ hasText: 'A faster workflow' }),
+    ).toBeVisible();
+    await expect(
       page.getByRole('button', { name: 'Undo', exact: true }),
     ).toBeEnabled();
     await page.getByRole('button', { name: 'Undo', exact: true }).click();

@@ -17,6 +17,8 @@ export function RecipesDialog({
 }) {
   const snapshot = useStudio((s) => s.snapshot);
   const apply = useStudio((s) => s.apply);
+  const setPlayhead = useStudio((s) => s.setPlayhead);
+  const selectClip = useStudio((s) => s.selectClip);
   const [recipe, setRecipe] = useState<Recipe>(STARTER_RECIPES[0]!);
   const [kit, setKit] = useState<BrandKit>(STARTER_BRAND_KITS[0]!);
   const [sections, setSections] = useState<RecipeSectionInput[]>(
@@ -93,6 +95,17 @@ export function RecipesDialog({
       );
       const result = await apply(command, `Apply ${recipe.name}`);
       if (!result) throw new Error('Could not apply the blueprint. Try again.');
+      const existingTracks = new Set(
+        snapshot.project.sequence.tracks.map((track) => track.id),
+      );
+      const firstClip = result.snapshot.project.sequence.tracks
+        .filter((track) => !existingTracks.has(track.id))
+        .flatMap((track) => track.clips)
+        .sort((a, b) => a.startFrame - b.startFrame)[0];
+      if (firstClip) {
+        setPlayhead(firstClip.startFrame);
+        selectClip(firstClip.id);
+      }
       onOpenChange(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -260,6 +273,11 @@ export function RecipesDialog({
             placeholder="Optional opening title"
           />
         </label>
+        <p className="text-xs text-ink-muted">
+          Choose footage below for each section. Sections set to Title only
+          create text clips without video. Append draft does not select footage
+          automatically.
+        </p>
         <div className="grid gap-4">
           {sections.map((section, index) => (
             <div key={index} className="grid gap-2 border-t border-line pt-3">

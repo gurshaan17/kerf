@@ -160,5 +160,18 @@ export function recipeCommand(
     const duration = secondsToFrames(3, sequence.frameRate);
     addTitle(kit.outro, duration, false);
   }
-  return { type: 'batch', label: `Apply ${recipe.name}`, commands };
+  // Title-only sections and silent media do not need empty media/audio lanes.
+  const populatedTracks = new Set(
+    commands.flatMap((command) =>
+      command.type === 'clip.insert' ? [command.clip.trackId] : [],
+    ),
+  );
+  return {
+    type: 'batch',
+    label: `Apply ${recipe.name}`,
+    commands: commands.filter(
+      (command) =>
+        command.type !== 'track.add' || populatedTracks.has(command.track.id),
+    ),
+  };
 }
