@@ -17,6 +17,9 @@ import {
 export interface RecipeSectionInput {
   text: string;
   assetId?: string;
+  sourceInSeconds?: number;
+  durationSeconds?: number;
+  showTitle?: boolean;
 }
 /** Compile a draft into existing commands. Never changes or removes existing clips. */
 export function recipeCommand(
@@ -29,6 +32,7 @@ export function recipeCommand(
 ): EditCommand {
   const recipe = recipeSchema.parse(recipeInput);
   const kit = brandKitSchema.parse(kitInput);
+  const treatment = recipe.treatment ?? recipe.id;
   if (sections.length !== recipe.sections.length)
     throw new Error('Choose content for every section.');
   const resolve = (id: string) => {
@@ -72,6 +76,7 @@ export function recipeCommand(
     ...(logo ? [logos] : []),
   ].map((track) => ({ type: 'track.add', track }));
   let cursor = Math.max(
+    sequence.durationFrames,
     0,
     ...sequence.tracks.flatMap((t) =>
       t.clips.map((c) => c.startFrame + c.durationFrames),
@@ -81,22 +86,41 @@ export function recipeCommand(
     commands.push({ type: 'sequence.setStyle', style: kit.style });
   const insert = (value: unknown) =>
     commands.push({ type: 'clip.insert', clip: clipSchema.parse(value) });
-  const addTitle = (text: string, duration: number, withMedia: boolean) =>
+  const addTitle = (
+    text: string,
+    duration: number,
+    withMedia: boolean,
+    index = 0,
+  ) =>
     insert({
       id: newId('clip'),
       trackId: titles.id,
       type: 'text',
       startFrame: cursor,
       durationFrames: duration,
-      text,
+      text:
+        withMedia && treatment === 'tutorial' ? `${index + 1}. ${text}` : text,
       label: text,
-      transform: { y: withMedia ? sequence.height * 0.35 : 0 },
+      transform: {
+        x: 0,
+        y: withMedia
+          ? sequence.height * (treatment === 'quick-tip' ? -0.35 : 0.35)
+          : 0,
+      },
       style: {
         fontFamily: kit.style.displayFontFamily,
         color: kit.style.foreground,
         background: kit.style.background,
         fontWeight: kit.name === 'Bold' ? 800 : 600,
-        fontSize: Math.round(sequence.height * 0.045),
+        fontSize: Math.round(
+          sequence.height *
+            (withMedia && treatment === 'quick-tip'
+              ? 0.055
+              : withMedia && treatment === 'tutorial'
+                ? 0.035
+                : 0.045),
+        ),
+        align: withMedia && treatment === 'tutorial' ? 'left' : 'center',
         padding: 20,
       },
     });
@@ -105,13 +129,33 @@ export function recipeCommand(
     addTitle(kit.intro, duration, false);
     cursor += duration;
   }
-  for (const section of sections) {
+  for (const [index, section] of sections.entries()) {
     if (!section.text.trim()) throw new Error('Each section needs a title.');
     const asset = section.assetId ? resolve(section.assetId) : null;
+    const sourceIn = section.sourceInSeconds ?? 0;
+    const requested = section.durationSeconds ?? recipe.secondsPerSection;
+    if (
+      !Number.isFinite(sourceIn) ||
+      sourceIn < 0 ||
+      !Number.isFinite(requested) ||
+      requested <= 0
+    )
+      throw new Error(
+        `Scene ${index + 1}: choose a valid source range and duration.`,
+      );
+    if (
+      asset?.kind === 'video' &&
+      (sourceIn >= asset.durationSeconds ||
+        (section.durationSeconds !== undefined &&
+          sourceIn + requested > asset.durationSeconds + 0.000001))
+    )
+      throw new Error(
+        `Scene ${index + 1}: the selected range exceeds the footage. Shorten it or choose another source.`,
+      );
     const seconds =
       asset?.kind === 'video'
-        ? Math.min(recipe.secondsPerSection, asset.durationSeconds)
-        : recipe.secondsPerSection;
+        ? Math.min(requested, asset.durationSeconds - sourceIn)
+        : requested;
     const duration = Math.floor(
       (seconds * sequence.frameRate.numerator) / sequence.frameRate.denominator,
     );
@@ -125,7 +169,7 @@ export function recipeCommand(
         label: asset.name,
         assetId: asset.id,
         type: asset.kind,
-        sourceInFrame: 0,
+        sourceInFrame: secondsToFrames(sourceIn, sequence.frameRate),
         volume: 0,
       };
       insert(base);
@@ -138,7 +182,8 @@ export function recipeCommand(
           volume: 1,
         });
     }
-    addTitle(section.text, duration, Boolean(asset));
+    if (!asset || section.showTitle !== false)
+      addTitle(section.text, duration, Boolean(asset), index);
     if (logo)
       insert({
         id: newId('clip'),

@@ -438,8 +438,10 @@ function MarkerMenu({
 
 export function Timeline({
   onAutoCut,
+  onOpenBlueprints,
 }: {
   onAutoCut: (clipId: string) => void;
+  onOpenBlueprints: () => void;
 }) {
   const sequence = useStudio(
     (state) => state.snapshot?.project.sequence ?? null,
@@ -1357,6 +1359,16 @@ export function Timeline({
               <Film size={20} aria-hidden="true" />
               <p>No clips on the timeline</p>
               <span>Drag footage from the bin, or press ⌘I to import.</span>
+              <Button
+                className="pointer-events-auto"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenBlueprints();
+                }}
+              >
+                Start with a Blueprint
+              </Button>
             </div>
           ) : null}
         </div>

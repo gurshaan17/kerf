@@ -1,28 +1,33 @@
 # Blueprints and brand kits
 
-Open a project, then choose **Blueprints & brand kits** in the Footage toolbar or command palette.
+Blueprints combine a visual starting point with a footage-backed storyboard. The draft stays separate from your timeline until you add it.
 
-Ten starter blueprints cover product demos, feature launches, tutorials, update roundups, quick tips, before/after videos, talking-head explainers, social teasers, customer stories and app walkthroughs. They provide editable structure and timing, not pre-rendered assets or AI-generated claims.
+## Start a video
 
-1. Choose a blueprint and the Clean, Bold or Editorial starter brand kit.
-2. Customize colors, font, intro/outro and seconds per section. Edit section titles, add/remove sections, and choose ready video/image footage for each. Leave footage at **Title only** for a text section.
-3. Optionally choose an imported image as a project logo.
-4. Choose **Append draft**. Kerf appends ordinary media, audio and text clips after existing content, preserving the current canvas and frame rate. One Undo removes the entire application. Preview, adjust and export using the existing editor.
+Choose **Start with a Blueprint** on an empty timeline, **Blueprints** in the Footage toolbar, or **Blueprints & brand kits** in the command palette. The Footage action carries your selected asset into setup when you start a new storyboard.
 
-Video sections use footage from its beginning, limited to the selected duration or available source length. Video audio is inserted on its own track. No narration, stock media or synthetic footage is generated. The same source can be assigned to several sections, but each assignment starts at the source beginning; trim/slip the resulting clips for other ranges.
+1. **Choose a starting point.** Product demo, Quick tip and Step-by-step tutorial have visual cards and playable treatment previews. The previews use clearly labeled illustrative panels and sample text, not footage that will enter your draft. Other original starters and saved Blueprints remain available in the dropdown.
+2. **Choose footage.** Select an imported recording/image or import one. Optionally describe the video's goal and choose a footage budget and brand preset. For a recording, Kerf assigns consecutive ranges up to the available duration. This is deterministic division, not AI scene understanding. Opening/closing cards are additional to the footage budget.
+3. **Review the storyboard.** Select a scene, change its source, trim by seconds or scrub the source and choose **Start here** / **End here**. Change its purpose independently of its on-screen title. Enable a title explicitly, or choose **Title card** as the scene's content type. Reorder with the earlier/later buttons, duplicate, remove or add scenes. Two to twelve scenes are supported.
+4. **Preview the actual draft.** Playback and the scrubber use the editor's renderer, generated clips, audio, source ranges and styling in an isolated preview. No edits or undo entries are created by previewing. Missing required media, invalid titles/purposes and invalid source ranges block insertion with an explanation.
+5. **Add to timeline.** On a populated timeline the button says **Add after current edit**, and the preview summary shows the insertion time. Existing edits remain intact. Applying is a single reversible batch; repeat clicks cannot add the same draft twice while it is being applied. Kerf selects the first inserted clip and moves the playhead to the draft.
 
-## Reuse your work
+The goal provides opening-title wording when supplied; it does not trigger content analysis. The three starters use different story lengths and title treatments: lower centered demo titles, larger upper quick-tip titles, and smaller numbered tutorial labels. Quick tip starts without a forced opening/closing card. Title styling can be adjusted with the brand controls. These are restrained editing treatments, not generated animation packages.
 
-Enter a new name and choose **Save blueprint & kit**. This saves a copy of the section wording, order, timing and branding to this installation's local blueprint library. Saved copies appear in both dropdowns and survive reopening. Starter definitions stay unchanged. Project-specific footage and logo references are deliberately omitted so the blueprint can be used in other projects; choose them again there.
+## Keep control of your work
 
-The library is versioned and validated in renderer local storage. Save failures are displayed, and invalid stored data is not overwritten. The library is installation-local, not part of project backups or a cloud account. Applied clips and styling are stored with the project through the normal edit path.
+Going back from the storyboard preserves scene edits. Changing the starting footage or budget rebuilds source ranges; the setup explains this. Switching to another Blueprint after preparing a storyboard asks whether to replace it. Closing and reopening the workspace retains unfinished work in the current project session. Unapplied storyboards are not persisted across an app restart.
 
-On an empty sequence, the kit also sets sequence styling. Existing sequences retain global styling; new blueprint title clips use the selected kit. Existing titles/captions are not restyled. Caption generation still uses its existing clean/bold/boxed presets; blueprint application does not generate captions.
+Video source ranges are validated against the recording length. Reusing one recording does not repeat its opening: each scene can use a different range. Timing is quantized to the project's frame rate. Video audio is inserted on its own track; image and title-only drafts do not create empty audio/video tracks. A title card must be chosen deliberately instead of being a fallback for missing footage.
 
-## Phases
+## Branding and reuse
 
-- Phase 1: validated model, ten blueprints and three starter kits.
-- Phase 2: blueprint dialog and atomic timeline generation, with duration and undo tests.
-- Phase 3: editable branding/structure, local reusable copies, persistence checks and desktop journey.
+Expand **Brand & opening / closing cards** to choose a preset, customize colors/font, add optional opening/closing cards or select an imported image as a logo. Save branding independently using **Save brand preset**.
 
-Current scope uses the project's existing aspect ratio, supports offline deterministic assembly, and leaves generated narration and automated footage selection to future work. These are structural starter templates; they do not include ten independently animated visual treatments.
+Expand **Save Blueprint structure** to save scene purposes, wording, content types, title visibility, timing proportions and treatment. Footage references and source offsets are omitted so another project can supply its own media. Reusing the saved structure divides the selected footage according to its scene timing proportions. Existing saved Blueprints without these additional fields still open using their original section structure.
+
+The library is validated and stored locally in this installation. Saved Blueprints and presets survive reopening and are available across projects. Save failures are shown; corrupt library data is not overwritten. This library is not included in project backups. Applied timeline clips are saved normally with the project.
+
+On an empty timeline, the selected kit also sets sequence styling. Existing edits keep their global style; new title clips use the chosen kit. No stock media, synthetic footage, narration, captions or screen-polish effects are silently generated. Existing analysis, narration and screen-polish workflows remain separate.
+
+See the [UX proposal](blueprints-ux-proposal.md) and [competitor research](blueprints-competitor-research.md) for rationale and possible later work. Saving a finished timeline selection as a Blueprint and AI scene matching are not implemented in this version.

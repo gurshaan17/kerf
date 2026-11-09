@@ -51,3 +51,16 @@ export function useStudioStoreApi(): StudioStore {
 export function useStudio<T>(selector: (state: StudioState) => T): T {
   return useStudioStore(useStudioStoreApi(), selector);
 }
+
+/** Provides an isolated store without hydrating or subscribing to project events. */
+export function StudioStoreProvider({
+  store,
+  children,
+}: {
+  store: StudioStore;
+  children: ReactNode;
+}) {
+  return (
+    <StudioContext.Provider value={store}>{children}</StudioContext.Provider>
+  );
+}

@@ -183,7 +183,9 @@ function sequenceSpec(width: number, height: number, rate: FrameRate): string {
   return `${width} × ${height} · ${Number.isInteger(fps) ? fps : fps.toFixed(2)} fps`;
 }
 
-export function Preview() {
+export function Preview({
+  initialSafeZones = true,
+}: { initialSafeZones?: boolean } = {}) {
   const snapshot = useStudio((state) => state.snapshot);
   const selection = useStudio((state) => state.selection);
   const selectedClip = useStudio(selectSelectedClip);
@@ -193,7 +195,7 @@ export function Preview() {
   const togglePlaying = useStudio((state) => state.togglePlaying);
   const compositionTrees = useStudio((state) => state.compositionTrees);
   const store = useStudioStoreApi();
-  const [safeZones, setSafeZones] = useState(true);
+  const [safeZones, setSafeZones] = useState(initialSafeZones);
   const [missingMedia, setMissingMedia] = useState(false);
   const [mediaRevision, setMediaRevision] = useState(0);
   const treeMap = useMemo(

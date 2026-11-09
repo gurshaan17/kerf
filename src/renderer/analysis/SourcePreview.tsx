@@ -1,4 +1,10 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import type { Asset, FrameRate } from '@kerf/model';
 import { formatTimecode, fpsToNumber } from '@kerf/model';
 
@@ -10,6 +16,7 @@ export interface SourcePreviewProps {
   readonly asset: Asset;
   readonly rate: FrameRate;
   readonly onFrameChange?: (frame: number) => void;
+  readonly initialFrame?: number;
 }
 
 function sourceUrl(assetId: string): string {
@@ -24,11 +31,19 @@ function sourceUrl(assetId: string): string {
 export const SourcePreview = forwardRef<
   SourcePreviewHandle,
   SourcePreviewProps
->(function SourcePreview({ asset, rate, onFrameChange }, ref) {
+>(function SourcePreview(
+  { asset, rate, onFrameChange, initialFrame = 0 },
+  ref,
+) {
   const fps = Math.max(1, fpsToNumber(rate));
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
+
+  useEffect(() => {
+    const media = videoRef.current ?? audioRef.current;
+    if (media && media.readyState >= 1) media.currentTime = initialFrame / fps;
+  }, [initialFrame, fps]);
 
   const syncFromMedia = () => {
     const media = videoRef.current ?? audioRef.current;
@@ -71,6 +86,10 @@ export const SourcePreview = forwardRef<
   }
 
   const mediaEvents = {
+    onLoadedMetadata: () => {
+      const media = videoRef.current ?? audioRef.current;
+      if (media) media.currentTime = initialFrame / fps;
+    },
     onTimeUpdate: syncFromMedia,
     onSeeked: syncFromMedia,
   };

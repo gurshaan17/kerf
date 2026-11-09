@@ -11,6 +11,7 @@ export interface DialogProps {
   children: ReactNode;
   footer?: ReactNode;
   panelClassName?: string;
+  size?: 'default' | 'workspace';
 }
 
 export function Dialog({
@@ -21,6 +22,7 @@ export function Dialog({
   children,
   footer,
   panelClassName,
+  size = 'default',
 }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -70,7 +72,7 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className="m-auto max-h-[calc(100dvh-48px)] w-[calc(100vw-48px)] max-w-[480px] overflow-y-auto border-0 bg-transparent p-0 text-ink backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+      className={`m-auto max-h-[calc(100dvh-48px)] w-[calc(100vw-48px)] ${size === 'workspace' ? 'max-w-[1240px] overflow-hidden' : 'max-w-[480px]'} overflow-y-auto border-0 bg-transparent p-0 text-ink backdrop:bg-black/60 backdrop:backdrop-blur-sm`}
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       onClick={handleBackdropClick}
@@ -78,12 +80,13 @@ export function Dialog({
       <div
         className={[
           'overflow-hidden rounded-lg border border-line-strong bg-surface-2 shadow-3',
+          size === 'workspace' && 'flex max-h-[calc(100dvh-48px)] flex-col',
           panelClassName,
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        <header className="flex items-start justify-between gap-4 px-[18px] pt-[18px]">
+        <header className="flex shrink-0 items-start justify-between gap-4 px-[18px] pt-[18px]">
           <div>
             <h2
               id={titleId}
@@ -107,9 +110,17 @@ export function Dialog({
             onClick={() => onOpenChange(false)}
           />
         </header>
-        <div className="px-[18px] pt-4 pb-5">{children}</div>
+        <div
+          className={
+            size === 'workspace'
+              ? 'min-h-0 overflow-y-auto px-[18px] pt-4 pb-5'
+              : 'px-[18px] pt-4 pb-5'
+          }
+        >
+          {children}
+        </div>
         {footer ? (
-          <footer className="flex justify-end gap-2 border-t border-line bg-surface-1 px-[18px] py-3">
+          <footer className="flex shrink-0 justify-end gap-2 border-t border-line bg-surface-1 px-[18px] py-3">
             {footer}
           </footer>
         ) : null}

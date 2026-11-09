@@ -14,6 +14,21 @@ export const recipeSchema = z.object({
   description: z.string().max(300),
   sections: z.array(z.string().trim().min(1).max(200)).min(2).max(12),
   secondsPerSection: z.number().min(2).max(60),
+  treatment: z
+    .enum(['standard', 'product-demo', 'quick-tip', 'tutorial'])
+    .optional(),
+  sceneDefaults: z
+    .array(
+      z.object({
+        text: z.string().trim().min(1).max(200),
+        kind: z.enum(['footage', 'title']),
+        durationSeconds: z.number().positive().max(600),
+        showTitle: z.boolean(),
+      }),
+    )
+    .min(2)
+    .max(12)
+    .optional(),
 });
 export type Recipe = z.infer<typeof recipeSchema>;
 const definitions = [

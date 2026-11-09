@@ -2,6 +2,10 @@
 
 Researched 4 November 2026. Based on official product pages and Kerf source/docs, not hands-on competitor testing. Product pages describe advertised capabilities; quality, availability, and plan restrictions need separate validation. Priorities and effort are judgments, not measured demand or delivery estimates.
 
+## Blueprint follow-up
+
+The initial Blueprint implementation was reviewed on 8 November 2026. See the [UX proposal](blueprints-ux-proposal.md) and [focused competitor research](blueprints-competitor-research.md) for a proposed move from configuration forms to visual examples, footage-backed storyboards and preview before applying. These are recommendations, not shipped capabilities.
+
 ## Recommendation
 
 Build a local-first workflow for turning existing recordings into polished, editable product videos. Start with reusable recipes, transcript-driven edits, and screen-recording polish. Kerf already has much of the underlying editing machinery; the opportunity is to reduce the decisions and manual steps required to finish a video.

@@ -48,7 +48,7 @@ export interface FootageBinProps {
   readonly onOpenSearch: () => void;
   readonly onOpenAnalysis: () => void;
   readonly onOpenMotion: () => void;
-  readonly onOpenRecipes: () => void;
+  readonly onOpenRecipes: (assetId?: string) => void;
   readonly onOpenReferences: () => void;
   readonly onOpenExport: () => void;
 }
@@ -288,14 +288,14 @@ export function FootageBin({
             icon={<Search size={14} />}
             onClick={onOpenSearch}
           />
-          <IconButton
-            label="Blueprints & brand kits"
-            tooltip="Blueprints & brand kits"
-            tooltipSide="bottom"
+          <Button
+            aria-label="Blueprints & brand kits"
             size="sm"
-            icon={<Clapperboard size={14} />}
-            onClick={onOpenRecipes}
-          />
+            leadingIcon={<Clapperboard size={14} />}
+            onClick={() => onOpenRecipes(selected?.id)}
+          >
+            Blueprints
+          </Button>
           <IconButton
             label="References"
             tooltip="References"

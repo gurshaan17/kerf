@@ -77,6 +77,11 @@ export default function App() {
   const [motionOpen, setMotionOpen] = useState(false);
   const [referencesOpen, setReferencesOpen] = useState(false);
   const [recipesOpen, setRecipesOpen] = useState(false);
+  const [blueprintAssetId, setBlueprintAssetId] = useState<string>();
+  const openBlueprints = (assetId?: string) => {
+    setBlueprintAssetId(assetId);
+    setRecipesOpen(true);
+  };
   const [aboutOpen, setAboutOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
@@ -267,6 +272,7 @@ export default function App() {
       <RendererRequestHost />
       <RecipesDialog
         key={project.id}
+        initialAssetId={blueprintAssetId}
         open={recipesOpen}
         onOpenChange={setRecipesOpen}
       />
@@ -282,7 +288,12 @@ export default function App() {
         toasts={toasts}
         onDismissToast={dismissToast}
         stage={<Preview />}
-        timeline={<Timeline onAutoCut={setAutoCutClipId} />}
+        timeline={
+          <Timeline
+            onAutoCut={setAutoCutClipId}
+            onOpenBlueprints={() => openBlueprints()}
+          />
+        }
         inspector={
           analysisView ? (
             analysisView.kind === 'transcript' ? (
@@ -335,7 +346,7 @@ export default function App() {
             onOpenAnalysis={openAnalysis}
             onOpenMotion={openMotion}
             onOpenReferences={openReferences}
-            onOpenRecipes={() => setRecipesOpen(true)}
+            onOpenRecipes={openBlueprints}
             onOpenExport={openExport}
           />
         }
@@ -376,7 +387,7 @@ export default function App() {
         onOpenSequenceSettings={openSequenceSettings}
         onOpenMotion={openMotion}
         onOpenReferences={openReferences}
-        onOpenRecipes={() => setRecipesOpen(true)}
+        onOpenRecipes={openBlueprints}
         onOpenAbout={openAbout}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
