@@ -38,6 +38,61 @@ test('footage toolbar fits and workspace panel respects resize limits', async ()
     await page.screenshot({ path: 'test-results/panel-expanded.png' });
     await page.keyboard.press('Home');
     await page.screenshot({ path: 'test-results/panel-minimum.png' });
+    const inspector = page.getByRole('complementary', {
+      name: 'Inspector',
+      exact: true,
+    });
+    const rightDivider = page.getByRole('separator', {
+      name: 'Resize inspector panel',
+    });
+    const rightHandle = await rightDivider.boundingBox();
+    const originalRightWidth = (await inspector.boundingBox())!.width;
+    await page.mouse.move(rightHandle!.x + 3, rightHandle!.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(rightHandle!.x - 97, rightHandle!.y + 100);
+    await page.mouse.up();
+    expect((await inspector.boundingBox())!.width).toBeGreaterThan(
+      originalRightWidth + 90,
+    );
+    await rightDivider.focus();
+    await page.keyboard.press('Home');
+    expect((await inspector.boundingBox())!.width).toBe(280);
+    await page.keyboard.press('ArrowLeft');
+    expect((await inspector.boundingBox())!.width).toBe(290);
+    await page.keyboard.press('End');
+    expect(
+      (await page.locator('.k-shell__center').boundingBox())!.width,
+    ).toBeGreaterThanOrEqual(359);
+    await kerf.app.evaluate(async ({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]!.setSize(1100, 800);
+    });
+    await expect
+      .poll(async () => {
+        const rect = await inspector.boundingBox();
+        return (
+          rect!.x + rect!.width <=
+          (await page.evaluate(() => window.innerWidth))
+        );
+      })
+      .toBe(true);
+    await expect
+      .poll(
+        async () =>
+          (await page.locator('.k-shell__center').boundingBox())!.width,
+      )
+      .toBeGreaterThanOrEqual(359);
+    expect((await inspector.boundingBox())!.width).toBeGreaterThanOrEqual(280);
+    expect((await panel.boundingBox())!.width).toBeGreaterThanOrEqual(280);
+    await page.screenshot({ path: 'test-results/inspector-resized.png' });
+    await rightDivider.dblclick();
+    await expect(rightDivider).toHaveAttribute('aria-valuenow', '300');
+    await page.getByRole('button', { name: 'Motion', exact: true }).click();
+    await rightDivider.focus();
+    await page.keyboard.press('End');
+    expect((await inspector.boundingBox())!.width).toBeGreaterThan(400);
+    expect(
+      (await page.locator('.k-shell__center').boundingBox())!.width,
+    ).toBeGreaterThanOrEqual(359);
   } finally {
     await kerf.close();
   }

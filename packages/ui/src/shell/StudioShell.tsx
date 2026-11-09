@@ -421,9 +421,20 @@ export function StudioShell({
   const showLeftPanel = showLibrary || showEffects || showChat;
   const bodyRef = useRef<HTMLDivElement>(null);
   const [libraryWidth, setLibraryWidth] = useState(300);
-  const [libraryMax, setLibraryMax] = useState(600);
+  const [panelBudget, setPanelBudget] = useState(900);
+  const [inspectorWidth, setInspectorWidth] = useState(300);
   const dragOffset = useRef<number | null>(null);
+  const inspectorDragOffset = useRef<number | null>(null);
+  const rightWidth = Math.max(
+    280,
+    Math.min(inspectorWidth, panelBudget - (showLeftPanel ? 280 : 0)),
+  );
+  const libraryMax = Math.max(280, panelBudget - rightWidth);
   const panelWidth = Math.max(280, Math.min(libraryWidth, libraryMax));
+  const inspectorMax = Math.max(
+    280,
+    panelBudget - (showLeftPanel ? panelWidth : 0),
+  );
 
   useEffect(() => {
     const body = bodyRef.current;
@@ -432,16 +443,16 @@ export function StudioShell({
       const railWidth =
         body.querySelector('.k-shell__rail')?.getBoundingClientRect().width ??
         56;
-      const inspectorWidth =
-        body.querySelector('.k-shell__inspector')?.getBoundingClientRect()
-          .width ?? 300;
-      setLibraryMax(
-        Math.max(280, body.clientWidth - railWidth - inspectorWidth - 360 - 7),
+      setPanelBudget(
+        Math.max(
+          showLeftPanel ? 560 : 280,
+          body.clientWidth - railWidth - 360 - (showLeftPanel ? 14 : 7),
+        ),
       );
     });
     observer.observe(body);
     return () => observer.disconnect();
-  }, []);
+  }, [showLeftPanel]);
 
   const railItems = [
     { id: 'media', label: 'Media', icon: <Library size={18} /> },
@@ -519,7 +530,12 @@ export function StudioShell({
 
       <div
         ref={bodyRef}
-        style={{ '--k-library-width': `${panelWidth}px` } as CSSProperties}
+        style={
+          {
+            '--k-library-width': `${panelWidth}px`,
+            '--k-inspector-width': `${rightWidth}px`,
+          } as CSSProperties
+        }
         className={cx(
           'k-shell__body',
           showLeftPanel && 'k-shell__body--library',
@@ -629,6 +645,63 @@ export function StudioShell({
             secondary={timeline ?? <Timeline />}
           />
         </main>
+
+        <div
+          className="k-shell__resize"
+          role="separator"
+          aria-label="Resize inspector panel"
+          aria-orientation="vertical"
+          aria-valuemin={280}
+          aria-valuemax={inspectorMax}
+          aria-valuenow={Math.round(rightWidth)}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            inspectorDragOffset.current = event.clientX + rightWidth;
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (inspectorDragOffset.current === null) return;
+            setInspectorWidth(
+              Math.max(
+                280,
+                Math.min(
+                  inspectorMax,
+                  inspectorDragOffset.current - event.clientX,
+                ),
+              ),
+            );
+          }}
+          onPointerUp={(event) => {
+            inspectorDragOffset.current = null;
+            if (event.currentTarget.hasPointerCapture(event.pointerId))
+              event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onPointerCancel={() => {
+            inspectorDragOffset.current = null;
+          }}
+          onLostPointerCapture={() => {
+            inspectorDragOffset.current = null;
+          }}
+          onDoubleClick={() => setInspectorWidth(Math.min(300, inspectorMax))}
+          onKeyDown={(event) => {
+            const step = event.shiftKey ? 40 : 10;
+            const next =
+              event.key === 'ArrowLeft'
+                ? rightWidth + step
+                : event.key === 'ArrowRight'
+                  ? rightWidth - step
+                  : event.key === 'Home'
+                    ? 280
+                    : event.key === 'End'
+                      ? inspectorMax
+                      : null;
+            if (next === null) return;
+            event.preventDefault();
+            setInspectorWidth(Math.max(280, Math.min(inspectorMax, next)));
+          }}
+        />
 
         <aside className="k-shell__inspector" aria-label="Inspector">
           {inspector ?? <Inspector />}
