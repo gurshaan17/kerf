@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Captions, Check, Copy, X } from 'lucide-react';
 import type { FrameRate, TranscriptSegment } from '@kerf/model';
-import { formatTimecode, framesToSeconds, secondsToFrames } from '@kerf/model';
-import { IconButton, Input, Panel, cn } from '@kerf/ui';
+import { framesToSeconds, secondsToFrames } from '@kerf/model';
+import { IconButton, Panel } from '@kerf/ui';
 import { SourcePreview } from '../analysis/SourcePreview';
 import type { SourcePreviewHandle } from '../analysis/SourcePreview';
 import { findSequenceFrame } from '../state/sequence-map';
 import { useStudio } from '../state/StudioProvider';
+import { SpeechTranscriptEditor } from './SpeechTranscriptEditor';
 import { VisualNarrationEditor, VisualNarrationJob } from './VisualNarration';
 
 export interface TranscriptPanelProps {
@@ -30,45 +31,13 @@ export function TranscriptPanel({ assetId, onClose }: TranscriptPanelProps) {
 
   const rate = asset?.frameRate ?? sequence?.frameRate ?? FALLBACK_RATE;
 
-  const [query, setQuery] = useState('');
   const [currentFrame, setCurrentFrame] = useState(0);
   const [copied, setCopied] = useState(false);
 
   const previewRef = useRef<SourcePreviewHandle>(null);
-  const listRef = useRef<HTMLDivElement>(null);
   const copiedTimer = useRef<number | null>(null);
 
-  const segments = useMemo(() => transcript?.segments ?? [], [transcript]);
-  const wordCount = useMemo(
-    () =>
-      segments.reduce(
-        (total, segment) =>
-          total +
-          (segment.words.length > 0
-            ? segment.words.length
-            : segment.text.split(/\s+/).filter(Boolean).length),
-        0,
-      ),
-    [segments],
-  );
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) {
-      return segments;
-    }
-    return segments.filter((segment) =>
-      segment.text.toLowerCase().includes(needle),
-    );
-  }, [segments, query]);
-
-  const activeSegmentId =
-    segments.find(
-      (segment) =>
-        currentFrame >= segment.startFrame && currentFrame < segment.endFrame,
-    )?.id ?? null;
-
   useEffect(() => {
-    setQuery('');
     setCurrentFrame(0);
     setCopied(false);
   }, [assetId]);
@@ -82,23 +51,16 @@ export function TranscriptPanel({ assetId, onClose }: TranscriptPanelProps) {
     [],
   );
 
-  useEffect(() => {
-    if (!activeSegmentId) {
-      return;
-    }
-    listRef.current
-      ?.querySelector('[data-active="true"]')
-      ?.scrollIntoView({ block: 'nearest' });
-  }, [activeSegmentId]);
-
   const seek = (segment: TranscriptSegment) => {
     previewRef.current?.seekToFrame(segment.startFrame);
-    if (
-      sequence &&
-      findSequenceFrame(sequence, assetId, segment.startFrame) !== null
-    ) {
-      revealAssetFrame(assetId, segment.startFrame);
-    }
+    const frame = sequence
+      ? secondsToFrames(
+          framesToSeconds(segment.startFrame, rate),
+          sequence.frameRate,
+        )
+      : segment.startFrame;
+    if (sequence && findSequenceFrame(sequence, assetId, frame) !== null)
+      revealAssetFrame(assetId, frame);
   };
 
   const copyTranscript = async () => {
@@ -185,74 +147,17 @@ export function TranscriptPanel({ assetId, onClose }: TranscriptPanelProps) {
               }}
             />
           ) : (
-            <>
-              <div className="border-b border-line p-2.5">
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Find in transcript"
-                  aria-label="Find in transcript"
-                  className="h-8"
-                />
-              </div>
-
-              <div ref={listRef} className="min-h-0 flex-1 overflow-auto p-1.5">
-                {filtered.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-[11px] text-ink-faint">
-                    {segments.length === 0
-                      ? 'The transcript has no segments.'
-                      : `No segments match “${query.trim()}”.`}
-                  </p>
-                ) : (
-                  <ol className="grid gap-0.5">
-                    {filtered.map((segment) => {
-                      const active = segment.id === activeSegmentId;
-                      return (
-                        <li key={segment.id}>
-                          <button
-                            type="button"
-                            data-transcript-segment
-                            data-active={active || undefined}
-                            onClick={() => seek(segment)}
-                            title="Play from this moment"
-                            className={cn(
-                              'flex w-full items-start gap-2 rounded-sm border border-transparent px-2 py-1.5 text-left transition-colors duration-150 ease-k hover:bg-surface-2 focus-visible:outline-none',
-                              active && 'border-accent/30 bg-accent/10',
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                'mt-px shrink-0 font-mono text-[9px]',
-                                active
-                                  ? 'text-accent-bright'
-                                  : 'text-ink-faint',
-                              )}
-                            >
-                              {formatTimecode(segment.startFrame, rate)}
-                            </span>
-                            <span
-                              className={cn(
-                                'min-w-0 flex-1 text-[11px] leading-relaxed',
-                                active ? 'text-ink' : 'text-ink-muted',
-                              )}
-                            >
-                              {segment.text}
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                )}
-              </div>
-
-              <footer className="border-t border-line px-3 py-2 font-mono text-[8px] tracking-[0.04em] text-ink-faint uppercase">
-                {segments.length}{' '}
-                {segments.length === 1 ? 'segment' : 'segments'} · {wordCount}{' '}
-                words · {transcript.language.toUpperCase()}
-                {transcript.model ? ` · ${transcript.model}` : ''}
-              </footer>
-            </>
+            <SpeechTranscriptEditor
+              key={assetId}
+              currentFrame={currentFrame}
+              transcript={transcript}
+              asset={asset}
+              rate={rate}
+              seek={seek}
+              previewCut={(start, end) =>
+                previewRef.current?.previewCut(start, end)
+              }
+            />
           )}
         </>
       ) : (

@@ -185,3 +185,70 @@ describe('visual narration edits', () => {
     expect(replaced.segments[1]!.id).toBe(previous.segments[1]!.id);
   });
 });
+
+it('corrects speech text without changing media timing, discards stale word text and supports undo/redo', () => {
+  const previous = createTranscript({
+    assetId: newId('asset'),
+    segments: [
+      {
+        ...row(0, 20),
+        words: [{ text: 'Wrong', startFrame: 0, endFrame: 20 }],
+      },
+    ],
+  });
+  const corrected = editNarration(
+    previous,
+    {
+      type: 'updateText',
+      transcriptId: previous.id,
+      expectedRevision: 0,
+      segmentId: previous.segments[0]!.id,
+      text: 'Correct',
+    },
+    100,
+  );
+  expect(corrected).toMatchObject({
+    source: 'speech',
+    status: 'reviewed',
+    text: 'Correct',
+    revision: 1,
+    segments: [{ startFrame: 0, endFrame: 20, words: [] }],
+  });
+  const undone = editNarration(
+    corrected,
+    { type: 'undo', transcriptId: previous.id, expectedRevision: 1 },
+    100,
+  );
+  expect(undone.segments).toEqual(previous.segments);
+  const redone = editNarration(
+    undone,
+    { type: 'redo', transcriptId: previous.id, expectedRevision: 2 },
+    100,
+  );
+  expect(redone.segments).toEqual(corrected.segments);
+  expect(() =>
+    editNarration(
+      previous,
+      {
+        type: 'delete',
+        transcriptId: previous.id,
+        expectedRevision: 0,
+        segmentId: previous.segments[0]!.id,
+      },
+      100,
+    ),
+  ).toThrow('Speech');
+  expect(() =>
+    editNarration(
+      corrected,
+      {
+        type: 'updateText',
+        transcriptId: previous.id,
+        expectedRevision: 0,
+        segmentId: previous.segments[0]!.id,
+        text: 'Stale',
+      },
+      100,
+    ),
+  ).toThrow('changed');
+});

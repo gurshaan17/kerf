@@ -10,6 +10,7 @@ import { formatTimecode, fpsToNumber } from '@kerf/model';
 
 export interface SourcePreviewHandle {
   seekToFrame(frame: number): void;
+  previewCut(startFrame: number, endFrame: number): void;
 }
 
 export interface SourcePreviewProps {
@@ -38,6 +39,11 @@ export const SourcePreview = forwardRef<
   const fps = Math.max(1, fpsToNumber(rate));
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const cutRef = useRef<{
+    start: number;
+    end: number;
+    skipped: boolean;
+  } | null>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
 
   useEffect(() => {
@@ -50,6 +56,14 @@ export const SourcePreview = forwardRef<
     if (!media) {
       return;
     }
+    const cut = cutRef.current;
+    if (cut && !cut.skipped && media.currentTime >= cut.start / fps) {
+      cut.skipped = true;
+      media.currentTime = cut.end / fps;
+    } else if (cut?.skipped && media.currentTime >= cut.end / fps + 1) {
+      media.pause();
+      cutRef.current = null;
+    }
     const frame = Math.round(media.currentTime * fps);
     setCurrentFrame(frame);
     onFrameChange?.(frame);
@@ -58,7 +72,15 @@ export const SourcePreview = forwardRef<
   useImperativeHandle(
     ref,
     () => ({
+      previewCut(startFrame: number, endFrame: number) {
+        const media = videoRef.current ?? audioRef.current;
+        if (!media) return;
+        cutRef.current = { start: startFrame, end: endFrame, skipped: false };
+        media.currentTime = Math.max(0, startFrame / fps - 1);
+        void media.play().catch(() => undefined);
+      },
       seekToFrame(frame: number) {
+        cutRef.current = null;
         const media = videoRef.current ?? audioRef.current;
         if (media) {
           const target = frame / fps;

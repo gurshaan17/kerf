@@ -112,8 +112,13 @@ export function editNarration(
   input: NarrationEdit,
   duration: number,
 ): Transcript {
-  if (previous.source !== 'visual')
-    throw new Error('This editor only changes visual narration.');
+  if (
+    previous.source !== 'visual' &&
+    !['updateText', 'undo', 'redo'].includes(input.type)
+  )
+    throw new Error(
+      'Speech transcripts support text correction, undo and redo only.',
+    );
   if (
     previous.id !== input.transcriptId ||
     previous.revision !== input.expectedRevision
@@ -125,7 +130,8 @@ export function editNarration(
       input.type === 'undo' ? previous.undoStates : previous.redoStates;
     const state = from.at(-1);
     if (!state) throw new Error(`Nothing to ${input.type}.`);
-    validateNarrationSegments(state.segments, duration);
+    if (previous.source === 'visual')
+      validateNarrationSegments(state.segments, duration);
     const other = { segments: previous.segments, status: previous.status };
     return transcriptSchema.parse({
       ...previous,
@@ -189,7 +195,7 @@ export function editNarration(
     const origin = row.origin === 'manual' ? 'manual' : 'edited';
     if (input.type === 'delete') rows.splice(index, 1);
     else if (input.type === 'updateText')
-      rows[index] = { ...row, text: input.text, origin };
+      rows[index] = { ...row, text: input.text, words: [], origin };
     else if (input.type === 'setTiming')
       rows[index] = {
         ...row,
@@ -237,8 +243,12 @@ export function editNarration(
     }
   }
   rows.sort((a, b) => a.startFrame - b.startFrame);
-  validateNarrationSegments(rows, duration);
-  return reviseNarration(previous, rows, 'draft');
+  if (previous.source === 'visual') validateNarrationSegments(rows, duration);
+  return reviseNarration(
+    previous,
+    rows,
+    previous.source === 'speech' ? previous.status : 'draft',
+  );
 }
 
 export function regenerateNarration(
@@ -266,6 +276,10 @@ export function regenerateNarration(
       ),
   );
   const rows = [...kept, ...added].sort((a, b) => a.startFrame - b.startFrame);
-  validateNarrationSegments(rows, duration);
-  return reviseNarration(previous, rows, 'draft');
+  if (previous.source === 'visual') validateNarrationSegments(rows, duration);
+  return reviseNarration(
+    previous,
+    rows,
+    previous.source === 'speech' ? previous.status : 'draft',
+  );
 }

@@ -644,7 +644,8 @@ export class ProjectRepository {
         throw new Error('Narration changed. Reload and reapply your edit.');
       const parsed = transcriptSchema.parse(next);
       if (
-        parsed.source !== 'visual' ||
+        (parsed.source !== 'visual' &&
+          (!expected || expected.source !== 'speech')) ||
         parsed.revision !== (expected ? expected.revision + 1 : 0) ||
         (expected && parsed.id !== expected.id)
       )
