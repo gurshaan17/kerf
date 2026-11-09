@@ -275,6 +275,7 @@ export function FootageBin({
   return (
     <Panel
       title="Footage"
+      headerClassName="flex-wrap [&>div:first-child]:shrink-0 [&>div:last-child]:flex-wrap [&>div:last-child]:gap-1"
       subtitle={`${assets.length} ${assets.length === 1 ? 'item' : 'items'} · ${readyCount} ready`}
       bodyClassName="flex flex-col p-0 overflow-hidden"
       actions={

@@ -8,6 +8,7 @@ export interface PanelProps {
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
+  headerClassName?: string;
   flush?: boolean;
 }
 
@@ -18,6 +19,7 @@ export function Panel({
   children,
   className,
   bodyClassName,
+  headerClassName,
   flush = false,
 }: PanelProps) {
   return (
@@ -25,7 +27,12 @@ export function Panel({
       className={cn('flex h-full min-h-0 flex-col bg-surface-1', className)}
     >
       {title ? (
-        <header className="flex min-h-12 items-center justify-between gap-3 border-b border-line px-3 py-2.5 pl-3.5">
+        <header
+          className={cn(
+            'flex min-h-12 items-center justify-between gap-3 border-b border-line px-3 py-2.5 pl-3.5',
+            headerClassName,
+          )}
+        >
           <div className="min-w-0">
             <h2 className="font-sans text-[12px] font-semibold tracking-[0.02em]">
               {title}

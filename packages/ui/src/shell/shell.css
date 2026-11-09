@@ -88,7 +88,7 @@
 
 .k-shell__body--library {
   grid-template-columns:
-    var(--k-rail-width) var(--k-library-width) minmax(0, 1fr)
+    var(--k-rail-width) var(--k-library-width) 7px minmax(360px, 1fr)
     var(--k-inspector-width);
 }
 
@@ -101,6 +101,26 @@
   padding: var(--k-space-2) 6px;
   border-right: 1px solid var(--k-line);
   background: var(--k-surface-1);
+}
+
+.k-shell__resize {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.k-shell__resize::after {
+  content: '';
+  position: absolute;
+  inset: 0 3px;
+  background: var(--k-line);
+}
+
+.k-shell__resize:hover::after,
+.k-shell__resize:focus-visible::after {
+  background: var(--k-accent);
 }
 
 .k-shell__rail-group {

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import {
   AudioLines,
   Film,
@@ -419,6 +419,29 @@ export function StudioShell({
   const showEffects = Boolean(effectsPanel) && rail === 'effects';
   const showChat = Boolean(chatPanel) && rail === 'chat';
   const showLeftPanel = showLibrary || showEffects || showChat;
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [libraryWidth, setLibraryWidth] = useState(300);
+  const [libraryMax, setLibraryMax] = useState(600);
+  const dragOffset = useRef<number | null>(null);
+  const panelWidth = Math.max(280, Math.min(libraryWidth, libraryMax));
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const observer = new ResizeObserver(() => {
+      const railWidth =
+        body.querySelector('.k-shell__rail')?.getBoundingClientRect().width ??
+        56;
+      const inspectorWidth =
+        body.querySelector('.k-shell__inspector')?.getBoundingClientRect()
+          .width ?? 300;
+      setLibraryMax(
+        Math.max(280, body.clientWidth - railWidth - inspectorWidth - 360 - 7),
+      );
+    });
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, []);
 
   const railItems = [
     { id: 'media', label: 'Media', icon: <Library size={18} /> },
@@ -495,6 +518,8 @@ export function StudioShell({
       </header>
 
       <div
+        ref={bodyRef}
+        style={{ '--k-library-width': `${panelWidth}px` } as CSSProperties}
         className={cx(
           'k-shell__body',
           showLeftPanel && 'k-shell__body--library',
@@ -536,6 +561,62 @@ export function StudioShell({
           <aside className="k-shell__library" aria-label="Assistant">
             {chatPanel}
           </aside>
+        ) : null}
+
+        {showLeftPanel ? (
+          <div
+            className="k-shell__resize"
+            role="separator"
+            aria-label="Resize workspace panel"
+            aria-orientation="vertical"
+            aria-valuemin={280}
+            aria-valuemax={libraryMax}
+            aria-valuenow={Math.round(panelWidth)}
+            tabIndex={0}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.preventDefault();
+              dragOffset.current = event.clientX - panelWidth;
+              event.currentTarget.setPointerCapture(event.pointerId);
+            }}
+            onPointerMove={(event) => {
+              if (dragOffset.current === null) return;
+              setLibraryWidth(
+                Math.max(
+                  280,
+                  Math.min(libraryMax, event.clientX - dragOffset.current),
+                ),
+              );
+            }}
+            onPointerUp={(event) => {
+              dragOffset.current = null;
+              if (event.currentTarget.hasPointerCapture(event.pointerId))
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            }}
+            onPointerCancel={() => {
+              dragOffset.current = null;
+            }}
+            onLostPointerCapture={() => {
+              dragOffset.current = null;
+            }}
+            onDoubleClick={() => setLibraryWidth(300)}
+            onKeyDown={(event) => {
+              const step = event.shiftKey ? 40 : 10;
+              const next =
+                event.key === 'ArrowLeft'
+                  ? panelWidth - step
+                  : event.key === 'ArrowRight'
+                    ? panelWidth + step
+                    : event.key === 'Home'
+                      ? 280
+                      : event.key === 'End'
+                        ? libraryMax
+                        : null;
+              if (next === null) return;
+              event.preventDefault();
+              setLibraryWidth(Math.max(280, Math.min(libraryMax, next)));
+            }}
+          />
         ) : null}
 
         <main className="k-shell__center">
