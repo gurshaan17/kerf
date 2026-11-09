@@ -16,3 +16,5 @@ export * from './auto-cut';
 export * from './recipes';
 
 export * from './screen-polish';
+
+export * from './transcript-edit';
