@@ -157,6 +157,15 @@ export function transcriptEditCommand(
         throw new Error(
           'Remove keyframes from affected clips before editing this passage.',
         );
+      if (
+        clip.type === 'caption' &&
+        !clip.words.length &&
+        intersects &&
+        (start > clip.startFrame || end < clipEndFrame(clip))
+      )
+        throw new Error(
+          'This cut splits a caption without word timing. Adjust the boundaries or remove that caption first.',
+        );
       affected.add(clip.id);
       if (action === 'extract') {
         inserts.push({

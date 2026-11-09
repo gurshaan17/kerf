@@ -42,8 +42,13 @@ export function SpeechTranscriptEditor({
   const [action, setAction] = useState<TranscriptAction>('remove');
   const [text, setText] = useState<string | null>(null);
   const [review, setReview] = useState(false);
+  const [bounds, setBounds] = useState<{
+    startFrame: number;
+    endFrame: number;
+  } | null>(null);
   useEffect(() => {
     setReview(false);
+    setBounds(null);
   }, [sequence]);
   const rows = transcript.segments.filter((s) => selected.includes(s.id));
   const range = rows.length
@@ -55,7 +60,9 @@ export function SpeechTranscriptEditor({
   const matches = range
     ? transcriptOccurrences(sequence, asset.id, range, rate)
     : [];
-  const match = matches.find((m) => m.clipId === occurrence) ?? matches[0];
+  const originalMatch =
+    matches.find((m) => m.clipId === occurrence) ?? matches[0];
+  const match = originalMatch ? { ...originalMatch, ...bounds } : undefined;
   const timelineRows = useMemo(
     () =>
       transcript.segments
@@ -86,6 +93,7 @@ export function SpeechTranscriptEditor({
     );
     if (clipId) setOccurrence(clipId);
     setReview(false);
+    setBounds(null);
     setError('');
     setText(null);
   };
@@ -228,6 +236,42 @@ export function SpeechTranscriptEditor({
                       : 'Matching source audio will be silenced. Visual timing stays the same.'}{' '}
                   One media undo restores the edit.
                 </p>
+                <p>
+                  Reviewing this timeline occurrence only. Trimmed segments may
+                  appear as partial passages.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <label>
+                    Start frame
+                    <Input
+                      aria-label="Passage start frame"
+                      type="number"
+                      min={0}
+                      value={match.startFrame}
+                      onChange={(e) =>
+                        setBounds({
+                          ...match,
+                          startFrame: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    End frame
+                    <Input
+                      aria-label="Passage end frame"
+                      type="number"
+                      min={match.startFrame + 1}
+                      value={match.endFrame}
+                      onChange={(e) =>
+                        setBounds({
+                          ...match,
+                          endFrame: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                </div>
                 <p className={action === 'remove' ? 'line-through' : ''}>
                   {rows.map((s) => s.text).join(' ')}
                 </p>
@@ -236,14 +280,6 @@ export function SpeechTranscriptEditor({
                     size="sm"
                     disabled={pending}
                     onClick={() => {
-                      const localStart = secondsToFrames(
-                        framesToSeconds(match.startFrame, sequence.frameRate),
-                        rate,
-                      );
-                      const localEnd = secondsToFrames(
-                        framesToSeconds(match.endFrame, sequence.frameRate),
-                        rate,
-                      );
                       const clip = sequence.tracks
                         .flatMap((t) => t.clips)
                         .find((c) => c.id === match.clipId);
@@ -251,16 +287,18 @@ export function SpeechTranscriptEditor({
                         clip &&
                         (clip.type === 'video' || clip.type === 'audio')
                       ) {
-                        const offset = secondsToFrames(
-                          framesToSeconds(
-                            clip.sourceInFrame - clip.startFrame * clip.speed,
-                            sequence.frameRate,
-                          ),
-                          rate,
-                        );
+                        const sourceFrame = (frame: number) =>
+                          secondsToFrames(
+                            framesToSeconds(
+                              clip.sourceInFrame +
+                                (frame - clip.startFrame) * clip.speed,
+                              sequence.frameRate,
+                            ),
+                            rate,
+                          );
                         previewCut(
-                          Math.round(localStart * clip.speed + offset),
-                          Math.round(localEnd * clip.speed + offset),
+                          sourceFrame(match.startFrame),
+                          sourceFrame(match.endFrame),
                         );
                       }
                     }}
@@ -268,7 +306,17 @@ export function SpeechTranscriptEditor({
                     Preview source join
                   </Button>
                 )}
-                <Button size="sm" disabled={pending} onClick={() => void run()}>
+                <Button
+                  size="sm"
+                  disabled={
+                    pending ||
+                    !Number.isInteger(match.startFrame) ||
+                    !Number.isInteger(match.endFrame) ||
+                    match.endFrame <= match.startFrame ||
+                    match.startFrame < 0
+                  }
+                  onClick={() => void run()}
+                >
                   {pending ? 'Applying…' : 'Apply media edit'}
                 </Button>
               </div>
@@ -346,6 +394,11 @@ export function SpeechTranscriptEditor({
           </p>
         )}
       </div>
+      {view === 'timeline' && !timelineRows.length && (
+        <p className="px-3 py-2 text-xs text-ink-muted">
+          No passages on the timeline. Showing the full source.
+        </p>
+      )}
       <ol className="min-h-0 flex-1 overflow-auto p-2">
         {visible.map(({ segment, match: item }, index) => (
           <li

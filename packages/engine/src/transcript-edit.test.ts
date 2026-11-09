@@ -122,3 +122,24 @@ describe('transcript edits', () => {
     );
   });
 });
+
+it('removes an entire occurrence and restores it exactly', () => {
+  const { sequence } = fixture();
+  const result = applyCommand(
+    sequence,
+    transcriptEditCommand(sequence, 0, 120, 'remove'),
+  );
+  expect(result.sequence.tracks.every((t) => !t.clips.length)).toBe(true);
+  expect(applyCommand(result.sequence, result.inverse!).sequence).toEqual(
+    sequence,
+  );
+});
+
+it('rejects partial captions without timing rather than duplicating their text', () => {
+  const { sequence } = fixture();
+  const caption = sequence.tracks[2]!.clips[0]!;
+  if (caption.type === 'caption') caption.words = [];
+  expect(() => transcriptEditCommand(sequence, 24, 48, 'remove')).toThrow(
+    'without word timing',
+  );
+});

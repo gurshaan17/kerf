@@ -12,12 +12,16 @@ Build a local-first workflow for turning existing recordings into polished, edit
 
 Two plausible audiences lead to different priorities: product educators benefit most from recipes, zooms and paired guides; interview/podcast creators benefit most from transcript editing, audio cleanup and highlight extraction. The default recommendation here assumes product demos and explainers, while retaining transcript editing as a broadly useful investment.
 
+## Transcript editing implementation
+
+Segment-level transcript editing is now implemented. See [Transcript editing](transcript-editing.md) for selection, occurrence review, frame adjustments, remove/extract/move, speech muting, text correction and undo. Extraction and movement currently collect passages at the timeline end. The original research below describes the opportunity at the time of inspection; automatic retake suggestions and precise word editing remain future work.
+
 ## Existing capabilities to extend
 
 - [README](../README.md): local projects, ingest, timeline, transcription, search, reference profiling, chat/MCP, export and OTIO.
 - [Tool catalog](tools.md): `assembleRoughCut`, `cutSilences`, `duckUnderSpeech`, captions, batch edits, motion compositions and overlays.
 - [Visual narration](visual-narration.md) and [TTS](text-to-speech.md): silent-footage narration drafts, review, generated speech, duration checks and linked timeline placement already exist. Basic voiceover is not a new feature proposal.
-- [Transcript panel](../src/renderer/transcript/TranscriptPanel.tsx): speech transcripts support search, copy and seek; they are not yet a document-style media editing surface.
+- [Transcript panel](../src/renderer/transcript/TranscriptPanel.tsx): speech transcripts support search, copy, seek and a segment-level media editing surface.
 - [Transcription parser](../src/main/analysis/transcribe.ts): `splitEntry` estimates word boundaries when an input entry contains several words. Do not assume every stored word timestamp is acoustically aligned.
 - [Overlay model](../packages/model/src/overlays.ts): blur, callout, spotlight and zoom already exist. Automated selection, tracking and reusable styling are the proposed additions.
 

@@ -136,6 +136,94 @@ test('verifies a transcript in the side panel', async () => {
       page.getByRole('heading', { name: 'Transcript', exact: true }),
     ).toBeVisible();
     await expect(page.locator('[data-transcript-segment]')).toHaveCount(2);
+
+    // Each passage operation is atomic and restores the original timeline.
+    const original = await page.evaluate(
+      async () =>
+        (await window.kerf.projects.active())?.project.sequence.tracks,
+    );
+    for (const action of ['extract', 'move', 'mute', 'remove']) {
+      await page
+        .getByRole('checkbox', { name: /Select passage:/ })
+        .first()
+        .check();
+      await page.getByLabel('Transcript media action').selectOption(action);
+      await page
+        .getByRole('button', { name: 'Review passage', exact: true })
+        .click();
+      await expect(
+        page.getByRole('region', { name: 'Proposed transcript edit' }),
+      ).toBeVisible();
+      if (action === 'remove') {
+        await page
+          .getByRole('button', { name: 'Preview source join', exact: true })
+          .click();
+        await page.screenshot({
+          path: '.cache/e2e/transcript-edit-review.png',
+        });
+      }
+      await page
+        .getByRole('button', { name: 'Apply media edit', exact: true })
+        .click();
+      await expect(
+        page.getByRole('button', { name: 'Apply media edit', exact: true }),
+      ).toHaveCount(0);
+      await expect
+        .poll(async () =>
+          page.evaluate(
+            async () =>
+              (await window.kerf.projects.active())?.project.sequence.tracks,
+          ),
+        )
+        .not.toEqual(original);
+      await page
+        .getByRole('button', { name: 'Undo media edit', exact: true })
+        .click();
+      await expect
+        .poll(async () =>
+          page.evaluate(
+            async () =>
+              (await window.kerf.projects.active())?.project.sequence.tracks,
+          ),
+        )
+        .toEqual(original);
+    }
+    await page
+      .getByRole('checkbox', { name: /Select passage:/ })
+      .first()
+      .check();
+    await page
+      .getByRole('button', { name: 'Correct transcript text', exact: true })
+      .click();
+    await page
+      .getByLabel('Corrected transcript text')
+      .fill('A corrected transcript sentence.');
+    await page
+      .getByRole('button', { name: 'Save text correction', exact: true })
+      .click();
+    await expect(
+      page.locator('[data-transcript-segment]').first(),
+    ).toContainText('A corrected transcript sentence.');
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          async () =>
+            (await window.kerf.projects.active())?.project.sequence.tracks,
+        ),
+      )
+      .toEqual(original);
+    await page
+      .getByRole('button', { name: 'Undo text correction', exact: true })
+      .click();
+    await expect(
+      page.locator('[data-transcript-segment]').first(),
+    ).not.toContainText('A corrected transcript sentence.');
+    await page
+      .getByRole('button', { name: 'Redo text correction', exact: true })
+      .click();
+    await expect(
+      page.locator('[data-transcript-segment]').first(),
+    ).toContainText('A corrected transcript sentence.');
   } finally {
     await kerf.close();
   }
