@@ -5,6 +5,8 @@ test('footage toolbar fits and workspace panel respects resize limits', async ()
   const kerf = await launchKerf({ whisper: false });
   const { page } = kerf;
   try {
+    // Match the narrow window available on the macOS CI runner.
+    await page.setViewportSize({ width: 1100, height: 800 });
     await page.getByPlaceholder('New project').fill('Panel resizing');
     await page.getByRole('button', { name: 'Create', exact: true }).click();
     const panel = page.getByRole('complementary', { name: 'Footage bin' });
@@ -47,25 +49,30 @@ test('footage toolbar fits and workspace panel respects resize limits', async ()
     });
     const rightHandle = await rightDivider.boundingBox();
     const originalRightWidth = (await inspector.boundingBox())!.width;
+    const rightMax = Number(await rightDivider.getAttribute('aria-valuemax'));
     await page.mouse.move(rightHandle!.x + 3, rightHandle!.y + 100);
     await page.mouse.down();
     await page.mouse.move(rightHandle!.x - 97, rightHandle!.y + 100);
     await page.mouse.up();
-    expect((await inspector.boundingBox())!.width).toBeGreaterThan(
-      originalRightWidth + 90,
-    );
+    await expect
+      .poll(async () => (await inspector.boundingBox())!.width)
+      .toBe(Math.min(originalRightWidth + 100, rightMax));
     await rightDivider.focus();
     await page.keyboard.press('Home');
+    await expect(rightDivider).toHaveAttribute('aria-valuenow', '280');
     expect((await inspector.boundingBox())!.width).toBe(280);
     await page.keyboard.press('ArrowLeft');
+    await expect(rightDivider).toHaveAttribute('aria-valuenow', '290');
     expect((await inspector.boundingBox())!.width).toBe(290);
+    // Expand at a wider viewport before shrinking, independent of screen size.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(rightDivider).toHaveAttribute('aria-valuemax', '570');
     await page.keyboard.press('End');
+    await expect(rightDivider).toHaveAttribute('aria-valuenow', '570');
     expect(
       (await page.locator('.k-shell__center').boundingBox())!.width,
     ).toBeGreaterThanOrEqual(359);
-    await kerf.app.evaluate(async ({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]!.setSize(1100, 800);
-    });
+    await page.setViewportSize({ width: 1100, height: 800 });
     await expect
       .poll(async () => {
         const rect = await inspector.boundingBox();

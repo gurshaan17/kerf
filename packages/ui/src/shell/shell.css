@@ -80,6 +80,7 @@
 /* Frame */
 .k-shell__body {
   display: grid;
+  min-width: 0;
   grid-template-columns:
     var(--k-rail-width) minmax(360px, 1fr) 7px
     var(--k-inspector-width);
