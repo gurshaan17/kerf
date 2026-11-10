@@ -181,6 +181,11 @@ function makeBridge(snapshot: ProjectSnapshot) {
       })),
     },
     chat: {
+      history: async () => [],
+      open: async () => {
+        throw new Error('not used');
+      },
+      new: async () => {},
       send: vi.fn(async () => {
         throw new Error('not used');
       }),
@@ -216,6 +221,46 @@ function makeBridge(snapshot: ProjectSnapshot) {
 }
 
 describe('studio store', () => {
+  it('loads saved chats and starts a fresh conversation without losing history', async () => {
+    const snapshot = makeSnapshot();
+    const { bridge } = makeBridge(snapshot);
+    const saved = {
+      id: 'chat_saved',
+      title: 'Saved question',
+      updatedAt: 100,
+      turns: [
+        {
+          id: 'turn_saved',
+          message: 'Saved question',
+          text: 'Saved answer',
+          status: 'done' as const,
+          tools: [],
+          providerLabel: 'Test',
+          error: null,
+          hint: null,
+          durationMs: 10,
+        },
+      ],
+    };
+    const chat: KerfBridge['chat'] = {
+      ...bridge.chat,
+      history: vi.fn(async () => [saved]),
+      open: vi.fn(async () => saved),
+      new: vi.fn(async () => {}),
+    };
+    const store = createStudioStore({ ...bridge, chat });
+    await store.getState().hydrate();
+    await store.getState().loadChatHistory(true);
+    expect(store.getState().chatTurns).toEqual(saved.turns);
+    await store.getState().newChat();
+    expect(store.getState().chatTurns).toEqual([]);
+    await store.getState().loadChatHistory();
+    expect(store.getState().chatConversations).toEqual([saved]);
+    expect(store.getState().chatTurns).toEqual([]);
+    await store.getState().openChat(saved.id);
+    expect(store.getState().chatTurns).toEqual(saved.turns);
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
   });

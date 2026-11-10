@@ -8,6 +8,8 @@ import { findSequenceFrame } from './sequence-map';
 import type {
   AnalysisKind,
   ChatProviderSetting,
+  ChatTurn,
+  ChatConversation,
   ChatToolActivity,
   CompositionSaveRequest,
   CompositionSaveResult,
@@ -40,20 +42,7 @@ export interface StudioSelection {
   readonly trackId: string | null;
 }
 
-export type ChatTurnStatus = 'streaming' | 'done' | 'aborted' | 'error';
-
-export interface ChatTurn {
-  readonly id: string;
-  readonly message: string;
-  readonly text: string;
-  readonly tools: readonly ChatToolActivity[];
-  readonly status: ChatTurnStatus;
-  readonly providerLabel: string;
-  readonly error: string | null;
-  readonly hint: string | null;
-  readonly durationMs: number | null;
-}
-
+export type { ChatTurn, ChatTurnStatus } from '../../shared/contracts';
 export interface ChatError {
   readonly message: string;
   readonly hint: string | null;
@@ -74,6 +63,10 @@ export interface StudioState {
   readonly playing: boolean;
   readonly exports: ExportRecord[];
   readonly compositionTrees: Readonly<Record<string, SceneTree>>;
+  readonly chatConversations: readonly ChatConversation[];
+  loadChatHistory: (restore?: boolean) => Promise<void>;
+  openChat: (id: string) => Promise<void>;
+  newChat: () => Promise<void>;
   readonly chatTurns: readonly ChatTurn[];
   readonly chatActiveTurnId: string | null;
   readonly chatError: ChatError | null;
@@ -291,15 +284,57 @@ export function createStudioStore(bridge: KerfBridge) {
           : 0,
         ...(projectChanged
           ? {
+              chatConversations: [],
               chatTurns: [],
               chatActiveTurnId: null,
               chatError: null,
             }
           : {}),
       });
+      if (projectChanged && snapshot) void get().loadChatHistory(true);
     };
 
     return {
+      chatConversations: [],
+      async loadChatHistory(restore = false) {
+        const projectId = get().snapshot?.project.id;
+        if (!projectId) return;
+        try {
+          const conversations = await bridge.chat.history();
+          if (get().snapshot?.project.id !== projectId) return;
+          set({ chatConversations: conversations });
+          if (
+            restore &&
+            !get().chatActiveTurnId &&
+            get().chatTurns.length === 0 &&
+            conversations[0]
+          ) {
+            await get().openChat(conversations[0].id);
+          }
+        } catch (cause) {
+          fail(cause, 'Could not load chat history');
+        }
+      },
+      async openChat(id) {
+        if (get().chatActiveTurnId) return;
+        const projectId = get().snapshot?.project.id;
+        try {
+          const conversation = await bridge.chat.open(id);
+          if (get().snapshot?.project.id === projectId)
+            set({ chatTurns: conversation.turns, chatError: null });
+        } catch (cause) {
+          fail(cause, 'Could not open chat');
+        }
+      },
+      async newChat() {
+        if (get().chatActiveTurnId) return;
+        try {
+          await bridge.chat.new();
+          set({ chatTurns: [], chatError: null });
+        } catch (cause) {
+          fail(cause, 'Could not start chat');
+        }
+      },
       projects: [],
       snapshot: null,
       busy: true,

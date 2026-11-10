@@ -12,6 +12,8 @@ import type {
 } from '../../shared/contracts';
 import type { ToolService } from '../tools/service';
 import { AgentService, createAgentToolSet } from './service';
+import { openDatabase } from '../db';
+import { ProjectRepository } from '../projects';
 
 function snapshot(): ProjectSnapshot {
   const project = createProject({ name: 'Agent test', now: 1 });
@@ -168,6 +170,50 @@ function waitForTurn() {
 }
 
 describe('AgentService', () => {
+  it('saves streamed turns and tool activity in the project database', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'kerf-chat-write-'));
+    const database = openDatabase({ filename: join(root, 'test.db') });
+    try {
+      const repository = new ProjectRepository({
+        database: database.connection,
+        projectsRoot: join(root, 'projects'),
+      });
+      const project = repository.create({ name: 'Chat write' }).project;
+      const current = { ...snapshot(), project };
+      const { done, resolveDone } = waitForTurn();
+      const service = new AgentService({
+        database: database.connection,
+        projects: { current: () => current },
+        providers: {
+          chatProvider: provider,
+          chatModel: () =>
+            fakeModel([toolChunks(), textChunks('Saved response')]),
+        },
+        tools: { call: vi.fn(async () => ({})) } as unknown as ToolService,
+        broadcast: (event) => {
+          if (event.type === 'chat.done' || event.type === 'chat.error')
+            resolveDone();
+        },
+      });
+      service.start({ message: 'Remember this question' });
+      await done;
+      const [conversation] = service.conversations();
+      expect(conversation?.title).toBe('Remember this question');
+      expect(conversation?.turns[0]).toMatchObject({
+        message: 'Remember this question',
+        text: 'Saved response',
+        status: 'done',
+      });
+      expect(conversation?.turns[0]?.tools[0]?.status).toBe('succeeded');
+      service.newConversation();
+      const reopened = service.openConversation(conversation!.id);
+      expect(reopened.turns[0]?.text).toBe('Saved response');
+    } finally {
+      database.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('maps the shared catalog into executable AI SDK tools', async () => {
     const call = vi.fn(async () => ({ ok: true }));
     const tools = createAgentToolSet({ call });

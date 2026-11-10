@@ -294,4 +294,15 @@ export const DATABASE_MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 9,
+    name: 'saved assistant conversations',
+    up(connection) {
+      connection.exec(`CREATE TABLE chat_conversations (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        payload_json TEXT NOT NULL
+      ); CREATE INDEX chat_conversations_project_idx ON chat_conversations(project_id);`);
+    },
+  },
 ];

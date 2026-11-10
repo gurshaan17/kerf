@@ -142,6 +142,11 @@ const bridge: KerfBridge = {
     }),
   },
   chat: {
+    history: async () => [],
+    open: async () => {
+      throw new Error('not used');
+    },
+    new: async () => {},
     send: async () => {
       throw new Error('not used');
     },

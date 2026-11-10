@@ -7,6 +7,7 @@ import {
   type AnalysisRunRequest,
   type AnalysisRunResult,
   type ChatProviderSetting,
+  type ChatConversation,
   type ChatSendRequest,
   type ChatStartResult,
   type CompositionSaveRequest,
@@ -170,6 +171,9 @@ const bridge: KerfBridge = {
       invoke<ReferencePacingResult>(KERF_IPC.references.applyPacing),
   },
   chat: {
+    history: () => invoke<ChatConversation[]>(KERF_IPC.chat.history),
+    open: (id: string) => invoke<ChatConversation>(KERF_IPC.chat.open, id),
+    new: () => invoke<void>(KERF_IPC.chat.new),
     send: (request: ChatSendRequest) =>
       invoke<ChatStartResult>(KERF_IPC.chat.send, request),
     abort: () => invoke<boolean>(KERF_IPC.chat.abort),

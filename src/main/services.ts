@@ -127,6 +127,7 @@ export function createKerfServices(
       revealExport: (path) => shell.showItemInFolder(path),
     });
     const agent = new AgentService({
+      database: database.connection,
       projects,
       providers: analysis.providers,
       tools,

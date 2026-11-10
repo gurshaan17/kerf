@@ -1,3 +1,4 @@
+import type { SqliteDatabase } from '../db/connection';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { stepCountIs, streamText, tool } from 'ai';
@@ -7,6 +8,8 @@ import { sequenceDurationFrames } from '@kerf/engine';
 import { toolRegistry } from '@kerf/tools';
 import type {
   ChatEvent,
+  ChatConversation,
+  ChatTurn,
   ChatSendRequest,
   ChatStartResult,
   ChatToolActivity,
@@ -25,6 +28,7 @@ export interface AgentProjectSource {
 }
 
 export interface AgentServiceOptions {
+  readonly database?: SqliteDatabase;
   readonly projects: AgentProjectSource;
   readonly providers: AgentProviderSource;
   readonly tools: ToolService;
@@ -133,21 +137,145 @@ export function createAgentToolSet(
 }
 
 /**
- * Owns the in-memory conversation and streams one agent turn at a time. The
+ * Owns the saved conversation and streams one agent turn at a time. The
  * renderer receives coarse chat events; tool execution stays in the main
  * process and always goes through ToolService.
  */
 export class AgentService {
   private readonly options: AgentServiceOptions;
   private readonly now: () => number;
-  private readonly sessionId = `chat_${randomUUID()}`;
+  private sessionId = `chat_${randomUUID()}`;
   private readonly history: ModelMessage[] = [];
+  private conversation: ChatConversation | null = null;
   private active: ActiveTurn | null = null;
   private projectId: string | null = null;
 
   constructor(options: AgentServiceOptions) {
     this.options = options;
     this.now = options.now ?? Date.now;
+  }
+
+  conversations(): ChatConversation[] {
+    const projectId = this.options.projects.current()?.project.id;
+    if (!projectId) return [];
+    const rows = this.options.database
+      ?.prepare(
+        'SELECT payload_json FROM chat_conversations WHERE project_id = ?',
+      )
+      .all(projectId) as { payload_json: string }[] | undefined;
+    return (rows ?? [])
+      .map((row) => {
+        const conversation = JSON.parse(row.payload_json) as ChatConversation;
+        return {
+          ...conversation,
+          turns: conversation.turns.map((turn) =>
+            turn.status === 'streaming'
+              ? { ...turn, status: 'aborted' as const }
+              : turn,
+          ),
+        };
+      })
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  openConversation(id: string): ChatConversation {
+    if (this.active)
+      throw new Error('Stop the current response before switching chats.');
+    const conversation = this.conversations().find((item) => item.id === id);
+    if (!conversation)
+      throw new Error('The conversation was not found in this project.');
+    this.newConversation();
+    this.conversation = conversation;
+    this.sessionId = conversation.id;
+    this.history.push(
+      ...conversation.turns
+        .filter((turn) => turn.status === 'done')
+        .slice(-20)
+        .flatMap((turn) => [
+          { role: 'user' as const, content: turn.message },
+          { role: 'assistant' as const, content: turn.text },
+        ]),
+    );
+    return conversation;
+  }
+
+  newConversation(): void {
+    if (this.active)
+      throw new Error('Stop the current response before starting a new chat.');
+    this.history.length = 0;
+    this.conversation = null;
+    this.projectId = this.options.projects.current()?.project.id ?? null;
+    this.sessionId = `chat_${randomUUID()}`;
+  }
+
+  private emit(event: ChatEvent): void {
+    if (event.type === 'chat.started') {
+      const turn: ChatTurn = {
+        id: event.turnId,
+        message: event.message,
+        text: '',
+        tools: [],
+        status: 'streaming',
+        providerLabel: event.providerLabel,
+        error: null,
+        hint: null,
+        durationMs: null,
+      };
+      this.conversation = {
+        id: this.sessionId,
+        title: this.conversation?.title ?? event.message.slice(0, 80),
+        updatedAt: this.now(),
+        turns: [...(this.conversation?.turns ?? []), turn],
+      };
+    } else if (this.conversation) {
+      this.conversation = {
+        ...this.conversation,
+        updatedAt: this.now(),
+        turns: this.conversation.turns.map((turn) => {
+          if (turn.id !== event.turnId) return turn;
+          switch (event.type) {
+            case 'chat.delta':
+              return { ...turn, text: turn.text + event.text };
+            case 'chat.tool':
+              return {
+                ...turn,
+                tools: [
+                  ...turn.tools.filter((tool) => tool.id !== event.tool.id),
+                  event.tool,
+                ],
+              };
+            case 'chat.done':
+              return {
+                ...turn,
+                text: event.text,
+                status: 'done',
+                durationMs: event.durationMs,
+              };
+            case 'chat.aborted':
+              return { ...turn, status: 'aborted' };
+            case 'chat.error':
+              return {
+                ...turn,
+                status: 'error',
+                error: event.error,
+                hint: event.hint,
+              };
+          }
+        }),
+      };
+    }
+    if (this.conversation && this.projectId) {
+      this.options.database
+        ?.prepare(
+          'INSERT INTO chat_conversations (id, project_id, payload_json) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload_json = excluded.payload_json',
+        )
+        .run(
+          this.conversation.id,
+          this.projectId,
+          JSON.stringify(this.conversation),
+        );
+    }
+    this.options.broadcast(event);
   }
 
   get busy(): boolean {
@@ -182,11 +310,10 @@ export class AgentService {
       startedAt: this.now(),
     };
     if (this.projectId !== snapshot.project.id) {
-      this.history.length = 0;
-      this.projectId = snapshot.project.id;
+      this.newConversation();
     }
     this.active = turn;
-    this.options.broadcast({
+    this.emit({
       type: 'chat.started',
       turnId: turn.turnId,
       sessionId: this.sessionId,
@@ -260,7 +387,7 @@ export class AgentService {
         switch (part.type) {
           case 'text-delta':
             text += part.text;
-            this.options.broadcast({
+            this.emit({
               type: 'chat.delta',
               turnId: turn.turnId,
               text: part.text,
@@ -277,7 +404,7 @@ export class AgentService {
               input: part.input,
               startedAt: this.now(),
             });
-            this.options.broadcast({
+            this.emit({
               type: 'chat.tool',
               turnId: turn.turnId,
               tool: activity,
@@ -286,7 +413,7 @@ export class AgentService {
           }
           case 'tool-result': {
             const timing = toolTimings.get(part.toolCallId);
-            this.options.broadcast({
+            this.emit({
               type: 'chat.tool',
               turnId: turn.turnId,
               tool: {
@@ -303,7 +430,7 @@ export class AgentService {
           }
           case 'tool-error': {
             const timing = toolTimings.get(part.toolCallId);
-            this.options.broadcast({
+            this.emit({
               type: 'chat.tool',
               turnId: turn.turnId,
               tool: {
@@ -331,7 +458,7 @@ export class AgentService {
       }
 
       if (aborted || turn.controller.signal.aborted) {
-        this.options.broadcast({ type: 'chat.aborted', turnId: turn.turnId });
+        this.emit({ type: 'chat.aborted', turnId: turn.turnId });
         return;
       }
 
@@ -342,7 +469,7 @@ export class AgentService {
       if (this.history.length > 40) {
         this.history.splice(0, this.history.length - 40);
       }
-      this.options.broadcast({
+      this.emit({
         type: 'chat.done',
         turnId: turn.turnId,
         text,
@@ -350,10 +477,10 @@ export class AgentService {
       });
     } catch (cause) {
       if (turn.controller.signal.aborted) {
-        this.options.broadcast({ type: 'chat.aborted', turnId: turn.turnId });
+        this.emit({ type: 'chat.aborted', turnId: turn.turnId });
         return;
       }
-      this.options.broadcast({
+      this.emit({
         type: 'chat.error',
         turnId: turn.turnId,
         error: errorMessage(cause),

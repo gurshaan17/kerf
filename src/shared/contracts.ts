@@ -636,6 +636,9 @@ export const KERF_IPC = {
     applyPacing: 'kerf:references:apply-pacing',
   },
   chat: {
+    history: 'kerf:chat:history',
+    open: 'kerf:chat:open',
+    new: 'kerf:chat:new',
     send: 'kerf:chat:send',
     abort: 'kerf:chat:abort',
     provider: 'kerf:chat:provider',
@@ -743,6 +746,9 @@ export interface KerfBridge {
     readonly applyPacing: () => Promise<ReferencePacingResult>;
   };
   readonly chat: {
+    readonly history: () => Promise<ChatConversation[]>;
+    readonly open: (id: string) => Promise<ChatConversation>;
+    readonly new: () => Promise<void>;
     readonly send: (request: ChatSendRequest) => Promise<ChatStartResult>;
     readonly abort: () => Promise<boolean>;
     readonly provider: () => Promise<ChatProviderSetting>;
@@ -762,4 +768,25 @@ export interface KerfBridge {
   readonly events: {
     readonly subscribe: (listener: (event: KerfEvent) => void) => () => void;
   };
+}
+
+export type ChatTurnStatus = 'streaming' | 'done' | 'aborted' | 'error';
+
+export interface ChatTurn {
+  readonly id: string;
+  readonly message: string;
+  readonly text: string;
+  readonly tools: readonly ChatToolActivity[];
+  readonly status: ChatTurnStatus;
+  readonly providerLabel: string;
+  readonly error: string | null;
+  readonly hint: string | null;
+  readonly durationMs: number | null;
+}
+
+export interface ChatConversation {
+  readonly id: string;
+  readonly title: string;
+  readonly updatedAt: number;
+  readonly turns: readonly ChatTurn[];
 }

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ChatMarkdown } from './ChatMarkdown';
 import {
   Check,
+  History,
+  Plus,
   ChevronDown,
   Loader2,
   MessageSquare,
@@ -102,6 +104,11 @@ function ToolCard({ tool }: { readonly tool: ChatToolActivity }) {
 }
 
 export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
+  const conversations = useStudio((state) => state.chatConversations);
+  const loadHistory = useStudio((state) => state.loadChatHistory);
+  const openChat = useStudio((state) => state.openChat);
+  const newChat = useStudio((state) => state.newChat);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const turns = useStudio((state) => state.chatTurns);
   const activeTurnId = useStudio((state) => state.chatActiveTurnId);
   const chatError = useStudio((state) => state.chatError);
@@ -163,6 +170,28 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
           </h2>
         </div>
         <IconButton
+          label="New chat"
+          tooltip="New chat"
+          size="sm"
+          icon={<Plus size={14} />}
+          disabled={busy}
+          onClick={() => {
+            void newChat();
+            setHistoryOpen(false);
+          }}
+        />
+        <IconButton
+          label="Chat history"
+          tooltip="Chat history"
+          size="sm"
+          icon={<History size={14} />}
+          disabled={busy}
+          onClick={() => {
+            setHistoryOpen(!historyOpen);
+            void loadHistory();
+          }}
+        />
+        <IconButton
           label="AI settings"
           tooltip="AI settings"
           tooltipSide="bottom"
@@ -172,6 +201,36 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
         />
       </header>
 
+      {historyOpen ? (
+        <div
+          className="max-h-64 overflow-auto border-b border-line p-3"
+          aria-label="Chat history"
+        >
+          <p className="mb-2 text-[11px] font-semibold text-ink">
+            Saved chats in this project
+          </p>
+          {conversations.length === 0 ? (
+            <p className="text-[10px] text-ink-muted">No saved chats yet.</p>
+          ) : (
+            conversations.map((conversation) => (
+              <button
+                type="button"
+                key={conversation.id}
+                className="mb-1 block w-full rounded-sm border border-line px-2 py-2 text-left text-[11px] text-ink-muted hover:text-ink"
+                onClick={() => {
+                  void openChat(conversation.id);
+                  setHistoryOpen(false);
+                }}
+              >
+                <span className="block truncate">{conversation.title}</span>
+                <span className="text-[9px] text-ink-faint">
+                  {new Date(conversation.updatedAt).toLocaleString()}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
       <div className="border-b border-line px-3 py-2">
         <p className="flex items-center gap-1.5 text-[10px] text-ink-muted">
           <span

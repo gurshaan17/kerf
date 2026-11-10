@@ -538,6 +538,11 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   ipcMain.handle(KERF_IPC.chat.send, (_event, request: unknown) =>
     agent.start(chatSendSchema.parse(request)),
   );
+  ipcMain.handle(KERF_IPC.chat.history, () => agent.conversations());
+  ipcMain.handle(KERF_IPC.chat.open, (_event, id: unknown) =>
+    agent.openConversation(z.string().min(1).parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.chat.new, () => agent.newConversation());
   ipcMain.handle(KERF_IPC.chat.abort, () => agent.abort());
   ipcMain.handle(KERF_IPC.chat.provider, () =>
     analysis.providers.chatProviderSetting(),
