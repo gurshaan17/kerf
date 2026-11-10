@@ -18,8 +18,10 @@ export const FRAME_RATES = {
 
 export const frameRateSchema = z
   .object({
-    numerator: z.number().int().min(1).max(1000),
-    denominator: z.number().int().min(1).max(1001).default(1),
+    // Fraction components can be large for NTSC and variable-rate recordings.
+    // Bound the actual fps below, rather than the numerator or denominator.
+    numerator: z.number().int().min(1),
+    denominator: z.number().int().min(1).default(1),
   })
   .refine(
     (rate) => {

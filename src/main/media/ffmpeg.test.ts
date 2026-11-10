@@ -2,6 +2,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { assetSchema, createAsset, newId } from '@kerf/model';
 import {
   MediaProcessError,
   MediaToolError,
@@ -97,6 +98,36 @@ describe('media tool discovery', () => {
 });
 
 describe('parseFfprobeOutput', () => {
+  it('preserves screen recording frame rates through asset validation', () => {
+    // Metadata from a macOS recording, with audio before video.
+    const probe = parseFfprobeOutput(
+      JSON.stringify({
+        streams: [
+          { index: 0, codec_type: 'audio', avg_frame_rate: '0/0' },
+          {
+            index: 1,
+            codec_type: 'video',
+            avg_frame_rate: '20340/647',
+            r_frame_rate: '60/1',
+          },
+        ],
+        format: { duration: '10.806083' },
+      }),
+    );
+    const asset = assetSchema.parse({
+      ...createAsset({
+        projectId: newId('project'),
+        name: 'recording.mov',
+        sourcePath: '/recording.mov',
+        kind: 'video',
+      }),
+      frameRate: probe.frameRate,
+      streams: probe.streams,
+    });
+    expect(asset.frameRate).toEqual({ numerator: 20340, denominator: 647 });
+    expect(asset.streams[1]?.frameRate).toEqual(asset.frameRate);
+  });
+
   it('maps video and audio streams into the media model', () => {
     const probe = parseFfprobeOutput(SAMPLE_PROBE);
     expect(probe.hasVideo).toBe(true);

@@ -77,4 +77,25 @@ describe('time', () => {
       frameRateSchema.parse({ numerator: 1000, denominator: 1 }),
     ).toThrow();
   });
+
+  it.each([
+    ...Object.values(FRAME_RATES),
+    { numerator: 20340, denominator: 647 },
+    { numerator: 300000, denominator: 10001 },
+  ])('accepts valid rational frame rates: %j', (rate) => {
+    expect(frameRateSchema.parse(rate)).toEqual(rate);
+  });
+
+  it.each([
+    { numerator: 1, denominator: 2 },
+    { numerator: 241000, denominator: 1000 },
+    { numerator: 30, denominator: 0 },
+    { numerator: 30, denominator: -1 },
+    { numerator: 30.5, denominator: 1 },
+    { numerator: 30, denominator: 1.5 },
+    { numerator: Number.MAX_SAFE_INTEGER + 1, denominator: 1000 },
+    { numerator: 30, denominator: Infinity },
+  ])('rejects invalid rational frame rates: %j', (rate) => {
+    expect(frameRateSchema.safeParse(rate).success).toBe(false);
+  });
 });
