@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ChatMarkdown } from './ChatMarkdown';
 import {
   Check,
   ChevronDown,
@@ -251,9 +252,9 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
                       className="mt-0.5 shrink-0 text-ink-faint"
                       aria-hidden="true"
                     />
-                    <p className="text-[11px] leading-relaxed whitespace-pre-wrap text-ink-muted">
-                      {turn.text}
-                    </p>
+                    <div className="chat-markdown min-w-0 flex-1 text-[11px] leading-relaxed text-ink-muted">
+                      <ChatMarkdown text={turn.text} />
+                    </div>
                   </div>
                 ) : turn.status === 'streaming' ? (
                   <p className="flex items-center gap-1.5 pl-5 text-[10px] text-ink-faint">
