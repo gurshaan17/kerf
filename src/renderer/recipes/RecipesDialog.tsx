@@ -89,6 +89,8 @@ export function RecipesDialog({
       setWorking(false);
     }
   };
+  if (!open) return null;
+
   return (
     <Dialog
       open={open}
