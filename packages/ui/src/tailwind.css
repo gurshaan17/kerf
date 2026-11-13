@@ -10,7 +10,9 @@
  * keep working while primitives move over incrementally.
  */
 @theme static {
-  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --font-display:
+    'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
   --font-sans:
     'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
     sans-serif;
