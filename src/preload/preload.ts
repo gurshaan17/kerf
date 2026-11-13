@@ -92,6 +92,7 @@ const bridge: KerfBridge = {
     history: () => invoke<ProjectHistoryState>(KERF_IPC.edits.history),
   },
   assets: {
+    remove: (id) => invoke<ProjectSnapshot | null>(KERF_IPC.assets.remove, id),
     list: () => invoke<Asset[]>(KERF_IPC.assets.list),
     import: (paths) => invoke<Asset[]>(KERF_IPC.assets.import, paths),
     pick: () => invoke<Asset[]>(KERF_IPC.assets.pick),

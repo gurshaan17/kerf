@@ -51,6 +51,7 @@ export default function App() {
   const deleteProject = useStudio((state) => state.deleteProject);
   const revealProject = useStudio((state) => state.revealProject);
   const importFootage = useStudio((state) => state.importFootage);
+  const removeAsset = useStudio((state) => state.removeAsset);
   const relinkAsset = useStudio((state) => state.relinkAsset);
   const cancelJob = useStudio((state) => state.cancelJob);
   const refreshAssets = useStudio((state) => state.refreshAssets);
@@ -334,6 +335,7 @@ export default function App() {
             error={error}
             onImport={importFootage}
             onRelink={relinkAsset}
+            onRemove={removeAsset}
             onCancelJob={cancelJob}
             onRefresh={refreshAssets}
             analysis={analysis}

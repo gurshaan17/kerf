@@ -141,6 +141,58 @@ export class ProjectService {
     return this.repository.delete(projectId, { removeFolder });
   }
 
+  removeAsset(assetId: string): ProjectSnapshot {
+    const active = this.requireActive();
+    if (!active.assets.some((asset) => asset.id === assetId)) {
+      throw new Error('The source is not part of the open project.');
+    }
+    if (
+      this.jobs(active.project.id).some(
+        (job) =>
+          job.targetId === assetId &&
+          (job.status === 'queued' || job.status === 'running'),
+      )
+    ) {
+      throw new Error(
+        'Cancel or finish processing this source before removing it.',
+      );
+    }
+    const usesSource = (clip: Sequence['tracks'][number]['clips'][number]) =>
+      'assetId' in clip && clip.assetId === assetId;
+    if (
+      active.project.sequence.tracks.some(
+        (track) => track.locked && track.clips.some(usesSource),
+      )
+    ) {
+      throw new Error(
+        'Unlock the tracks using this source before removing it.',
+      );
+    }
+    const sequence = {
+      ...active.project.sequence,
+      tracks: active.project.sequence.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.filter((clip) => !usesSource(clip)),
+      })),
+      reference:
+        active.project.sequence.reference?.sourceAssetId === assetId
+          ? null
+          : active.project.sequence.reference,
+    };
+    const project = syncProject(active.project, sequence, this.now());
+    this.repository.removeProjectAsset(project, assetId);
+    // Old undo entries may restore clips referencing the permanently removed asset.
+    active.history.clear();
+    this.active = {
+      ...active,
+      project,
+      assets: active.assets.filter((asset) => asset.id !== assetId),
+    };
+    const snapshot = this.snapshot();
+    this.emit({ type: 'project.changed', snapshot, reason: 'assets' });
+    return snapshot;
+  }
+
   isOpen(): boolean {
     return this.active !== null;
   }

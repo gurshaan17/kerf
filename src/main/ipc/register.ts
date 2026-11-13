@@ -336,6 +336,32 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     const active = requireActiveProject(projects);
     return imports.refreshAvailability(active.project.id);
   });
+  ipcMain.handle(KERF_IPC.assets.remove, async (_event, id: unknown) => {
+    const active = requireActiveProject(projects);
+    const assetId = idSchema('asset').parse(id);
+    const asset = active.assets.find((candidate) => candidate.id === assetId);
+    if (!asset) throw new Error('The source is not part of the open project.');
+    const options = {
+      type: 'warning' as const,
+      title: 'Remove source',
+      message: `Remove “${asset.name}” from this project?`,
+      detail:
+        'Clips using this source will also be removed. This clears undo and redo history and cannot be undone. Your original file stays on disk.',
+      buttons: ['Cancel', 'Remove source'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    };
+    const window = BrowserWindow.getFocusedWindow();
+    const result = window
+      ? await dialog.showMessageBox(window, options)
+      : await dialog.showMessageBox(options);
+    if (result.response !== 1) return null;
+    if (projects.current()?.project.id !== active.project.id)
+      throw new Error('The open project changed. Select the source again.');
+    return projects.removeAsset(assetId);
+  });
+
   ipcMain.handle(
     KERF_IPC.assets.relink,
     async (_event, id: unknown, path: unknown) => {

@@ -586,6 +586,7 @@ export const KERF_IPC = {
     import: 'kerf:assets:import',
     pick: 'kerf:assets:pick',
     relink: 'kerf:assets:relink',
+    remove: 'kerf:assets:remove',
     refresh: 'kerf:assets:refresh',
   },
   jobs: {
@@ -696,6 +697,7 @@ export interface KerfBridge {
     readonly pick: () => Promise<Asset[]>;
     readonly refresh: () => Promise<Asset[]>;
     readonly relink: (id: string, path?: string) => Promise<Asset | null>;
+    readonly remove: (id: string) => Promise<ProjectSnapshot | null>;
   };
   readonly jobs: {
     readonly list: (projectId?: string) => Promise<JobSummary[]>;

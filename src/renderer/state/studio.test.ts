@@ -88,6 +88,7 @@ function makeBridge(snapshot: ProjectSnapshot) {
       history: vi.fn(async () => snapshot.history),
     },
     assets: {
+      remove: async () => null,
       list: vi.fn(async () => snapshot.assets),
       import: vi.fn(async () => []),
       pick: vi.fn(async () => []),

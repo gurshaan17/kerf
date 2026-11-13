@@ -84,6 +84,7 @@ export interface StudioState {
   revealProject: (id: string) => void;
   importFootage: () => Promise<void>;
   relinkAsset: (assetId: string) => Promise<void>;
+  removeAsset: (assetId: string) => Promise<void>;
   refreshAssets: () => Promise<void>;
   cancelJob: (jobId: string) => Promise<void>;
   analyze: (
@@ -670,6 +671,21 @@ export function createStudioStore(bridge: KerfBridge) {
           }
         } catch (cause) {
           fail(cause, 'Could not import footage');
+        } finally {
+          set({ busy: false });
+        }
+      },
+
+      async removeAsset(assetId) {
+        set({ busy: true, error: null });
+        try {
+          const snapshot = await bridge.assets.remove(assetId);
+          if (snapshot) {
+            setSnapshot(snapshot);
+            pushToast({ title: 'Source removed', tone: 'success' });
+          }
+        } catch (cause) {
+          fail(cause, 'Could not remove the source');
         } finally {
           set({ busy: false });
         }

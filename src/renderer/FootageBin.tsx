@@ -13,6 +13,7 @@ import {
   Palette,
   Plus,
   RefreshCw,
+  Trash2,
   ScanLine,
   Search,
   Settings2,
@@ -34,6 +35,7 @@ export interface FootageBinProps {
   readonly error: string | null;
   readonly onImport: () => Promise<void>;
   readonly onRelink: (assetId: string) => Promise<void>;
+  readonly onRemove: (assetId: string) => Promise<void>;
   readonly onCancelJob: (jobId: string) => Promise<void>;
   readonly onRefresh: () => Promise<void>;
   readonly analysis: readonly AnalysisAssetStatus[];
@@ -198,6 +200,7 @@ export function FootageBin({
   error,
   onImport,
   onRelink,
+  onRemove,
   onCancelJob,
   onRefresh,
   analysis,
@@ -724,7 +727,7 @@ export function FootageBin({
             </Button>
           </div>
 
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
               variant={selected.status === 'missing' ? 'primary' : 'secondary'}
               size="sm"
@@ -735,6 +738,15 @@ export function FootageBin({
               {selected.status === 'missing'
                 ? 'Relink source'
                 : 'Replace source'}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              leadingIcon={<Trash2 size={12} />}
+              disabled={busy}
+              onClick={() => void onRemove(selected.id)}
+            >
+              Remove source
             </Button>
             {selected.status === 'ready' ? (
               <span className="inline-flex items-center gap-1 font-mono text-[8px] tracking-[0.02em] text-ok uppercase">

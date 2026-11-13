@@ -43,6 +43,7 @@ const bridge: KerfBridge = {
     },
   },
   assets: {
+    remove: async () => null,
     list: async () => [],
     import: async () => [],
     pick: async () => [],

@@ -577,6 +577,26 @@ export class ProjectRepository {
     return asset;
   }
 
+  removeProjectAsset(project: Project, assetId: string): void {
+    this.database.transaction(() => {
+      const asset = this.findAsset(assetId);
+      if (!asset || asset.projectId !== project.id) {
+        throw new Error('The source is not part of this project.');
+      }
+      this.saveProject(project);
+      for (const profile of this.listReferenceProfiles(project.id)) {
+        if (profile.sourceAssetId === assetId) {
+          this.database
+            .prepare(
+              'DELETE FROM reference_profiles WHERE id = ? AND project_id = ?',
+            )
+            .run(profile.id, project.id);
+        }
+      }
+      this.deleteAsset(assetId);
+    })();
+  }
+
   deleteAsset(assetId: string): boolean {
     return (
       this.database.prepare('DELETE FROM assets WHERE id = ?').run(assetId)
