@@ -118,7 +118,17 @@ const providerSaveSchema = z.object({
 });
 const modelIdSchema = z.string().min(1).max(40);
 const chatSendSchema = z.object({
-  message: z.string().trim().min(1).max(8_000),
+  mentions: z
+    .array(
+      z.object({
+        assetId: idSchema('asset'),
+        start: z.number().int().nonnegative(),
+        end: z.number().int().positive(),
+      }),
+    )
+    .max(50)
+    .optional(),
+  message: z.string().min(1).max(8_000),
 });
 const mcpSettingsSchema = z
   .object({

@@ -8,6 +8,7 @@ import { findSequenceFrame } from './sequence-map';
 import type {
   AnalysisKind,
   ChatProviderSetting,
+  ChatAssetMention,
   ChatTurn,
   ChatConversation,
   ChatToolActivity,
@@ -113,7 +114,10 @@ export interface StudioState {
   revealExport: (id: string) => void;
   exportOtio: () => Promise<string | null>;
 
-  sendChat: (message: string) => Promise<boolean>;
+  sendChat: (
+    message: string,
+    mentions?: readonly ChatAssetMention[],
+  ) => Promise<boolean>;
   stopChat: () => Promise<void>;
   refreshChatProvider: () => Promise<void>;
   dismissChatError: () => void;
@@ -382,6 +386,7 @@ export function createStudioStore(bridge: KerfBridge) {
               {
                 id: event.turnId,
                 message: event.message,
+                mentions: event.mentions,
                 text: '',
                 tools: [],
                 status: 'streaming',
@@ -896,14 +901,17 @@ export function createStudioStore(bridge: KerfBridge) {
         }
       },
 
-      async sendChat(message) {
+      async sendChat(message, mentions) {
         const trimmed = message.trim();
         if (!trimmed) {
           return false;
         }
         set({ chatError: null });
         try {
-          const result = await bridge.chat.send({ message: trimmed });
+          const result = await bridge.chat.send({
+            message,
+            ...(mentions?.length ? { mentions } : {}),
+          });
           set((state) =>
             state.chatTurns.find(
               (turn) =>

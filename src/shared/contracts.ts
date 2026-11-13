@@ -379,7 +379,14 @@ export interface ChatToolActivity {
   readonly durationMs?: number;
 }
 
+export interface ChatAssetMention {
+  readonly assetId: string;
+  readonly start: number;
+  readonly end: number;
+}
+
 export interface ChatSendRequest {
+  readonly mentions?: readonly ChatAssetMention[];
   readonly message: string;
 }
 
@@ -466,6 +473,7 @@ export interface ReferencePacingResult {
 export type ChatEvent =
   | {
       readonly type: 'chat.started';
+      readonly mentions?: readonly ChatAssetMention[];
       readonly turnId: string;
       readonly sessionId: string;
       readonly message: string;
@@ -773,6 +781,7 @@ export interface KerfBridge {
 export type ChatTurnStatus = 'streaming' | 'done' | 'aborted' | 'error';
 
 export interface ChatTurn {
+  readonly mentions?: readonly ChatAssetMention[];
   readonly id: string;
   readonly message: string;
   readonly text: string;

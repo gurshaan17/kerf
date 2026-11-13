@@ -8,6 +8,7 @@ import { sequenceDurationFrames } from '@kerf/engine';
 import { toolRegistry } from '@kerf/tools';
 import type {
   ChatEvent,
+  ChatAssetMention,
   ChatConversation,
   ChatTurn,
   ChatSendRequest,
@@ -102,6 +103,14 @@ function renderFrameModelOutput(output: unknown) {
   return { type: 'text' as const, value: text };
 }
 
+function chatModelMessage(
+  message: string,
+  mentions: readonly ChatAssetMention[] = [],
+): string {
+  if (!mentions.length) return message;
+  return `${message}\n\nTagged source videos (use these exact asset IDs with tools; these are references, not uploaded files):\n${JSON.stringify(mentions.map((mention) => ({ assetId: mention.assetId, start: mention.start, end: mention.end, mention: message.slice(mention.start, mention.end) })))}`;
+}
+
 /**
  * Maps the shared tool catalog into the AI SDK's tool shape. Every tool keeps
  * its Zod validation at the registry boundary, so the model cannot hand raw
@@ -192,7 +201,10 @@ export class AgentService {
         .filter((turn) => turn.status === 'done')
         .slice(-20)
         .flatMap((turn) => [
-          { role: 'user' as const, content: turn.message },
+          {
+            role: 'user' as const,
+            content: chatModelMessage(turn.message, turn.mentions),
+          },
           { role: 'assistant' as const, content: turn.text },
         ]),
     );
@@ -213,6 +225,7 @@ export class AgentService {
       const turn: ChatTurn = {
         id: event.turnId,
         message: event.message,
+        mentions: event.mentions,
         text: '',
         tools: [],
         status: 'streaming',
@@ -283,8 +296,8 @@ export class AgentService {
   }
 
   start(request: ChatSendRequest): ChatStartResult {
-    const message = request.message.trim();
-    if (message.length === 0) {
+    const message = request.message;
+    if (message.trim().length === 0) {
       throw new Error('Write a message before sending it.');
     }
     if (message.length > 8_000) {
@@ -296,6 +309,34 @@ export class AgentService {
     const snapshot = this.options.projects.current();
     if (!snapshot) {
       throw new Error('Open a project before chatting.');
+    }
+    const mentions = request.mentions ?? [];
+    if (mentions.length > 50)
+      throw new Error('Tag up to 50 videos per message.');
+    let previousEnd = 0;
+    for (const mention of mentions) {
+      if (
+        !Number.isInteger(mention.start) ||
+        !Number.isInteger(mention.end) ||
+        mention.start < previousEnd ||
+        mention.end <= mention.start ||
+        mention.end > message.length ||
+        message[mention.start] !== '@'
+      ) {
+        throw new Error(
+          'A video tag is invalid. Remove it and tag the video again.',
+        );
+      }
+      if (
+        !snapshot.assets.some(
+          (asset) => asset.id === mention.assetId && asset.kind === 'video',
+        )
+      ) {
+        throw new Error(
+          'A tagged video is no longer in this project. Remove the tag and choose another source.',
+        );
+      }
+      previousEnd = mention.end;
     }
     const provider = this.options.providers.chatProvider();
     if (!provider) {
@@ -315,12 +356,13 @@ export class AgentService {
     this.active = turn;
     this.emit({
       type: 'chat.started',
+      mentions,
       turnId: turn.turnId,
       sessionId: this.sessionId,
       message,
       providerLabel: provider.label,
     });
-    void this.run(turn, provider, model, snapshot, message);
+    void this.run(turn, provider, model, snapshot, message, mentions);
     return {
       turnId: turn.turnId,
       sessionId: this.sessionId,
@@ -358,6 +400,7 @@ export class AgentService {
     model: LanguageModel,
     snapshot: ProjectSnapshot,
     message: string,
+    mentions: readonly ChatAssetMention[],
   ): Promise<void> {
     const toolTimings = new Map<string, ToolTiming>();
     let text = '';
@@ -371,7 +414,10 @@ export class AgentService {
           providerLabel: provider.label,
           referenceName: snapshot.project.sequence.reference?.name ?? null,
         }),
-        messages: [...this.history, { role: 'user', content: message }],
+        messages: [
+          ...this.history,
+          { role: 'user', content: chatModelMessage(message, mentions) },
+        ],
         tools: createAgentToolSet(this.options.tools),
         stopWhen: stepCountIs(12),
         toolCallConcurrency: 1,
@@ -463,7 +509,7 @@ export class AgentService {
       }
 
       this.history.push(
-        { role: 'user', content: message },
+        { role: 'user', content: chatModelMessage(message, mentions) },
         { role: 'assistant', content: text },
       );
       if (this.history.length > 40) {
