@@ -152,6 +152,8 @@ export class SearchService {
       return { results: [], vectorSearch: false };
     }
     const limit = Math.max(1, Math.min(request.limit ?? 40, 100));
+    const selected = request.assetIds ? new Set(request.assetIds) : null;
+    if (selected?.size === 0) return { results: [], vectorSearch: false };
     const assets = new Map(
       this.repository
         .listAssets(projectId)
@@ -160,11 +162,23 @@ export class SearchService {
     let transcriptRows: FtsRow[] = [];
     let sceneRows: FtsRow[] = [];
     if (this.fts5Enabled) {
-      transcriptRows = this.fts('transcript_fts', projectId, words, limit);
-      sceneRows = this.fts('scene_fts', projectId, words, limit);
+      transcriptRows = this.fts(
+        'transcript_fts',
+        projectId,
+        words,
+        limit,
+        request.assetIds,
+      );
+      sceneRows = this.fts(
+        'scene_fts',
+        projectId,
+        words,
+        limit,
+        request.assetIds,
+      );
     }
     if (transcriptRows.length === 0 && sceneRows.length === 0) {
-      const lexical = this.lexical(projectId, words, limit);
+      const lexical = this.lexical(projectId, words, limit, selected);
       transcriptRows = lexical.transcripts;
       sceneRows = lexical.scenes;
     }
@@ -189,17 +203,19 @@ export class SearchService {
     projectId: string,
     words: readonly string[],
     limit: number,
+    assetIds?: readonly string[],
   ): FtsRow[] {
     const sql = `SELECT text, asset_id, start_frame, end_frame,
       bm25(${table}) AS rank
       FROM ${table}
       WHERE ${table} MATCH ? AND project_id = ?
+      ${assetIds ? `AND asset_id IN (${assetIds.map(() => '?').join(',')})` : ''}
       ORDER BY rank LIMIT ?`;
     const run = (query: string): FtsRow[] => {
       try {
         return this.database
           .prepare(sql)
-          .all(query, projectId, limit) as FtsRow[];
+          .all(query, projectId, ...(assetIds ?? []), limit) as FtsRow[];
       } catch {
         return [];
       }
@@ -215,10 +231,12 @@ export class SearchService {
     projectId: string,
     words: readonly string[],
     limit: number,
+    selected: ReadonlySet<string> | null,
   ): { transcripts: FtsRow[]; scenes: FtsRow[] } {
     const needle = words.join(' ');
     const transcripts: FtsRow[] = [];
     for (const transcript of this.repository.listTranscripts(projectId)) {
+      if (selected && !selected.has(transcript.assetId)) continue;
       for (const window of transcriptWindows(transcript)) {
         const index = window.text.toLowerCase().indexOf(needle);
         if (index >= 0) {
@@ -237,6 +255,7 @@ export class SearchService {
     }
     const scenes: FtsRow[] = [];
     for (const scene of this.repository.listScenes(projectId)) {
+      if (selected && !selected.has(scene.assetId)) continue;
       if (!scene.description) {
         continue;
       }

@@ -26,6 +26,13 @@ Verification contract:
 5. After authorComposition or reviseComposition, call previewComposition and repair any policy issue it reports.
 6. If a requested capability is unavailable (no transcript, no beat map, no provider, no preview), report the clean error and stop. Do not fabricate analysis.
 
+Rough-cut workflow:
+- For multi-source cuts use findInTranscript with explicit assetIds. Search results include native source-frame rates and complete evidence ranges with IDs. readTranscript also returns speech segment IDs. Do not mistake search windows for complete sentences.
+- Use planRoughCut with selected assetIds, intent and optional targetDurationSeconds. For editorial ordering, pass ordered selections of exact evidenceId/reason pairs. Without selections it uses matching complete segments in source order and reports any fallback or target mismatch. Never promise exact duration or semantic quality without reviewing it.
+- Planning uses existing local evidence; missing analysis must be produced explicitly first. Audio sources need speech transcripts; silent sources need described scenes. Unsupported/overlapping ranges are rejected. Plans append normal-speed source footage and synchronized audio after existing content.
+- readSourceFilmstrip provides up to six cached SOURCE scene midpoints, not timeline previews. Source imagery in built-in chat requires vision consent. If unavailable, use text evidence and say what is missing.
+- Use readEditProposal and applyEditProposal for review. The desktop panel lets the user inspect each source and include/exclude ranges. After approval, captions, ducking and verification are separate steps. Use writeCaptions/duckUnderSpeech with clipIds from the new cut only; never caption or duck an entire project to finish one cut.
+
 AI analysis workflow:
 - Discover configured provider IDs and consent through readContext.editingProviders. Never invent or silently change provider settings.
 - For contextual cuts or screen interactions use planAutoCut or planScreenPolish. These return asynchronous job IDs; report progress and let the user return after analysis. Avoid spending the whole turn polling.

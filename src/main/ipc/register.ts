@@ -92,6 +92,7 @@ const analysisRunSchema = z.object({
   onlyUndescribed: z.boolean().optional(),
 });
 const searchSchema = z.object({
+  assetIds: z.array(idSchema('asset')).min(1).max(20).optional(),
   query: z.string().max(200),
   limit: z.number().int().min(1).max(100).optional(),
 });
@@ -221,6 +222,16 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       'user',
     ),
   );
+  ipcMain.handle(KERF_IPC.editing.finish, (_event, request: unknown) => {
+    const parsed = z
+      .object({
+        jobId: idSchema('job'),
+        stage: z.enum(['captions', 'duck', 'verify']),
+      })
+      .strict()
+      .parse(request);
+    return options.tools.finishRoughCut(parsed.jobId, parsed.stage);
+  });
   ipcMain.handle(KERF_IPC.editing.reviews, () =>
     options.tools.editingReviews(),
   );

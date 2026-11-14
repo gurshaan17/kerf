@@ -1,3 +1,4 @@
+import { RoughCutService } from './analysis/rough-cut-service';
 import { EditingService } from './tools/editing';
 import { app, shell } from 'electron';
 import { join } from 'node:path';
@@ -113,7 +114,15 @@ export function createKerfServices(
     const renderer = new RendererBridge({
       framesDir: join(app.getPath('userData'), 'tool-frames'),
     });
+    const roughCut = new RoughCutService({
+      referenceProfiles: (projectId) =>
+        repository.listReferenceProfiles(projectId),
+      projects,
+      jobs,
+      search: (request) => analysis.query(request),
+    });
     const editing = new EditingService({
+      roughCut,
       projects,
       jobs,
       autoCut,
@@ -164,6 +173,7 @@ export function createKerfServices(
       agent,
       mcp,
       dispose() {
+        roughCut.dispose();
         screenPolish.dispose();
         autoCut.dispose();
         tts.dispose();

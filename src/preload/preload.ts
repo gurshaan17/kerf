@@ -49,6 +49,7 @@ const invoke = <Result>(channel: string, ...args: unknown[]): Promise<Result> =>
 // needs instead of handing over Node.js or the whole `electron` module.
 const bridge: KerfBridge = {
   editing: {
+    finish: (request) => invoke(KERF_IPC.editing.finish, request),
     cancel: (jobId) => invoke(KERF_IPC.editing.cancel, jobId),
     reviews: () => invoke(KERF_IPC.editing.reviews),
     confirm: (request) => invoke(KERF_IPC.editing.confirm, request),

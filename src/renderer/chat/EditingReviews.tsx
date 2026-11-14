@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fpsToNumber } from '@kerf/model';
 import { assetMediaUrl } from '@kerf/canvas';
+import type { ChatEditVerification } from '../../shared/contracts';
 import type { EditingReview } from '@kerf/tools';
 import { Button } from '@kerf/ui';
 import { useStudio } from '../state/StudioProvider';
@@ -58,28 +59,58 @@ function Review({ review }: { review: EditingReview }) {
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [finishNote, setFinishNote] = useState('');
+  const [verification, setVerification] = useState<ChatEditVerification | null>(
+    null,
+  );
   const [receipt, setReceipt] = useState(review.receipt);
   const [cancelled, setCancelled] = useState(false);
-  const [previewFrame, setPreviewFrame] = useState<number | null>(null);
+  const [preview, setPreview] = useState<{
+    assetId: string;
+    seconds: number;
+  } | null>(null);
   useEffect(() => {
     setSelected(review.selectedIds);
   }, [review.selectedIds.join('|')]);
+  useEffect(() => {
+    if (video.current && preview) {
+      video.current.pause();
+      video.current.currentTime = preview.seconds;
+    }
+  }, [preview?.assetId, preview?.seconds]);
   const proposal = review.proposal;
   const clip = snapshot?.project.sequence.tracks
     .flatMap((t) => t.clips)
     .find((c) => c.id === proposal?.clipId);
-  const asset = snapshot?.assets.find((a) => a.id === proposal?.assetId);
+  const asset = snapshot?.assets.find(
+    (a) => a.id === (preview?.assetId ?? proposal?.assetId),
+  );
   const fps = snapshot ? fpsToNumber(snapshot.project.sequence.frameRate) : 24;
   const terminal =
     cancelled ||
     receipt ||
     ['applied', 'cancelled'].includes(review.job.reviewStatus);
   const running = ['queued', 'running'].includes(review.job.status);
-  const inspect = (frame: number, space: 'source' | 'sequence') => {
+  const inspect = (
+    frame: number,
+    space: 'source' | 'sequence',
+    change?: NonNullable<EditingReview['proposal']>['changes'][number],
+  ) => {
+    if (proposal?.kind === 'roughCut' && change?.assetId) {
+      setPreview({
+        assetId: change.assetId,
+        seconds:
+          frame /
+          fpsToNumber(
+            change.sourceFrameRate ?? snapshot!.project.sequence.frameRate,
+          ),
+      });
+      return;
+    }
     if (!clip || !('sourceInFrame' in clip)) return;
     const sourceFrame =
       space === 'source' ? frame : frame - clip.startFrame + clip.sourceInFrame;
-    setPreviewFrame(sourceFrame);
+    if (asset) setPreview({ assetId: asset.id, seconds: sourceFrame / fps });
     if (video.current) video.current.currentTime = sourceFrame / fps;
     seek(
       space === 'source' ? clip.startFrame + frame - clip.sourceInFrame : frame,
@@ -107,7 +138,11 @@ function Review({ review }: { review: EditingReview }) {
   return (
     <section className="grid gap-2 rounded-sm border border-line bg-surface-0 p-2 text-[11px] text-ink-muted">
       <p className="font-semibold text-ink">
-        {review.job.kind === 'analysis.autoCut' ? 'Auto cut' : 'Screen polish'}{' '}
+        {review.job.kind === 'analysis.roughCut'
+          ? 'Rough cut'
+          : review.job.kind === 'analysis.autoCut'
+            ? 'Auto cut'
+            : 'Screen polish'}{' '}
         · {review.job.status}
       </p>
       <p>
@@ -120,19 +155,109 @@ function Review({ review }: { review: EditingReview }) {
           the timeline to check the result.
         </p>
       )}
+      {proposal?.kind === 'roughCut' && (receipt || review.receipt) && (
+        <>
+          <p>Finish this cut in separate undoable steps.</p>
+          {(['captions', 'duck', 'verify'] as const).map((stage) => (
+            <Button
+              key={stage}
+              size="sm"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setError('');
+                try {
+                  const result = await window.kerf.editing!.finish({
+                    jobId: review.job.id,
+                    stage,
+                  });
+                  setFinishNote(
+                    result.note ?? result.verification?.note ?? 'Done.',
+                  );
+                  setVerification(result.verification ?? null);
+                } catch (cause) {
+                  setError(
+                    cause instanceof Error ? cause.message : String(cause),
+                  );
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {stage === 'captions'
+                ? 'Caption this cut'
+                : stage === 'duck'
+                  ? 'Duck background audio'
+                  : 'Verify this cut'}
+            </Button>
+          ))}
+          {finishNote && <p>{finishNote}</p>}
+          {verification?.findings.map((finding, index) => (
+            <button
+              type="button"
+              key={index}
+              className="text-left"
+              onClick={() => seek(finding.startFrame)}
+            >
+              {finding.severity}: {finding.message} · frame {finding.startFrame}
+            </button>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            {verification?.previews.map((p) => (
+              <button
+                type="button"
+                className="w-28"
+                key={p.frame}
+                onClick={() => seek(p.frame)}
+              >
+                <img src={p.dataUrl} alt={`Cut preview at frame ${p.frame}`} />
+                Frame {p.frame}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       {(cancelled || review.job.reviewStatus === 'cancelled') && (
         <p>Cancelled. No further changes will apply.</p>
       )}
       {!terminal && proposal && (
         <>
-          <p>Review each proposed change. Uncheck sections to retain them.</p>
-          {asset && previewFrame !== null && (
+          <p>
+            {proposal.kind === 'roughCut'
+              ? 'Review the ordered source ranges. Uncheck ranges to leave them out of this cut.'
+              : 'Review each proposed change. Uncheck sections to retain them.'}
+          </p>
+          {proposal.roughCut && (
+            <>
+              <p>{proposal.roughCut.intent}</p>
+              <p>
+                Selected cut:{' '}
+                {(
+                  proposal.changes
+                    .filter((c) => selected.includes(c.id))
+                    .reduce((n, c) => n + (c.durationFrames ?? 0), 0) / fps
+                ).toFixed(2)}
+                s · Appends at sequence frame {proposal.roughCut.appendAtFrame}
+              </p>
+              {proposal.roughCut.targetDurationSeconds && (
+                <p>
+                  Target: {proposal.roughCut.targetDurationSeconds}s · Complete
+                  source ranges determine the final duration.
+                </p>
+              )}
+              {proposal.roughCut.unmetConstraints.map((note) => (
+                <p key={note}>{note}</p>
+              ))}
+            </>
+          )}
+          {asset && preview !== null && (
             <video
+              key={asset.id}
               ref={video}
               src={assetMediaUrl(asset, 'source')}
               onLoadedMetadata={() => {
-                if (video.current && previewFrame !== null)
-                  video.current.currentTime = previewFrame / fps;
+                if (video.current && preview)
+                  video.current.currentTime = preview.seconds;
               }}
               controls
               preload="metadata"
@@ -142,7 +267,7 @@ function Review({ review }: { review: EditingReview }) {
           )}
           {!proposal.changes.length && <p>No changes suggested.</p>}
           <div className="grid max-h-56 gap-2 overflow-auto">
-            {proposal.changes.map((change) => (
+            {proposal.changes.map((change, index) => (
               <div key={change.id}>
                 <label className="flex items-start gap-2">
                   <input
@@ -158,6 +283,8 @@ function Review({ review }: { review: EditingReview }) {
                     }
                   />
                   <span>
+                    {proposal.kind === 'roughCut' &&
+                      `${index + 1}. ${snapshot?.assets.find((a) => a.id === change.assetId)?.name ?? change.assetId} · `}
                     {change.description} · {change.reason}
                   </span>
                 </label>
@@ -165,7 +292,7 @@ function Review({ review }: { review: EditingReview }) {
                   type="button"
                   className="text-accent"
                   onClick={() =>
-                    inspect(change.startFrame, proposal.frameSpace)
+                    inspect(change.startFrame, proposal.frameSpace, change)
                   }
                 >
                   Inspect {proposal.frameSpace} frames {change.startFrame}–
@@ -176,7 +303,7 @@ function Review({ review }: { review: EditingReview }) {
                     type="button"
                     key={frame}
                     className="ml-2 text-accent"
-                    onClick={() => inspect(frame, 'source')}
+                    onClick={() => inspect(frame, 'source', change)}
                   >
                     Evidence {frame}
                   </button>

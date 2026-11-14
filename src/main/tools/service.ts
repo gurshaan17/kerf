@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import type { ChatEditVerification } from '../../shared/contracts';
+import { roughCutEvidence } from '@kerf/tools';
 import type { EditingService } from './editing';
 import { sequenceDurationFrames } from '@kerf/engine';
 import type { EditReceipt } from '@kerf/tools';
@@ -181,6 +184,99 @@ export class ToolService {
     return run;
   }
 
+  finishRoughCut(jobId: string, stage: 'captions' | 'duck' | 'verify') {
+    const run = this.queue.then(async () => {
+      if (!this.options.editing)
+        throw new Error('Rough-cut finishing is unavailable.');
+      const clipIds = this.options.editing.roughCutClipIds(jobId);
+      const snapshot = this.snapshot();
+      const sequence = snapshot?.project.sequence;
+      const clips = sequence?.tracks
+        .flatMap((t) => t.clips)
+        .filter((c) => clipIds.includes(c.id));
+      if (
+        !snapshot ||
+        !sequence ||
+        !clips?.length ||
+        clips.length !== clipIds.length
+      )
+        throw new Error(
+          'The applied cut changed. Inspect the timeline before continuing.',
+        );
+      let receipt: EditReceipt | undefined;
+      const context = this.context('user', (value) => {
+        receipt = value;
+      });
+      if (stage !== 'verify') {
+        const output = await toolRegistry.call(
+          stage === 'captions' ? 'writeCaptions' : 'duckUnderSpeech',
+          { clipIds },
+          context,
+        );
+        const ducked = output as { duckedClipCount?: number; note?: string };
+        return {
+          receipt,
+          note:
+            stage === 'captions'
+              ? 'Captions applied as a separate undo step.'
+              : (ducked.note ??
+                `Lowered ${ducked.duckedClipCount ?? 0} background audio clips as a separate undo step.`),
+        };
+      }
+      const result = (await toolRegistry.call(
+        'verifyTimeline',
+        {},
+        context,
+      )) as { findings: ChatEditVerification['findings'] };
+      const previews: { frame: number; dataUrl: string }[] = [];
+      let complete = false;
+      let note =
+        'Structural checks complete. Source audio, playback and visual quality need review.';
+      const frames = [
+        ...new Set([
+          clips[0]!.startFrame,
+          ...clips
+            .slice(0, 2)
+            .map((c) => c.startFrame + Math.floor(c.durationFrames / 2)),
+        ]),
+      ].slice(0, 3);
+      try {
+        const renderer = context.renderer();
+        if (!renderer) throw new Error('Preview renderer unavailable.');
+        for (const frame of frames) {
+          if (this.options.projects.current()?.project.sequence !== sequence)
+            throw new Error('Timeline changed during verification.');
+          const image = await renderer.renderFrame({ frame, maxWidth: 480 });
+          const bytes = readFileSync(image.path);
+          if (bytes.length > 2_000_000)
+            throw new Error('Preview exceeds the image budget.');
+          previews.push({
+            frame,
+            dataUrl: `data:image/png;base64,${bytes.toString('base64')}`,
+          });
+        }
+        if (this.options.projects.current()?.project.sequence !== sequence)
+          throw new Error('Timeline changed during verification.');
+        complete = true;
+      } catch (cause) {
+        note += ' ' + (cause instanceof Error ? cause.message : String(cause));
+      }
+      return {
+        verification: {
+          status: complete ? ('checked' as const) : ('partial' as const),
+          findings: result.findings,
+          previews,
+          note,
+        },
+      };
+    });
+    this.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   private context(
     actor: 'agent' | 'mcp' | 'system' | 'user',
     onCommit?: (receipt: EditReceipt) => void,
@@ -303,12 +399,14 @@ export class ToolService {
 
   private search(request: {
     readonly query: string;
+    readonly assetIds?: readonly string[];
     readonly limit?: number;
   }): ToolSearchResponse {
     if (!this.options.analysis) {
       throw new Error('Search is not available in this session.');
     }
     const response = this.options.analysis.query(request);
+    const snapshot = this.snapshot();
     const results: ToolSearchHit[] = response.results.map((result) => ({
       id: result.id,
       kind: result.kind,
@@ -318,6 +416,25 @@ export class ToolService {
       startFrame: result.startFrame,
       endFrame: result.endFrame,
       score: result.score,
+      sourceFrameRate:
+        snapshot?.assets.find((a) => a.id === result.assetId)?.frameRate ??
+        undefined,
+      evidence: snapshot
+        ? (() => {
+            try {
+              return roughCutEvidence(snapshot, [result.assetId])
+                .filter(
+                  (e) =>
+                    e.kind === result.kind &&
+                    e.startFrame < result.endFrame &&
+                    e.endFrame > result.startFrame,
+                )
+                .slice(0, 20);
+            } catch {
+              return [];
+            }
+          })()
+        : [],
     }));
     return { results, vectorSearch: response.vectorSearch };
   }

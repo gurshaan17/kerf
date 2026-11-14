@@ -186,6 +186,7 @@ export interface AnalysisAssetStatus {
 export interface SearchRequest {
   readonly query: string;
   readonly limit?: number;
+  readonly assetIds?: readonly string[];
 }
 
 export type SearchMatchKind = 'transcript' | 'scene';
@@ -558,6 +559,7 @@ export const KERF_IPC = {
     reviews: 'kerf:editing:reviews',
     confirm: 'kerf:editing:confirm',
     cancel: 'kerf:editing:cancel',
+    finish: 'kerf:editing:finish',
   },
   screenPolish: {
     generate: 'kerf:screen-polish:generate',
@@ -685,6 +687,14 @@ export interface KerfEventEnvelope {
 /** The complete surface exposed on `window.kerf`. Keep this allowlist small. */
 export interface KerfBridge {
   readonly editing?: {
+    finish(request: {
+      jobId: string;
+      stage: 'captions' | 'duck' | 'verify';
+    }): Promise<{
+      receipt?: EditReceipt;
+      note?: string;
+      verification?: ChatEditVerification;
+    }>;
     cancel(jobId: string): Promise<unknown>;
     reviews(): Promise<readonly import('@kerf/tools').EditingReview[]>;
     confirm(request: {

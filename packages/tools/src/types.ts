@@ -43,6 +43,7 @@ export interface ToolEditResult {
 export interface ToolSearchRequest {
   readonly query: string;
   readonly limit?: number;
+  readonly assetIds?: readonly string[];
 }
 
 export interface ToolSearchHit {
@@ -54,6 +55,8 @@ export interface ToolSearchHit {
   readonly startFrame: number;
   readonly endFrame: number;
   readonly score: number;
+  readonly evidence?: readonly import('./rough-cut').SourceEvidence[];
+  readonly sourceFrameRate?: FrameRate;
 }
 
 export interface ToolSearchResponse {
@@ -211,8 +214,23 @@ export interface EditingProposal {
   readonly clipId: string;
   readonly assetId: string;
   readonly fingerprint: string;
-  readonly kind: 'autoCut' | 'screenPolish';
+  readonly kind: 'autoCut' | 'screenPolish' | 'roughCut';
+  readonly roughCut?: {
+    intent: string;
+    assetIds: readonly string[];
+    targetDurationSeconds?: number;
+    estimatedDurationFrames: number;
+    estimatedDurationSeconds: number;
+    appendAtFrame: number;
+    unmetConstraints: readonly string[];
+  };
   readonly changes: readonly {
+    assetId?: string;
+    evidenceId?: string;
+    evidenceKind?: 'transcript' | 'scene';
+    sourceFrameRate?: FrameRate;
+    sourceInFrame?: number;
+    durationFrames?: number;
     id: string;
     startFrame: number;
     endFrame: number;
@@ -229,6 +247,9 @@ export interface EditingReview {
   readonly receipt?: EditReceipt;
 }
 export interface ToolEditingAccess {
+  planRoughCut?(
+    input: import('./rough-cut').RoughCutPlanRequest,
+  ): EditingJob & { proposal: EditingProposal };
   providers(): readonly {
     id: string;
     label: string;

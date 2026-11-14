@@ -1,3 +1,5 @@
+import type { RoughCutService } from '../analysis/rough-cut-service';
+import type { RoughCutPlanRequest } from '@kerf/tools';
 import type { EditReceipt } from '@kerf/tools';
 import type { EditCommand } from '@kerf/model';
 import type {
@@ -13,6 +15,7 @@ import type { ScreenPolishService } from '../analysis/screen-polish-service';
 import type { SqliteDatabase } from '../db/connection';
 
 export interface EditingServiceOptions {
+  roughCut?: Pick<RoughCutService, 'generate' | 'proposal' | 'prepare'>;
   projects: { current(): { project: { id: string } } | null };
   jobs: Pick<JobQueue, 'get' | 'list' | 'cancel'>;
   autoCut: Pick<AutoCutService, 'generate' | 'proposal' | 'prepare'>;
@@ -33,7 +36,11 @@ export class EditingService implements ToolEditingAccess {
       !projectId ||
       !job ||
       job.projectId !== projectId ||
-      !['analysis.autoCut', 'analysis.screenPolish'].includes(job.kind)
+      ![
+        'analysis.autoCut',
+        'analysis.screenPolish',
+        'analysis.roughCut',
+      ].includes(job.kind)
     )
       throw new Error('That editing job does not belong to the open project.');
     return job;
@@ -76,6 +83,12 @@ export class EditingService implements ToolEditingAccess {
       .get(`editing-review:${jobId}`) as { value_json: string } | undefined;
     return row ? JSON.parse(row.value_json).receipt : undefined;
   }
+  planRoughCut(input: RoughCutPlanRequest) {
+    if (!this.options.roughCut)
+      throw new Error('Rough-cut planning is unavailable.');
+    const { job, proposal } = this.options.roughCut.generate(input);
+    return { ...this.read(job.id), proposal };
+  }
   start(
     kind: 'autoCut' | 'screenPolish',
     input: { clipId: string; providerId: string; purpose?: string },
@@ -115,6 +128,8 @@ export class EditingService implements ToolEditingAccess {
   proposal(jobId: string): EditingProposal | null {
     const job = this.job(jobId);
     if (job.status !== 'succeeded') return null;
+    if (job.kind === 'analysis.roughCut')
+      return this.options.roughCut?.proposal(jobId) ?? null;
     if (job.kind === 'analysis.autoCut') {
       const p = this.options.autoCut.proposal(jobId);
       return (
@@ -169,6 +184,11 @@ export class EditingService implements ToolEditingAccess {
       changeIds.some((id) => !proposal.changes.some((c) => c.id === id))
     )
       throw new Error('Select unique changes from the stored proposal.');
+    if (proposal.kind === 'roughCut') {
+      if (!this.options.roughCut)
+        throw new Error('Rough-cut planning is unavailable.');
+      return this.options.roughCut.prepare(jobId, changeIds);
+    }
     if (proposal.kind === 'autoCut')
       return this.options.autoCut.prepare({
         jobId,
@@ -191,7 +211,11 @@ export class EditingService implements ToolEditingAccess {
     return this.options.jobs
       .list(projectId)
       .filter((j) =>
-        ['analysis.autoCut', 'analysis.screenPolish'].includes(j.kind),
+        [
+          'analysis.autoCut',
+          'analysis.screenPolish',
+          'analysis.roughCut',
+        ].includes(j.kind),
       )
       .slice(0, 40)
       .map((job) => {
@@ -206,6 +230,19 @@ export class EditingService implements ToolEditingAccess {
             [],
         };
       });
+  }
+  roughCutClipIds(jobId: string): readonly string[] {
+    const job = this.job(jobId);
+    const receipt = this.receipt(jobId);
+    if (
+      job.kind !== 'analysis.roughCut' ||
+      this.state(jobId) !== 'applied' ||
+      !receipt
+    )
+      throw new Error('Apply and review this rough cut before finishing it.');
+    return receipt.changes
+      .filter((c) => c.kind === 'added' && c.visual)
+      .map((c) => c.clipId);
   }
   /** Synchronous revalidation and commit; never exposed as a model tool. */
   confirm(jobId: string, changeIds: readonly string[], context: ToolContext) {

@@ -1,3 +1,4 @@
+import { sourceFilmstripImages } from '../tools/source-images';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -70,6 +71,24 @@ function textResult(value: unknown, toolName?: string) {
         // The path may have been pruned between the render and this call.
       }
     }
+  }
+  if (toolName === 'readSourceFilmstrip') {
+    const images = sourceFilmstripImages(value);
+    for (const image of images)
+      content.push({
+        type: 'image',
+        data: image.data,
+        mimeType: image.mimeType,
+      });
+    content.push({
+      type: 'text',
+      text: JSON.stringify({
+        deliveredSourceFrames: images.map((i) => i.frame),
+        note: images.length
+          ? 'Source images only.'
+          : 'Source images unavailable or exceed the image budget.',
+      }),
+    });
   }
   content.push({
     type: 'text',

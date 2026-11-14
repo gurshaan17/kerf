@@ -144,3 +144,47 @@ describe('SearchService', () => {
     });
   });
 });
+
+it.each([true, false])(
+  'filters selected assets before limiting search results (FTS=%s)',
+  (fts) => {
+    const { bundle, asset, repository, search } = makeContext(fts);
+    const other = repository.saveAsset({
+      ...asset,
+      id: newId('asset'),
+      name: 'Chosen.mp4',
+      sourcePath: '/chosen.mp4',
+    });
+    for (const source of [asset, other])
+      repository.saveTranscript(
+        createTranscript({
+          assetId: source.id,
+          now: 1,
+          segments: [
+            {
+              id: newId('segment'),
+              startFrame: 0,
+              endFrame: 24,
+              text: 'Matching speech evidence',
+              words: [],
+            },
+          ],
+        }),
+      );
+    search.reindexProject(bundle.project.id);
+    const result = search.search(bundle.project.id, {
+      query: 'Matching',
+      assetIds: [other.id],
+      limit: 1,
+    });
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]?.assetId).toBe(other.id);
+    expect(
+      search.search(bundle.project.id, {
+        query: 'Matching',
+        assetIds: [],
+        limit: 1,
+      }).results,
+    ).toEqual([]);
+  },
+);

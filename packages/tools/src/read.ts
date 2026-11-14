@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Asset, Clip, Scene, Transcript } from '@kerf/model';
 import {
   OVERLAY_KINDS,
+  idSchema,
   assetKindSchema,
   blendModeSchema,
   effectTypeSchema,
@@ -369,11 +370,15 @@ export const findInTranscriptTool = {
   input: z.object({
     query: z.string().trim().min(1),
     limit: z.number().int().positive().max(50).default(10),
+    assetIds: z.array(idSchema('asset')).min(1).max(20).optional(),
   }),
   readOnly: true,
-  execute(context: ToolContext, input: { query: string; limit: number }) {
+  execute(
+    context: ToolContext,
+    input: { query: string; limit: number; assetIds?: string[] },
+  ) {
     requireSnapshot(context);
-    return context.search({ query: input.query, limit: input.limit });
+    return context.search(input);
   },
 };
 

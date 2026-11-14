@@ -232,3 +232,38 @@ describe('McpServerHost', () => {
     expect(host.recentActivity().every((entry) => !entry.ok)).toBe(true);
   }, 20_000);
 });
+
+it('delivers cached source filmstrip images over MCP', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'kerf-mcp-filmstrip-'));
+  const path = join(directory, 'scene.jpg');
+  const bytes = Buffer.from([0xff, 0xd8, 0xff]);
+  writeFileSync(path, bytes);
+  const host = new McpServerHost({
+    tools: {
+      call: async () => ({
+        frames: [{ path, frame: 24, mimeType: 'image/jpeg' }],
+      }),
+    },
+    token: 'filmstrip-token',
+    port: 0,
+  });
+  hosts.push(host);
+  await host.start();
+  const { client } = await connect(host, 'filmstrip-token');
+  try {
+    const result = await client.callTool({
+      name: 'readSourceFilmstrip',
+      arguments: { assetId: 'ast_abcdefghijkl' },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.content).toContainEqual({
+      type: 'image',
+      mimeType: 'image/jpeg',
+      data: bytes.toString('base64'),
+    });
+    expect(JSON.stringify(result.content)).toContain('deliveredSourceFrames');
+  } finally {
+    await client.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

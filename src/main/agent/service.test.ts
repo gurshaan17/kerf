@@ -500,3 +500,40 @@ it('cancels analysis created while a chat turn is being stopped', async () => {
     expect(call).toHaveBeenCalledWith('cancelEditingJob', { jobId }, 'agent'),
   );
 });
+
+it('requires source-image consent and delivers cached filmstrip bytes to the model', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'kerf-source-filmstrip-'));
+  const path = join(directory, 'scene.jpg');
+  writeFileSync(path, Buffer.from([0xff, 0xd8, 0xff]));
+  try {
+    const output = { frames: [{ path, mimeType: 'image/jpeg', frame: 12 }] };
+    const call = vi.fn(async () => output);
+    type Adapter = {
+      execute(
+        input: unknown,
+        options: { toolCallId: string; messages: unknown[] },
+      ): Promise<unknown>;
+      toModelOutput(input: { output: unknown }): unknown;
+    };
+    const denied = createAgentToolSet({ call })[
+      'readSourceFilmstrip'
+    ] as unknown as Adapter;
+    await expect(
+      denied.execute({}, { toolCallId: 'filmstrip', messages: [] }),
+    ).rejects.toThrow('vision consent');
+    expect(call).not.toHaveBeenCalled();
+    const allowed = createAgentToolSet({ call }, { sourceImages: true })[
+      'readSourceFilmstrip'
+    ] as unknown as Adapter;
+    await allowed.execute({}, { toolCallId: 'filmstrip', messages: [] });
+    expect(JSON.stringify(allowed.toModelOutput({ output }))).toContain(
+      Buffer.from([0xff, 0xd8, 0xff]).toString('base64'),
+    );
+    rmSync(path);
+    expect(JSON.stringify(allowed.toModelOutput({ output }))).toContain(
+      'No source images',
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

@@ -1,3 +1,4 @@
+import { sourceFilmstripImages } from '../tools/source-images';
 import type { SqliteDatabase } from '../db/connection';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -122,7 +123,12 @@ function chatModelMessage(
  */
 export function createAgentToolSet(
   executor: Pick<ToolService, 'call'>,
+  permissions: { sourceImages?: boolean | (() => boolean) } = {},
 ): ToolSet {
+  const canSendSourceImages = () =>
+    typeof permissions.sourceImages === 'function'
+      ? permissions.sourceImages()
+      : permissions.sourceImages === true;
   const tools: ToolSet = {};
   for (const definition of toolRegistry.list()) {
     const base = {
@@ -135,7 +141,16 @@ export function createAgentToolSet(
         if (options.abortSignal?.aborted) {
           throw new Error('The turn was stopped before this tool ran.');
         }
-        return executor.call(definition.name, input, 'agent');
+        if (definition.name === 'readSourceFilmstrip' && !canSendSourceImages())
+          throw new Error(
+            'Source imagery requires vision consent for the chat provider. Enable it in AI settings or use text evidence.',
+          );
+        const result = await executor.call(definition.name, input, 'agent');
+        if (definition.name === 'readSourceFilmstrip' && !canSendSourceImages())
+          throw new Error(
+            'Source-image consent changed before the images could be delivered.',
+          );
+        return result;
       },
     };
     tools[definition.name] =
@@ -144,7 +159,34 @@ export function createAgentToolSet(
             ...base,
             toModelOutput: ({ output }) => renderFrameModelOutput(output),
           })
-        : tool(base);
+        : definition.name === 'readSourceFilmstrip'
+          ? tool({
+              ...base,
+              toModelOutput: ({ output }) => {
+                const images = sourceFilmstripImages(output);
+                return {
+                  type: 'content' as const,
+                  value: [
+                    {
+                      type: 'text' as const,
+                      text: JSON.stringify({
+                        result: output,
+                        deliveredSourceFrames: images.map((i) => i.frame),
+                        note: images.length
+                          ? 'Source imagery only.'
+                          : 'No source images could be delivered.',
+                      }),
+                    },
+                    ...images.map((i) => ({
+                      type: 'file' as const,
+                      mediaType: i.mimeType,
+                      data: { type: 'data' as const, data: i.data },
+                    })),
+                  ],
+                };
+              },
+            })
+          : tool(base);
   }
   return tools;
 }
@@ -519,52 +561,69 @@ export class AgentService {
           ...this.history,
           { role: 'user', content: chatModelMessage(message, mentions) },
         ],
-        tools: createAgentToolSet({
-          call: async (name, input, actor) => {
-            const receipts: EditReceipt[] = [];
-            try {
-              const output = await this.options.tools.call(
-                name,
-                input,
-                actor,
-                (receipt) => {
-                  receipts.push(receipt);
-                  this.emit({
-                    type: 'chat.tool',
-                    turnId: turn.turnId,
-                    tool: {
-                      id: receipt.commandId,
-                      name: 'Committed edit',
-                      input: {},
-                      status: 'succeeded',
-                      receipt,
-                      verification: {
-                        status: 'unverified',
-                        findings: [],
-                        previews: [],
-                        note: 'Applied. Verification pending.',
+        tools: createAgentToolSet(
+          {
+            call: async (name, input, actor) => {
+              const receipts: EditReceipt[] = [];
+              try {
+                const output = await this.options.tools.call(
+                  name,
+                  input,
+                  actor,
+                  (receipt) => {
+                    receipts.push(receipt);
+                    this.emit({
+                      type: 'chat.tool',
+                      turnId: turn.turnId,
+                      tool: {
+                        id: receipt.commandId,
+                        name: 'Committed edit',
+                        input: {},
+                        status: 'succeeded',
+                        receipt,
+                        verification: {
+                          status: 'unverified',
+                          findings: [],
+                          previews: [],
+                          note: 'Applied. Verification pending.',
+                        },
                       },
-                    },
-                  });
-                },
-              );
-              if (name === 'planAutoCut' || name === 'planScreenPolish') {
-                const jobId = (output as { id: string }).id;
-                turn.editingJobs?.add(jobId);
-                if (turn.controller.signal.aborted)
-                  await this.options.tools.call(
-                    'cancelEditingJob',
-                    { jobId },
-                    'agent',
-                  );
+                    });
+                  },
+                );
+                if (
+                  name === 'planAutoCut' ||
+                  name === 'planScreenPolish' ||
+                  name === 'planRoughCut'
+                ) {
+                  const jobId = (output as { id: string }).id;
+                  turn.editingJobs?.add(jobId);
+                  if (turn.controller.signal.aborted)
+                    await this.options.tools.call(
+                      'cancelEditingJob',
+                      { jobId },
+                      'agent',
+                    );
+                }
+                return output;
+              } finally {
+                for (const receipt of receipts)
+                  await this.verifyEdit(turn, receipt);
               }
-              return output;
-            } finally {
-              for (const receipt of receipts)
-                await this.verifyEdit(turn, receipt);
-            }
+            },
           },
-        }),
+          {
+            sourceImages: () => {
+              const current = this.options.providers.chatProvider();
+              return (
+                current?.id === provider.id &&
+                current.enabled &&
+                current.chatConsent &&
+                current.visionConsent
+              );
+            },
+          },
+        ),
         stopWhen: stepCountIs(12),
         toolCallConcurrency: 1,
         maxRetries: 1,

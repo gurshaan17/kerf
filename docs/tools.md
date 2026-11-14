@@ -157,6 +157,55 @@ Stopping a chat turn cancels analysis it started while that turn is active. Jobs
 that outlive a completed turn remain visible and cancellable in the review panel.
 Project switching retains the existing services' cancellation behavior.
 
+### Evidence-based rough cuts
+
+`findInTranscript` accepts up to 20 `assetIds` and filters before limiting results.
+Both indexed and lexical search retain the project boundary. Tool results include
+native source-frame rates and up to 20 complete speech/scene evidence ranges per
+hit, with stable IDs usable by the planner. Search windows may be shorter than a
+sentence; the planner uses the complete underlying speech segment.
+
+`readSourceFilmstrip` returns at most six cached scene thumbnails at their source
+midpoints, with source-frame rates and scene IDs. Missing caches are reported;
+this tool does not start analysis. Chat and MCP receive actual JPEG content with
+a combined 2 MB image budget. Built-in chat requires vision consent for its active
+provider. These source images are distinct from composited `renderFrame` previews.
+
+`planRoughCut` accepts selected ready video `assetIds`, an `intent`, optional
+`targetDurationSeconds` (up to 30 minutes), and optional ordered
+`selections: [{ evidenceId, reason }]` (up to 40). Each selected ID must identify a
+complete speech segment or a described scene in silent footage. Audio-bearing
+sources require reviewed speech analysis; missing analysis is reported. Reference
+footage, invented IDs, duplicate/overlapping source ranges and invalid bounds are
+rejected. Existing clips and retimes are preserved; the new cut uses source media
+at normal speed with its own synchronized source audio. External sync/retime
+instructions are not accepted by this contract.
+
+The assistant can choose editorial order through explicit evidence selections.
+Without them, indexed intent matches are assembled in source order, falling back
+to complete source ranges with a visible warning when no matches exist. This
+fallback is a local draft, not a claim of semantic story quality. Duration is a
+preference: complete segments are retained, and mismatches are reported instead
+of truncating speech.
+
+The tool returns an editing job and its ordered proposal, including source
+citations, duration estimate, unmet constraints and append frame. Existing
+`readEditingJob`, `readEditProposal`, `cancelEditingJob` and `applyEditProposal`
+handle its lifecycle. The desktop review panel supports source playback and
+including/excluding ranges. Approval recompiles the retained ranges, validates the
+captured project, evidence and source-file fingerprints, and appends the cut as
+one ordinary undo step. Plans and replay protection persist through the job store.
+
+After approval, the panel offers separate **Caption this cut**, **Duck background
+audio**, and **Verify this cut** actions. Captions and ducking also accept
+`clipIds` through the existing shared tools. Scoped captions map native transcript
+frames into sequence time and preserve unrelated/manual captions. Scoped ducking
+lowers whole overlapping background clips while protecting known speech assets;
+it reports a no-op when no background audio overlaps. Verification runs structural
+checks and captures up to three representative 480-pixel previews for user review;
+it does not certify playback, audio or whole-video visual quality. Each mutating
+stage has its own undo step.
+
 ### Beat and reference
 
 | Tool                | What it does                                                                |

@@ -1,3 +1,4 @@
+import { writeScopedCaptions, duckScopedSpeech } from './scoped-speech';
 import { z } from 'zod';
 import type {
   AssetId,
@@ -406,13 +407,14 @@ function assetClips(sequence: Sequence, assetId: string): Clip[] {
 export const writeCaptionsTool = {
   name: 'writeCaptions',
   description:
-    'Create caption clips from a transcript using the clean, bold or boxed preset. Visual narration must be reviewed and fit normal-speed timeline clips; only its linked generated captions are replaced, preserving manual clips.',
+    'Create caption clips from a transcript using the clean, bold or boxed preset. Pass clipIds to caption only complete speech ranges in selected normal-speed source clips, preserving other captions. Visual narration must be reviewed and fit normal-speed timeline clips; only its linked generated captions are replaced, preserving manual clips.',
   input: z.object({
     assetId: assetIdSchema.optional(),
     transcriptId: transcriptIdSchema.optional(),
     preset: captionPresetSchema.default('clean'),
     trackId: visualTrackId.optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
+    clipIds: z.array(idSchema('clip')).min(1).max(40).optional(),
   }),
   execute(
     context: ToolContext,
@@ -422,8 +424,25 @@ export const writeCaptionsTool = {
       preset: CaptionPreset;
       trackId?: string;
       expectedRevision?: number;
+      clipIds?: string[];
     },
   ) {
+    if (input.clipIds) {
+      if (
+        input.assetId ||
+        input.transcriptId ||
+        input.trackId ||
+        input.expectedRevision !== undefined
+      )
+        throw new Error(
+          'Use clipIds alone for scoped speech captions, with an optional preset.',
+        );
+      return writeScopedCaptions(
+        context,
+        input.clipIds,
+        PRESET_STYLES[input.preset],
+      );
+    }
     const snapshot = requireSnapshot(context);
     const transcripts = snapshot.transcripts.filter((transcript) =>
       input.transcriptId
@@ -658,16 +677,29 @@ export const cutSilencesTool = {
 export const duckUnderSpeechTool = {
   name: 'duckUnderSpeech',
   description:
-    'Lower non-speech audio clips that overlap transcribed speech. Use a gain between 0 and 1.',
+    'Lower non-speech audio clips that overlap transcribed speech. Pass clipIds to scope to selected normal-speed video clips, protecting all known source speech. Use a gain between 0 and 1.',
   input: z.object({
     assetId: assetIdSchema.optional(),
     transcriptId: transcriptIdSchema.optional(),
     gain: z.number().min(0).max(1).default(0.35),
+    clipIds: z.array(idSchema('clip')).min(1).max(40).optional(),
   }),
   execute(
     context: ToolContext,
-    input: { assetId?: AssetId; transcriptId?: string; gain: number },
+    input: {
+      assetId?: AssetId;
+      transcriptId?: string;
+      gain: number;
+      clipIds?: string[];
+    },
   ) {
+    if (input.clipIds) {
+      if (input.assetId || input.transcriptId)
+        throw new Error(
+          'Use clipIds alone for scoped ducking, with an optional gain.',
+        );
+      return duckScopedSpeech(context, input.clipIds, input.gain);
+    }
     const snapshot = requireSnapshot(context);
     const transcript = findTranscript(
       context,

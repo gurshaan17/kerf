@@ -1,3 +1,5 @@
+import { planRoughCutTool, readSourceFilmstripTool } from './rough-cut';
+export * from './rough-cut';
 import { EDITING_TOOLS } from './editing';
 export * from './editing';
 import { verifyTimelineTool } from './verification';
@@ -26,6 +28,8 @@ export * from './types';
 
 export const TOOL_DEFINITIONS = [
   ...READ_TOOLS,
+  planRoughCutTool,
+  readSourceFilmstripTool,
   ...EDITING_TOOLS,
   verifyTimelineTool,
   ...EDIT_TOOLS,
