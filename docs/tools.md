@@ -118,6 +118,45 @@ so kind-specific fields remain type-checked.
 | `duckUnderSpeech`  | Lower non-speech audio that overlaps transcribed speech                                                                        |
 | `assembleRoughCut` | Build a video track from spoken segments, dropping false starts and repeated takes                                             |
 
+### AI editing analysis and review
+
+| Tool                | Behavior                                                                      |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `planAutoCut`       | Start the existing contextual cut analysis; returns a job without editing     |
+| `planScreenPolish`  | Start the existing screen-interaction analysis; returns a job without editing |
+| `readEditingJob`    | Read project-scoped progress, failure and review status                       |
+| `cancelEditingJob`  | Cancel analysis and invalidate pending review; idempotent                     |
+| `readEditProposal`  | Read stored reasons, ranges, evidence and eligible change IDs                 |
+| `applyEditProposal` | Request desktop review of selected IDs; returns `awaiting-review`             |
+
+Read `readContext.editingProviders` for configured provider IDs and consent flags.
+Auto cut needs vision and chat consent; screen polish needs vision consent. Both
+retain their normal-speed and five-minute limits and report unsupported footage.
+Provider work starts only through an explicit planning call. Read tools never
+start analysis. Long jobs should be checked on a later turn instead of exhausting
+the model's step budget with polling.
+
+Both chat and MCP use the **Review AI edits** panel in Kerf chat. The user inspects
+source footage, reasons and evidence, unchecks unwanted changes, then clicks Apply.
+`applyEditProposal` does not mutate the timeline or accept a model-supplied approval
+boolean. Approval is a desktop-only IPC operation, outside the model/MCP catalog.
+MCP therefore requires an open desktop session for this review flow.
+
+Apply resolves selected IDs against the stored proposal, rechecks source/timeline
+fingerprints and provider settings/consent, and commits through the shared command
+path as one user-approved undo step. Applied/cancelled proposal markers and receipts
+persist locally to prevent replay after restart or undo. Pending selections are
+session-local; reopening requires review again. Old screen-polish proposals without
+a provider revision must be analysed again before applying.
+
+Source ranges in Auto cut are source frames. Screen-polish ranges are sequence
+frames; its evidence frames refer to the source. Auto cut returns reasoned removal
+ranges, rather than claiming exact evidence frames it did not store. Source
+playback is available for both; after applying, inspect the composited timeline.
+Stopping a chat turn cancels analysis it started while that turn is active. Jobs
+that outlive a completed turn remain visible and cancellable in the review panel.
+Project switching retains the existing services' cancellation behavior.
+
 ### Beat and reference
 
 | Tool                | What it does                                                                |

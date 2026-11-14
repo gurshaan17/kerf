@@ -214,6 +214,26 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
+  ipcMain.handle(KERF_IPC.editing.cancel, (_event, jobId: unknown) =>
+    options.tools.call(
+      'cancelEditingJob',
+      { jobId: idSchema('job').parse(jobId) },
+      'user',
+    ),
+  );
+  ipcMain.handle(KERF_IPC.editing.reviews, () =>
+    options.tools.editingReviews(),
+  );
+  ipcMain.handle(KERF_IPC.editing.confirm, (_event, request: unknown) => {
+    const parsed = z
+      .object({
+        jobId: idSchema('job'),
+        changeIds: z.array(z.string().min(1)).min(1).max(400),
+      })
+      .strict()
+      .parse(request);
+    return options.tools.confirmEditing(parsed.jobId, parsed.changeIds);
+  });
   ipcMain.handle(KERF_IPC.screenPolish.generate, (_event, request: unknown) =>
     options.screenPolish.generate(polishGenerateSchema.parse(request)),
   );
@@ -742,6 +762,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   return () => {
     unsubscribe();
     for (const channel of [
+      ...Object.values(KERF_IPC.editing),
       ...Object.values(KERF_IPC.screenPolish),
       ...Object.values(KERF_IPC.autoCut),
       ...Object.values(KERF_IPC.projects),

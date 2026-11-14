@@ -1,3 +1,4 @@
+import type { EditingService } from './editing';
 import { sequenceDurationFrames } from '@kerf/engine';
 import type { EditReceipt } from '@kerf/tools';
 import type {
@@ -66,6 +67,7 @@ export interface ToolExportSource {
 }
 
 export interface ToolServiceOptions {
+  readonly editing?: EditingService;
   readonly projects: ToolProjectSource;
   readonly repository: ToolRepositorySource;
   readonly analysis?: ToolAnalysisSource;
@@ -153,11 +155,38 @@ export class ToolService {
     return run;
   }
 
+  editingReviews() {
+    return this.options.editing?.reviews() ?? [];
+  }
+
+  confirmEditing(jobId: string, changeIds: readonly string[]) {
+    const run = this.queue.then(() => {
+      if (!this.options.editing)
+        throw new Error('AI editing analysis is unavailable.');
+      let receipt: EditReceipt | undefined;
+      this.options.editing.confirm(
+        jobId,
+        changeIds,
+        this.context('user', (value) => {
+          receipt = value;
+        }),
+      );
+      if (receipt) this.options.editing.recordReceipt(jobId, receipt);
+      return { receipt };
+    });
+    this.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   private context(
     actor: 'agent' | 'mcp' | 'system' | 'user',
     onCommit?: (receipt: EditReceipt) => void,
   ): ToolContext {
     return {
+      editing: this.options.editing ? () => this.options.editing! : undefined,
       snapshot: () => this.snapshot(),
       editor: () => this.editor,
       apply: (command, options) =>

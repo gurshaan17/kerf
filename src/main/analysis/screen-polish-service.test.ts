@@ -212,6 +212,20 @@ describe('screen polish service', () => {
       f.service.apply({ jobId: job.id, suggestions: [row] }),
     ).toThrow('changed');
   });
+  it('rejects consent revoked after a proposal succeeded', async () => {
+    const f = fixture();
+    const job = f.service.generate(f.request);
+    expect((await finished(f.jobs, job.id)).status).toBe('succeeded');
+    const before = f.projects.current()!.project.sequence;
+    f.providers.save({ ...f.provider, visionConsent: false });
+    expect(() =>
+      f.service.prepare({
+        jobId: job.id,
+        suggestions: f.service.proposal(job.id)!.suggestions,
+      }),
+    ).toThrow('consent');
+    expect(f.projects.current()!.project.sequence).toEqual(before);
+  });
   it('requires vision consent and checks revocation before publishing results', async () => {
     const f = fixture();
     f.providers.save({ ...f.provider, visionConsent: false });

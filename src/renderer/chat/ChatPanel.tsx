@@ -1,3 +1,4 @@
+import { EditingReviews } from './EditingReviews';
 import { formatTimecode } from '@kerf/model';
 import { useEffect, useRef, useState } from 'react';
 import { ChatMarkdown } from './ChatMarkdown';
@@ -390,6 +391,7 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
         className="min-h-0 flex-1 overflow-auto px-3 py-3"
         aria-live="polite"
       >
+        <EditingReviews />
         {turns.length === 0 ? (
           <div className="grid gap-3">
             <div className="rounded-sm border border-line bg-surface-0 p-3">

@@ -157,6 +157,7 @@ export interface ToolReferenceProfileRequest {
 }
 
 export interface ToolContext {
+  editing?(): ToolEditingAccess;
   snapshot(): ToolSnapshot | null;
   editor(): ToolEditorContext;
   apply(command: EditCommand, options?: ToolApplyOptions): ToolEditResult;
@@ -192,4 +193,58 @@ export interface EditReceipt {
     endFrame: number;
     visual: boolean;
   }[];
+}
+
+export interface EditingJob {
+  readonly id: string;
+  readonly projectId: string | null;
+  readonly kind: string;
+  readonly status: string;
+  readonly stage: string;
+  readonly progress: number;
+  readonly error: string | null;
+  readonly reviewStatus: 'none' | 'awaiting-review' | 'applied' | 'cancelled';
+}
+export interface EditingProposal {
+  readonly jobId: string;
+  readonly projectId: string;
+  readonly clipId: string;
+  readonly assetId: string;
+  readonly fingerprint: string;
+  readonly kind: 'autoCut' | 'screenPolish';
+  readonly changes: readonly {
+    id: string;
+    startFrame: number;
+    endFrame: number;
+    reason: string;
+    evidenceFrames: readonly number[];
+    description: string;
+  }[];
+  readonly frameSpace: 'source' | 'sequence';
+}
+export interface EditingReview {
+  readonly job: EditingJob;
+  readonly proposal: EditingProposal | null;
+  readonly selectedIds: readonly string[];
+  readonly receipt?: EditReceipt;
+}
+export interface ToolEditingAccess {
+  providers(): readonly {
+    id: string;
+    label: string;
+    enabled: boolean;
+    visionConsent: boolean;
+    chatConsent: boolean;
+  }[];
+  start(
+    kind: 'autoCut' | 'screenPolish',
+    input: { clipId: string; providerId: string; purpose?: string },
+  ): EditingJob;
+  read(jobId: string): EditingJob;
+  cancel(jobId: string): EditingJob;
+  proposal(jobId: string): EditingProposal | null;
+  requestApply(
+    jobId: string,
+    changeIds: readonly string[],
+  ): { status: 'awaiting-review'; jobId: string };
 }

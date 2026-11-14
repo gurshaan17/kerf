@@ -44,6 +44,7 @@ interface ActiveTurn {
   readonly turnId: string;
   readonly controller: AbortController;
   readonly startedAt: number;
+  readonly editingJobs?: Set<string>;
 }
 
 interface ToolTiming {
@@ -349,6 +350,7 @@ export class AgentService {
     }
     const model = this.createModel(provider);
     const turn: ActiveTurn = {
+      editingJobs: new Set(),
       turnId: `turn_${randomUUID()}`,
       controller: new AbortController(),
       startedAt: this.now(),
@@ -383,6 +385,10 @@ export class AgentService {
       return false;
     }
     this.active.controller.abort();
+    for (const jobId of this.active.editingJobs ?? [])
+      void this.options.tools
+        .call('cancelEditingJob', { jobId }, 'agent')
+        .catch(() => undefined);
     return true;
   }
 
@@ -517,7 +523,7 @@ export class AgentService {
           call: async (name, input, actor) => {
             const receipts: EditReceipt[] = [];
             try {
-              return await this.options.tools.call(
+              const output = await this.options.tools.call(
                 name,
                 input,
                 actor,
@@ -542,6 +548,17 @@ export class AgentService {
                   });
                 },
               );
+              if (name === 'planAutoCut' || name === 'planScreenPolish') {
+                const jobId = (output as { id: string }).id;
+                turn.editingJobs?.add(jobId);
+                if (turn.controller.signal.aborted)
+                  await this.options.tools.call(
+                    'cancelEditingJob',
+                    { jobId },
+                    'agent',
+                  );
+              }
+              return output;
             } finally {
               for (const receipt of receipts)
                 await this.verifyEdit(turn, receipt);

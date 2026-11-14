@@ -462,3 +462,41 @@ describe('edit receipt verification', () => {
     },
   );
 });
+
+it('cancels analysis created while a chat turn is being stopped', async () => {
+  const state = snapshot();
+  const jobId = 'job_test';
+  const call = vi.fn(async (name: string) => {
+    if (name === 'planAutoCut') {
+      queueMicrotask(() => service.abort());
+      return { id: jobId };
+    }
+    return {};
+  });
+  const chunks = [
+    { type: 'stream-start', warnings: [] },
+    {
+      type: 'tool-call',
+      toolCallId: 'plan_1',
+      toolName: 'planAutoCut',
+      input: JSON.stringify({
+        clipId: 'clp_abcdefghijkl',
+        providerId: 'provider',
+      }),
+    },
+    finish('tool-calls'),
+  ];
+  const service = new AgentService({
+    projects: { current: () => state },
+    providers: {
+      chatProvider: provider,
+      chatModel: () => fakeModel([chunks, textChunks('Started')]),
+    },
+    tools: { call } as unknown as ToolService,
+    broadcast: () => undefined,
+  });
+  service.start({ message: 'Cut this clip' });
+  await vi.waitFor(() =>
+    expect(call).toHaveBeenCalledWith('cancelEditingJob', { jobId }, 'agent'),
+  );
+});

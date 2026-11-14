@@ -169,10 +169,14 @@ export class AutoCutService {
     return autoCutProposalSchema.parse(this.options.jobs.result(jobId));
   }
 
-  apply(request: unknown) {
+  prepare(request: unknown) {
     const parsed = autoCutApplySchema.parse(request);
     const proposal = this.proposal(parsed.jobId);
     if (!proposal) throw new Error('Wait for Auto cut analysis to finish.');
+    if (
+      this.providerRevision(proposal.providerId) !== proposal.providerRevision
+    )
+      throw new Error('Provider settings or consent changed. Analyse again.');
     const { snapshot, asset } = this.current(proposal.clipId);
     if (this.fingerprint(snapshot, asset) !== proposal.fingerprint)
       throw new Error(
@@ -189,7 +193,11 @@ export class AutoCutService {
       proposal.clipId,
       proposal.removals.filter((r) => ids.has(r.id)),
     );
-    return this.options.projects.apply(command, {
+    return command;
+  }
+
+  apply(request: unknown) {
+    return this.options.projects.apply(this.prepare(request), {
       actor: 'user',
       label: 'Auto cut',
     });

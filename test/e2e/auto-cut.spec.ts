@@ -364,8 +364,14 @@ test('automatically transcribes speech locally and keeps source audio aligned wh
     const clip = snapshot.project.sequence.tracks
       .flatMap((t) => t.clips)
       .find((c) => c.type === 'video')!;
-    const job = await page.evaluate(
-      async (request) => window.kerf.autoCut.generate(request),
+    const job = await kerf.app.evaluate(
+      async (_, request) => {
+        const tools = (globalThis as { __kerfServices?: KerfServices })
+          .__kerfServices!.tools;
+        return (await tools.call('planAutoCut', request, 'agent')) as {
+          id: string;
+        };
+      },
       { clipId: clip.id, providerId: provider.id },
     );
     await expect
@@ -385,10 +391,48 @@ test('automatically transcribes speech locally and keeps source audio aligned wh
       job.id,
     );
     expect(proposal!.removals).toHaveLength(1);
-    await page.evaluate(async (request) => window.kerf.autoCut.apply(request), {
-      jobId: job.id,
-      removalIds: proposal!.removals.map((r) => r.id),
+    await kerf.app.evaluate(
+      async (_, request) => {
+        const tools = (globalThis as { __kerfServices?: KerfServices })
+          .__kerfServices!.tools;
+        const result = (await tools.call(
+          'applyEditProposal',
+          request,
+          'mcp',
+        )) as { status: string };
+        if (result.status !== 'awaiting-review')
+          throw new Error('Expected desktop review');
+      },
+      { jobId: job.id, changeIds: proposal!.removals.map((r) => r.id) },
+    );
+    await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+    const reviews = page.getByLabel('AI editing reviews');
+    await expect(
+      reviews.getByText('Remove section', { exact: false }),
+    ).toBeVisible();
+    await reviews.getByRole('checkbox').uncheck();
+    await expect(
+      reviews.getByRole('button', { name: 'Apply 0 reviewed changes' }),
+    ).toBeDisabled();
+    await reviews.getByRole('checkbox').check();
+    await reviews
+      .getByRole('button', { name: 'Inspect source frames', exact: false })
+      .click();
+    await expect(reviews.getByLabel('Review source footage')).toBeVisible();
+    await expect
+      .poll(() =>
+        reviews
+          .getByLabel('Review source footage')
+          .evaluate((element: HTMLVideoElement) => element.readyState),
+      )
+      .toBeGreaterThanOrEqual(2);
+    await page.screenshot({
+      path: join(cacheRoot, 'phase2-editing-review.png'),
     });
+    await reviews
+      .getByRole('button', { name: 'Apply 1 reviewed change', exact: true })
+      .click();
+    await expect(reviews.getByText('Applied:', { exact: false })).toBeVisible();
     const after = await page.evaluate(
       async () => (await window.kerf.projects.active())!,
     );

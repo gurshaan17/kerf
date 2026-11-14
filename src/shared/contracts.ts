@@ -554,6 +554,11 @@ export interface RendererEditorContext {
 export type KerfEvent = ProjectEvent | JobEvent | ExportEvent | ChatEvent;
 
 export const KERF_IPC = {
+  editing: {
+    reviews: 'kerf:editing:reviews',
+    confirm: 'kerf:editing:confirm',
+    cancel: 'kerf:editing:cancel',
+  },
   screenPolish: {
     generate: 'kerf:screen-polish:generate',
     proposal: 'kerf:screen-polish:proposal',
@@ -679,6 +684,14 @@ export interface KerfEventEnvelope {
 
 /** The complete surface exposed on `window.kerf`. Keep this allowlist small. */
 export interface KerfBridge {
+  readonly editing?: {
+    cancel(jobId: string): Promise<unknown>;
+    reviews(): Promise<readonly import('@kerf/tools').EditingReview[]>;
+    confirm(request: {
+      jobId: string;
+      changeIds: readonly string[];
+    }): Promise<{ receipt?: EditReceipt }>;
+  };
   readonly screenPolish: import('./screen-polish').ScreenPolishBridge;
   readonly autoCut: import('./auto-cut').AutoCutBridge;
   readonly tts?: import('./tts').TtsBridge;

@@ -48,6 +48,11 @@ const invoke = <Result>(channel: string, ...args: unknown[]): Promise<Result> =>
 // Keep the renderer sandboxed: expose only the specific operations the UI
 // needs instead of handing over Node.js or the whole `electron` module.
 const bridge: KerfBridge = {
+  editing: {
+    cancel: (jobId) => invoke(KERF_IPC.editing.cancel, jobId),
+    reviews: () => invoke(KERF_IPC.editing.reviews),
+    confirm: (request) => invoke(KERF_IPC.editing.confirm, request),
+  },
   screenPolish: {
     generate: (request) => invoke(KERF_IPC.screenPolish.generate, request),
     proposal: (id) => invoke(KERF_IPC.screenPolish.proposal, id),

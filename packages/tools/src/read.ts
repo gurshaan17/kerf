@@ -145,6 +145,7 @@ export const readContextTool = {
         markerCount: sequence.markers.length,
       },
       editor: context.editor(),
+      editingProviders: context.editing?.().providers() ?? [],
       counts: {
         assets: snapshot.assets.length,
         transcripts: snapshot.transcripts.length,

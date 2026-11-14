@@ -184,6 +184,20 @@ describe('Auto cut service', () => {
       f.service.apply({ jobId: job.id, removalIds: ['unit_1'] }),
     ).toThrow('source file changed');
   });
+  it('rejects consent revoked after a proposal succeeded', async () => {
+    const f = fixture();
+    const job = f.service.generate(f.request);
+    expect((await finished(f.jobs, job.id)).status).toBe('succeeded');
+    const before = f.projects.current()!.project.sequence;
+    f.providers.save({ ...f.provider, visionConsent: false });
+    expect(() =>
+      f.service.prepare({
+        jobId: job.id,
+        removalIds: f.service.proposal(job.id)!.removals.map((r) => r.id),
+      }),
+    ).toThrow('consent');
+    expect(f.projects.current()!.project.sequence).toEqual(before);
+  });
   it('requires both consents and fails when consent changes during analysis', async () => {
     const f = fixture();
     f.providers.save({ ...f.provider, visionConsent: false });

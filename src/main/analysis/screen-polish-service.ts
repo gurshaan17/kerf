@@ -151,11 +151,14 @@ export class ScreenPolishService {
       ? polishProposalSchema.parse(this.options.jobs.result(jobId))
       : null;
   }
-  apply(request: unknown) {
+  prepare(request: unknown) {
     const parsed = polishApplySchema.parse(request);
     const proposal = this.proposal(parsed.jobId);
     if (!proposal)
       throw new Error('Wait for screen polish analysis to finish.');
+    const revision = this.providerRevision(proposal.providerId);
+    if (!proposal.providerRevision || proposal.providerRevision !== revision)
+      throw new Error('Provider settings or consent changed. Analyse again.');
     const current = this.current(proposal.clipId);
     if (current.fingerprint !== proposal.fingerprint)
       throw new Error(
@@ -171,10 +174,13 @@ export class ScreenPolishService {
       )
     )
       throw new Error('Choose only suggestions from this proposal.');
-    return this.options.projects.apply(
-      screenPolishCommand(current.sequence, parsed.suggestions),
-      { actor: 'user', label: 'Apply screen polish' },
-    );
+    return screenPolishCommand(current.sequence, parsed.suggestions);
+  }
+  apply(request: unknown) {
+    return this.options.projects.apply(this.prepare(request), {
+      actor: 'user',
+      label: 'Apply screen polish',
+    });
   }
   private async run(
     payload: z.infer<typeof payloadSchema>,
@@ -254,6 +260,7 @@ export class ScreenPolishService {
         assetId: asset.id,
         fingerprint: payload.fingerprint,
         providerId: payload.providerId,
+        providerRevision: payload.providerRevision,
         sampleCount: result.sampleCount,
         suggestions,
       });

@@ -32,6 +32,7 @@ export const polishProposalSchema = z.object({
   assetId: idSchema('asset'),
   fingerprint: z.string(),
   providerId: z.string(),
+  providerRevision: z.string().optional(),
   sampleCount: z.number().int().nonnegative(),
   suggestions: z.array(polishSuggestionSchema).max(60),
 });

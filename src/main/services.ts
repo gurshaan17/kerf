@@ -1,3 +1,4 @@
+import { EditingService } from './tools/editing';
 import { app, shell } from 'electron';
 import { join } from 'node:path';
 import type { DatabaseHandle } from './db';
@@ -112,7 +113,16 @@ export function createKerfServices(
     const renderer = new RendererBridge({
       framesDir: join(app.getPath('userData'), 'tool-frames'),
     });
+    const editing = new EditingService({
+      projects,
+      jobs,
+      autoCut,
+      screenPolish,
+      providers: analysis.providers,
+      database: database.connection,
+    });
     const tools = new ToolService({
+      editing,
       projects,
       repository,
       analysis,

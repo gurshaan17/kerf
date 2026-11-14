@@ -1,3 +1,5 @@
+import { EDITING_TOOLS } from './editing';
+export * from './editing';
 import { verifyTimelineTool } from './verification';
 export * from './verification';
 import { BEAT_TOOLS } from './beat';
@@ -24,6 +26,7 @@ export * from './types';
 
 export const TOOL_DEFINITIONS = [
   ...READ_TOOLS,
+  ...EDITING_TOOLS,
   verifyTimelineTool,
   ...EDIT_TOOLS,
   ...MACRO_TOOLS,
