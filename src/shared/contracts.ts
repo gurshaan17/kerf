@@ -1,3 +1,4 @@
+import type { EditReceipt, TimelineFinding } from '@kerf/tools';
 import type {
   Actor,
   Asset,
@@ -367,9 +368,18 @@ export interface ExportOtioResult {
   readonly path: string;
 }
 
-export type ChatToolStatus = 'running' | 'succeeded' | 'failed';
+export type ChatToolStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+export interface ChatEditVerification {
+  readonly status: 'unverified' | 'partial' | 'checked';
+  readonly findings: readonly TimelineFinding[];
+  readonly previews: readonly { frame: number; dataUrl: string }[];
+  readonly note: string;
+}
 
 export interface ChatToolActivity {
+  readonly receipt?: EditReceipt;
+  readonly verification?: ChatEditVerification;
   readonly id: string;
   readonly name: string;
   readonly status: ChatToolStatus;

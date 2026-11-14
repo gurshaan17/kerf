@@ -129,6 +129,9 @@ importers:
       '@ai-sdk/xai':
         specifier: ^5.0.27
         version: 5.0.27(zod@4.6.7)
+      '@kerf/tools':
+        specifier: workspace:*
+        version: link:../tools
       ai:
         specifier: ^7.0.148
         version: 7.0.148(zod@4.6.7)

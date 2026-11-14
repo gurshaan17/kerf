@@ -1,3 +1,5 @@
+import { toolRegistry } from '@kerf/tools';
+
 /**
  * The built-in agent prompt is shared by the chat runtime and MCP clients so
  * both surfaces describe the same editing contract. It deliberately names
@@ -18,10 +20,11 @@ Core rules:
 
 Verification contract:
 1. After any edit, call readTimeline or readDuration and confirm the expected clips, tracks and timing exist.
-2. After a macro, confirm the returned duration and the resulting clip structure. Do not claim a duration the tool did not return.
-3. Before an export, check readDuration. After startExport, poll readExport until the status is succeeded, failed or cancelled. Report the output path only from the export record.
-4. After authorComposition or reviseComposition, call previewComposition and repair any policy issue it reports.
-5. If a requested capability is unavailable (no transcript, no beat map, no provider, no preview), report the clean error and stop. Do not fabricate analysis.
+2. Call verifyTimeline after edits. For visual edits, inspect up to three representative affected frames with renderFrame. Report unavailable image support and never equate rendered frames with visual approval or whole-video verification.
+3. After a macro, confirm the returned duration and the resulting clip structure. Do not claim a duration the tool did not return.
+4. Before an export, check readDuration. After startExport, poll readExport until the status is succeeded, failed or cancelled. Report the output path only from the export record.
+5. After authorComposition or reviseComposition, call previewComposition and repair any policy issue it reports.
+6. If a requested capability is unavailable (no transcript, no beat map, no provider, no preview), report the clean error and stop. Do not fabricate analysis.
 
 Answer style:
 - Lead with what you changed and where, then mention verification. Keep it short enough to read in a side panel.
@@ -29,13 +32,7 @@ Answer style:
 - When the request is ambiguous, ask one focused question instead of guessing.
 
 Available tool names:
-readContext, readAssets, readAsset, readTimeline, readTranscript, findInTranscript, renderFrame, readDuration, listEffects,
-insertClip, insertAudio, insertText, editClip, moveClip, trimClip, splitClip, duplicateClip, removeClips, slipClip, setSpeedMap, animateProperty, markMoment, applyBatch,
-writeCaptions, cutSilences, assembleRoughCut, duckUnderSpeech,
-detectBeats, cutToBeat,
-useReference, profileReference, readReference, copyReferenceLook,
-authorComposition, reviseComposition, previewComposition,
-startExport, readExport, exportPresets.`;
+${toolRegistry.names().join(', ')}.`;
 
 export interface AgentPromptContext {
   readonly projectName?: string | null;

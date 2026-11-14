@@ -1,3 +1,5 @@
+import { sequenceDurationFrames } from '@kerf/engine';
+import type { EditReceipt } from '@kerf/tools';
 import type {
   Actor,
   BeatMap,
@@ -139,9 +141,10 @@ export class ToolService {
     name: string,
     input: unknown,
     actor: 'agent' | 'mcp' | 'system' | 'user' = 'agent',
+    onCommit?: (receipt: EditReceipt) => void,
   ): Promise<unknown> {
     const run = this.queue.then(() =>
-      toolRegistry.call(name, input, this.context(actor)),
+      toolRegistry.call(name, input, this.context(actor, onCommit)),
     );
     this.queue = run.then(
       () => undefined,
@@ -150,13 +153,17 @@ export class ToolService {
     return run;
   }
 
-  private context(actor: 'agent' | 'mcp' | 'system' | 'user'): ToolContext {
+  private context(
+    actor: 'agent' | 'mcp' | 'system' | 'user',
+    onCommit?: (receipt: EditReceipt) => void,
+  ): ToolContext {
     return {
       snapshot: () => this.snapshot(),
       editor: () => this.editor,
-      apply: (command, options) => this.apply(command, actor, options?.label),
+      apply: (command, options) =>
+        this.apply(command, actor, options?.label, onCommit),
       applyBatch: (commands, options) =>
-        this.applyBatch(commands, actor, options?.label),
+        this.applyBatch(commands, actor, options?.label, onCommit),
       search: (request) => this.search(request),
       renderer: () => this.options.renderer?.() ?? null,
       exports: () => this.exports(),
@@ -197,10 +204,46 @@ export class ToolService {
     command: EditCommand,
     actor: 'agent' | 'mcp' | 'system' | 'user',
     label?: string,
+    onCommit?: (receipt: EditReceipt) => void,
   ): ToolEditResult {
+    const before = this.options.projects.current()?.project.sequence;
     const result = this.options.projects.apply(command, { actor, label });
     if (!result.command) {
       throw new Error('The edit did not return a command envelope.');
+    }
+    if (before && onCommit) {
+      const after = result.snapshot.project.sequence;
+      const oldClips = new Map(
+        before.tracks.flatMap((t) => t.clips).map((c) => [c.id, c]),
+      );
+      const newClips = new Map(
+        after.tracks.flatMap((t) => t.clips).map((c) => [c.id, c]),
+      );
+      const changes: EditReceipt['changes'][number][] = [];
+      for (const id of new Set([...oldClips.keys(), ...newClips.keys()])) {
+        const old = oldClips.get(id);
+        const next = newClips.get(id);
+        if (JSON.stringify(old) === JSON.stringify(next)) continue;
+        const clip = next ?? old!;
+        changes.push({
+          clipId: id,
+          label: clip.label || clip.type,
+          kind: !old ? 'added' : !next ? 'removed' : 'changed',
+          startFrame: clip.startFrame,
+          endFrame: clip.startFrame + clip.durationFrames,
+          visual: clip.type !== 'audio',
+        });
+      }
+      onCommit({
+        frameRate: after.frameRate,
+        undoable: result.inverse !== null,
+        commandId: result.command.id,
+        projectId: result.snapshot.project.id,
+        label: result.command.label || label || command.type,
+        beforeDurationFrames: sequenceDurationFrames(before),
+        afterDurationFrames: sequenceDurationFrames(after),
+        changes,
+      });
     }
     return {
       snapshot: this.toolSnapshot(result.snapshot),
@@ -213,19 +256,20 @@ export class ToolService {
     commands: readonly EditCommand[],
     actor: 'agent' | 'mcp' | 'system' | 'user',
     label?: string,
+    onCommit?: (receipt: EditReceipt) => void,
   ): ToolEditResult {
     if (commands.length === 0) {
       throw new Error('A batch must contain at least one command.');
     }
     if (commands.length === 1) {
-      return this.apply(commands[0]!, actor, label);
+      return this.apply(commands[0]!, actor, label, onCommit);
     }
     const batch: EditCommand = {
       type: 'batch',
       label: label ?? 'Batch edit',
       commands: [...commands],
     };
-    return this.apply(batch, actor, label ?? 'Batch edit');
+    return this.apply(batch, actor, label ?? 'Batch edit', onCommit);
   }
 
   private search(request: {

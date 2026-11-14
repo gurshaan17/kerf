@@ -332,6 +332,7 @@ describe('AgentService', () => {
       'readTimeline',
       { includeMarkers: true },
       'agent',
+      expect.any(Function),
     );
     const deltas = events
       .filter((event) => event.type === 'chat.delta')
@@ -372,4 +373,92 @@ describe('AgentService', () => {
     expect(events.some((event) => event.type === 'chat.done')).toBe(false);
     expect(service.abort()).toBe(false);
   });
+});
+
+describe('edit receipt verification', () => {
+  it.each([false, true])(
+    'persists committed edits with renderer unavailable=%s',
+    async (unavailable) => {
+      const state = snapshot();
+      const folder = mkdtempSync(join(tmpdir(), 'kerf-receipt-'));
+      const path = join(folder, 'preview.png');
+      writeFileSync(path, Buffer.from('preview'));
+      const events: ChatEvent[] = [];
+      const call: ToolService['call'] = async (
+        name,
+        _input,
+        _actor,
+        onCommit,
+      ) => {
+        if (name === 'verifyTimeline')
+          return { findings: [], durationFrames: 48 };
+        if (name === 'renderFrame') {
+          if (unavailable) throw new Error('Preview unavailable');
+          return {
+            path,
+            frame: 24,
+            width: 480,
+            height: 270,
+            mimeType: 'image/png',
+          };
+        }
+        onCommit?.({
+          commandId: 'command-test',
+          projectId: state.project.id,
+          label: 'Caption',
+          frameRate: state.project.sequence.frameRate,
+          undoable: true,
+          beforeDurationFrames: 48,
+          afterDurationFrames: 48,
+          changes: [
+            {
+              clipId: 'caption',
+              label: 'Caption',
+              kind: 'added',
+              startFrame: 0,
+              endFrame: 48,
+              visual: true,
+            },
+          ],
+        });
+        return {};
+      };
+      let done!: () => void;
+      const completed = new Promise<void>((resolve) => {
+        done = resolve;
+      });
+      const service = new AgentService({
+        projects: { current: () => state },
+        providers: {
+          chatProvider: provider,
+          chatModel: () => fakeModel([toolChunks(), textChunks('Done')]),
+        },
+        tools: { call } as ToolService,
+        broadcast: (event) => {
+          events.push(event);
+          if (event.type === 'chat.done' || event.type === 'chat.error') done();
+        },
+      });
+      try {
+        service.start({ message: 'Caption this' });
+        await completed;
+        const receipts = events.filter(
+          (e) => e.type === 'chat.tool' && e.tool.receipt,
+        );
+        expect(receipts).toHaveLength(2);
+        const last = receipts.at(-1);
+        if (last?.type !== 'chat.tool') throw new Error('Missing receipt');
+        expect(last.tool.status).toBe('succeeded');
+        expect(last.tool.verification?.status).toBe(
+          unavailable ? 'partial' : 'checked',
+        );
+        expect(last.tool.verification?.previews).toHaveLength(
+          unavailable ? 0 : 1,
+        );
+        expect(last.tool.receipt?.commandId).toBe('command-test');
+      } finally {
+        rmSync(folder, { recursive: true, force: true });
+      }
+    },
+  );
 });

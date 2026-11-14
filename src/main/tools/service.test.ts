@@ -310,3 +310,98 @@ describe('ToolService', () => {
     expect(renderExport).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('committed edit receipts', () => {
+  it('captures engine changes once per batch and preserves the inverse', async () => {
+    const { applyCommand } = await import('@kerf/engine');
+    let state = withTextClip(makeSnapshot());
+    const before = state.project.sequence;
+    let inverse: EditCommand | null = null;
+    const service = new ToolService({
+      projects: {
+        current: () => state,
+        refresh: () => state,
+        apply(command, options) {
+          const result = applyCommand(
+            state.project.sequence,
+            command as EditCommand,
+          );
+          inverse = result.inverse;
+          state = {
+            ...state,
+            project: { ...state.project, sequence: result.sequence },
+          };
+          return {
+            snapshot: state,
+            inverse,
+            command: createCommandEnvelope({
+              command: command as EditCommand,
+              ...options,
+              now: 2,
+            }),
+          };
+        },
+      },
+      repository: {
+        listReferenceProfiles: () => [],
+        saveReferenceProfile: (_id, profile) => profile,
+      },
+      exports: {
+        list: () => [],
+        get: () => null,
+        cancel: () => false,
+        start: () => {
+          throw new Error('unused');
+        },
+      },
+    });
+    const committed = vi.fn();
+    const clip = before.tracks.flatMap((t) => t.clips)[0]!;
+    await service.call(
+      'applyBatch',
+      {
+        label: 'Update caption',
+        commands: [
+          {
+            type: 'clip.update',
+            clipId: clip.id,
+            patch: { text: 'Updated caption' },
+          },
+          {
+            type: 'clip.update',
+            clipId: clip.id,
+            patch: { label: 'Updated title' },
+          },
+        ],
+      },
+      'agent',
+      committed,
+    );
+    expect(committed).toHaveBeenCalledTimes(1);
+    expect(committed.mock.calls[0]![0]).toMatchObject({
+      projectId: state.project.id,
+      undoable: true,
+      changes: [
+        expect.objectContaining({
+          clipId: clip.id,
+          kind: 'changed',
+          visual: true,
+        }),
+      ],
+    });
+    expect(inverse).not.toBeNull();
+    expect(applyCommand(state.project.sequence, inverse!).sequence).toEqual(
+      before,
+    );
+    committed.mockClear();
+    await expect(
+      service.call(
+        'editClip',
+        { clipId: 'missing', patch: { text: 'No' } },
+        'agent',
+        committed,
+      ),
+    ).rejects.toThrow();
+    expect(committed).not.toHaveBeenCalled();
+  });
+});

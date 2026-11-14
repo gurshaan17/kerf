@@ -174,3 +174,22 @@ export interface ToolContext {
   ): Promise<ReferenceProfile>;
   now(): number;
 }
+
+/** Facts captured immediately around a committed engine command. */
+export interface EditReceipt {
+  readonly commandId: string;
+  readonly frameRate: FrameRate;
+  readonly undoable: boolean;
+  readonly projectId: string;
+  readonly label: string;
+  readonly beforeDurationFrames: number;
+  readonly afterDurationFrames: number;
+  readonly changes: readonly {
+    clipId: string;
+    label: string;
+    kind: 'added' | 'changed' | 'removed';
+    startFrame: number;
+    endFrame: number;
+    visual: boolean;
+  }[];
+}

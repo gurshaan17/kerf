@@ -1,3 +1,4 @@
+import { formatTimecode } from '@kerf/model';
 import { useEffect, useRef, useState } from 'react';
 import { ChatMarkdown } from './ChatMarkdown';
 import { mentionQuery, updateMentions } from './mentions';
@@ -51,13 +52,73 @@ function statusIcon(tool: ChatToolActivity) {
   if (tool.status === 'running') {
     return <Loader2 size={11} className="animate-spin text-accent" />;
   }
-  if (tool.status === 'failed') {
+  if (tool.status === 'failed' || tool.status === 'cancelled') {
     return <X size={11} className="text-danger" />;
   }
   return <Check size={11} className="text-ok" />;
 }
 
 function ToolCard({ tool }: { readonly tool: ChatToolActivity }) {
+  const seek = useStudio((state) => state.setPlayhead);
+  if (tool.receipt) {
+    const receipt = tool.receipt;
+    return (
+      <div className="grid gap-2 rounded-sm border border-line bg-surface-0 p-2 text-[11px] text-ink-muted">
+        <p className="font-semibold text-ink">Applied: {receipt.label}</p>
+        <p>
+          {receipt.beforeDurationFrames} → {receipt.afterDurationFrames} frames
+          · {receipt.undoable ? 'One undo step' : 'No undo available'}
+        </p>
+        {receipt.changes.map((change) => (
+          <button
+            type="button"
+            key={change.clipId}
+            className="text-left text-accent"
+            onClick={() => seek(change.startFrame)}
+          >
+            {change.kind}: {change.label} · frames {change.startFrame}–
+            {change.endFrame}
+          </button>
+        ))}
+        <p>
+          {tool.verification?.status ?? 'unverified'}:{' '}
+          {tool.verification?.note ?? 'Not verified.'}
+        </p>
+        {tool.verification?.findings.map((finding, index) => (
+          <button
+            type="button"
+            key={index}
+            className="text-left"
+            onClick={() => seek(finding.startFrame)}
+          >
+            {finding.severity}: {finding.message} · frame {finding.startFrame}
+          </button>
+        ))}
+        <div className="flex flex-wrap gap-2">
+          {tool.verification?.previews.map((preview) => (
+            <button
+              type="button"
+              key={preview.frame}
+              onClick={() => seek(preview.frame)}
+              className="w-28 text-left"
+            >
+              <img
+                src={preview.dataUrl}
+                alt={`Edit preview at frame ${preview.frame}`}
+                className="w-full rounded-sm"
+              />
+              {formatTimecode(preview.frame, receipt.frameRate)} · frame{' '}
+              {preview.frame}
+            </button>
+          ))}
+        </div>
+        <details>
+          <summary>Command details</summary>
+          <p>{receipt.commandId}</p>
+        </details>
+      </div>
+    );
+  }
   return (
     <details
       className="group rounded-sm border border-line bg-surface-0"
@@ -320,7 +381,7 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
         </p>
         <p className="mt-1 text-[9px] leading-relaxed text-ink-faint">
           Edits run against the open project and can be undone with ⌘Z. The
-          assistant sees the timeline, not your media files.
+          assistant reads the timeline and can inspect rendered preview frames.
         </p>
       </div>
 

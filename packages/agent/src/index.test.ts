@@ -1,3 +1,4 @@
+import { toolRegistry } from '@kerf/tools';
 import { describe, expect, it } from 'vitest';
 import {
   AgentCredentialError,
@@ -19,6 +20,12 @@ describe('agent prompt', () => {
     expect(KERF_AGENT_SYSTEM_PROMPT).toContain('readExport');
     expect(KERF_AGENT_SYSTEM_PROMPT).toContain('writeCaptions');
     expect(KERF_AGENT_SYSTEM_PROMPT).toContain('reference material');
+  });
+
+  it('includes exactly the registered tool names', () => {
+    expect(KERF_AGENT_SYSTEM_PROMPT.split('Available tool names:\n')[1]).toBe(
+      toolRegistry.names().join(', ') + '.',
+    );
   });
 
   it('adds session facts without changing the contract', () => {

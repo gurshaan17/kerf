@@ -63,17 +63,18 @@ report unavailable capabilities rather than fabricate results.
 
 ### Read
 
-| Tool               | What it returns                                                                             |
-| ------------------ | ------------------------------------------------------------------------------------------- |
-| `readContext`      | Project and sequence summary, editor selection, playhead, analysis counts, active reference |
-| `readAssets`       | Footage list with duration, dimensions, stream flags, and analysis availability             |
-| `readAsset`        | One asset by ID or exact name, including transcript, scenes, and beat map                   |
-| `readTimeline`     | Tracks, clips, overlays, markers, timing, and effect counts in timeline order               |
-| `readTranscript`   | Transcript segments and optional word timings for a frame window                            |
-| `findInTranscript` | Transcript and scene search hits with asset and frame ranges                                |
-| `renderFrame`      | One composited frame, returned as a PNG path and an image result                            |
-| `readDuration`     | Sequence or asset duration in frames, seconds, and timecode                                 |
-| `listEffects`      | Supported effects, overlays, masks, blend modes, fits, and animatable properties            |
+| Tool               | What it returns                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `readContext`      | Project and sequence summary, editor selection, playhead, analysis counts, active reference                                    |
+| `readAssets`       | Footage list with duration, dimensions, stream flags, and analysis availability                                                |
+| `readAsset`        | One asset by ID or exact name, including transcript, scenes, and beat map                                                      |
+| `readTimeline`     | Tracks, clips, overlays, markers, timing, and effect counts in timeline order                                                  |
+| `readTranscript`   | Transcript segments and optional word timings for a frame window                                                               |
+| `findInTranscript` | Transcript and scene search hits with asset and frame ranges                                                                   |
+| `renderFrame`      | One composited frame, returned as a PNG path and an image result                                                               |
+| `verifyTimeline`   | Structural findings for missing assets, source bounds and informational gaps/overlaps; does not verify visual or audio quality |
+| `readDuration`     | Sequence or asset duration in frames, seconds, and timecode                                                                    |
+| `listEffects`      | Supported effects, overlays, masks, blend modes, fits, and animatable properties                                               |
 
 `renderFrame` returns both the frame metadata and the captured image, so a model
 can inspect what it just changed. MCP sends an image content block; the built-in
@@ -190,3 +191,20 @@ Typical failures:
 
 The MCP schema, descriptions, and read-only annotations are generated from the
 registry, so no separate MCP registration is needed.
+
+## Chat edit receipts and verification
+
+The built-in prompt's tool names come from the registry. Every committed tool
+command emits a factual receipt with its command ID, undo label, affected clips
+and frame ranges, and before/after duration. A batch produces one receipt.
+Receipts remain visible if subsequent work fails or the turn is stopped.
+
+Chat automatically runs structural verification and renders at most three affected
+visual midpoints per committed command, at 480 pixels wide. Receipts show seekable
+ranges, structural findings and timecoded thumbnails. Images stay local in chat;
+the existing `renderFrame` tool remains the model's explicit image-inspection path.
+Preview capture is not visual approval. Missing previews, cancellation or timeline
+changes leave verification partial or unverified. Stopping does not roll back edits.
+Saved chats retain their receipts and thumbnails as historical evidence, not proof
+of the current timeline. Each receipt describes one command's undo step; it does
+not promise whole-turn undo or selective restoration of an old command.

@@ -6,6 +6,8 @@ import type { LanguageModel, ModelMessage, ToolSet } from 'ai';
 import { buildAgentSystemPrompt, credentialHint } from '@kerf/agent';
 import { sequenceDurationFrames } from '@kerf/engine';
 import { toolRegistry } from '@kerf/tools';
+import type { EditReceipt, ToolRenderedFrame } from '@kerf/tools';
+import type { ChatEditVerification } from '../../shared/contracts';
 import type {
   ChatEvent,
   ChatAssetMention,
@@ -45,6 +47,7 @@ interface ActiveTurn {
 }
 
 interface ToolTiming {
+  readonly name: string;
   readonly input: unknown;
   readonly startedAt: number;
 }
@@ -394,6 +397,98 @@ export class AgentService {
     }
   }
 
+  private async verifyEdit(
+    turn: ActiveTurn,
+    receipt: EditReceipt,
+  ): Promise<void> {
+    const previews: { frame: number; dataUrl: string }[] = [];
+    let verification: ChatEditVerification = {
+      status: 'unverified',
+      findings: [],
+      previews,
+      note: 'Applied; verification did not complete.',
+    };
+    const sequence = this.options.projects.current()?.project.sequence;
+    const current = () => {
+      if (turn.controller.signal.aborted)
+        throw new Error('Stopped. Committed edits remain applied.');
+      if (this.options.projects.current()?.project.id !== receipt.projectId)
+        throw new Error('Project changed; verification unavailable.');
+      if (this.options.projects.current()?.project.sequence !== sequence)
+        throw new Error(
+          'Timeline changed during verification; previews may be stale.',
+        );
+    };
+    try {
+      current();
+      const result = (await this.options.tools.call(
+        'verifyTimeline',
+        {},
+        'agent',
+      )) as {
+        findings: ChatEditVerification['findings'];
+        durationFrames: number;
+      };
+      current();
+      verification = {
+        ...verification,
+        status: 'partial',
+        findings: result.findings,
+      };
+      const frames = [
+        ...new Set(
+          receipt.changes
+            .filter((c) => c.visual)
+            .map((c) =>
+              Math.max(
+                0,
+                Math.min(
+                  result.durationFrames - 1,
+                  Math.floor((c.startFrame + c.endFrame) / 2),
+                ),
+              ),
+            ),
+        ),
+      ].slice(0, 3);
+      if (result.durationFrames > 0)
+        for (const frame of frames) {
+          current();
+          const rendered = (await this.options.tools.call(
+            'renderFrame',
+            { frame, maxWidth: 480 },
+            'agent',
+          )) as ToolRenderedFrame;
+          current();
+          const bytes = readFileSync(rendered.path);
+          if (bytes.length > 2_000_000)
+            throw new Error('Preview exceeds the image budget.');
+          previews.push({
+            frame: rendered.frame,
+            dataUrl: `data:image/png;base64,${bytes.toString('base64')}`,
+          });
+        }
+      verification = {
+        ...verification,
+        status: 'checked',
+        note: 'Structural checks complete. Sampled previews are for review; visual quality, playback and audio are not verified.',
+      };
+    } catch (cause) {
+      verification = { ...verification, note: errorMessage(cause) };
+    }
+    this.emit({
+      type: 'chat.tool',
+      turnId: turn.turnId,
+      tool: {
+        id: receipt.commandId,
+        name: 'Committed edit',
+        input: {},
+        status: 'succeeded',
+        receipt,
+        verification,
+      },
+    });
+  }
+
   private async run(
     turn: ActiveTurn,
     provider: ProviderAccount,
@@ -418,7 +513,41 @@ export class AgentService {
           ...this.history,
           { role: 'user', content: chatModelMessage(message, mentions) },
         ],
-        tools: createAgentToolSet(this.options.tools),
+        tools: createAgentToolSet({
+          call: async (name, input, actor) => {
+            const receipts: EditReceipt[] = [];
+            try {
+              return await this.options.tools.call(
+                name,
+                input,
+                actor,
+                (receipt) => {
+                  receipts.push(receipt);
+                  this.emit({
+                    type: 'chat.tool',
+                    turnId: turn.turnId,
+                    tool: {
+                      id: receipt.commandId,
+                      name: 'Committed edit',
+                      input: {},
+                      status: 'succeeded',
+                      receipt,
+                      verification: {
+                        status: 'unverified',
+                        findings: [],
+                        previews: [],
+                        note: 'Applied. Verification pending.',
+                      },
+                    },
+                  });
+                },
+              );
+            } finally {
+              for (const receipt of receipts)
+                await this.verifyEdit(turn, receipt);
+            }
+          },
+        }),
         stopWhen: stepCountIs(12),
         toolCallConcurrency: 1,
         maxRetries: 1,
@@ -447,6 +576,7 @@ export class AgentService {
               input: part.input,
             };
             toolTimings.set(part.toolCallId, {
+              name: part.toolName,
               input: part.input,
               startedAt: this.now(),
             });
@@ -533,6 +663,21 @@ export class AgentService {
         hint: errorHint(cause),
       });
     } finally {
+      for (const [id, timing] of toolTimings) {
+        this.emit({
+          type: 'chat.tool',
+          turnId: turn.turnId,
+          tool: {
+            id,
+            name: timing.name,
+            input: timing.input,
+            status: turn.controller.signal.aborted ? 'cancelled' : 'failed',
+            error:
+              'Tool did not finish. Any committed edits are shown separately.',
+            durationMs: this.now() - timing.startedAt,
+          },
+        });
+      }
       if (this.active?.turnId === turn.turnId) {
         this.active = null;
       }
