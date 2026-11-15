@@ -1,3 +1,4 @@
+import { VisualReviewCard } from './VisualReviewCard';
 import { EditingReviews } from './EditingReviews';
 import { formatTimecode } from '@kerf/model';
 import { useEffect, useRef, useState } from 'react';
@@ -61,6 +62,7 @@ function statusIcon(tool: ChatToolActivity) {
 
 function ToolCard({ tool }: { readonly tool: ChatToolActivity }) {
   const seek = useStudio((state) => state.setPlayhead);
+  if (tool.visualReview) return <VisualReviewCard review={tool.visualReview} />;
   if (tool.receipt) {
     const receipt = tool.receipt;
     return (

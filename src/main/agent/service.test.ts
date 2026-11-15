@@ -333,6 +333,7 @@ describe('AgentService', () => {
       { includeMarkers: true },
       'agent',
       expect.any(Function),
+      undefined,
     );
     const deltas = events
       .filter((event) => event.type === 'chat.delta')

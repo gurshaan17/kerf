@@ -1,3 +1,5 @@
+import { VISUAL_REVIEW_TOOLS } from './visual-review';
+export * from './visual-review';
 import { planRoughCutTool, readSourceFilmstripTool } from './rough-cut';
 export * from './rough-cut';
 import { EDITING_TOOLS } from './editing';
@@ -28,6 +30,7 @@ export * from './types';
 
 export const TOOL_DEFINITIONS = [
   ...READ_TOOLS,
+  ...VISUAL_REVIEW_TOOLS,
   planRoughCutTool,
   readSourceFilmstripTool,
   ...EDITING_TOOLS,

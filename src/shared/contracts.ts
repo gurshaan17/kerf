@@ -378,7 +378,21 @@ export interface ChatEditVerification {
   readonly note: string;
 }
 
+export interface ChatVisualReview {
+  readonly storyboardId: string;
+  readonly status: string;
+  readonly pass?: 'initial' | 'recheck';
+  readonly findings: readonly import('@kerf/tools').VisualFinding[];
+  readonly structuralFindings: readonly TimelineFinding[];
+  readonly previews: readonly { frame: number; dataUrl: string }[];
+  readonly note: string;
+  readonly scope: string;
+  readonly samplingTruncated?: boolean;
+  readonly objectsTruncated?: boolean;
+}
+
 export interface ChatToolActivity {
+  readonly visualReview?: ChatVisualReview;
   readonly receipt?: EditReceipt;
   readonly verification?: ChatEditVerification;
   readonly id: string;

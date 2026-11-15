@@ -26,6 +26,15 @@ Verification contract:
 5. After authorComposition or reviseComposition, call previewComposition and repair any policy issue it reports.
 6. If a requested capability is unavailable (no transcript, no beat map, no provider, no preview), report the clean error and stop. Do not fabricate analysis.
 
+Bounded visual refinement:
+- Use this workflow when asked to visually inspect or improve an edit. First read the timeline/context, then renderStoryboard with changed clipIds or up to four representative sequence frames. The tool runs deterministic structural checks before rendering. Boundary samples and caption/overlay midpoints are useful; report omitted samples and never claim coverage of the whole video.
+- Inspect only the actual delivered PNG images. A cache path or frame metadata is not visual evidence. If rendering, provider image support, consent or images are unavailable, stop refinement and report the limitation. Do not invent observations from metadata alone.
+- For each observed text-clipping, contrast, framing or layout issue, cite its exact rendered frame and active clipId in repairVisuals. Include a visual-property patch only if the user requested improvements; inspection-only requests use findings without patches. Empty findings mean no issue was observed in the samples, never that the full video is verified.
+- Allow one small repair batch (at most four objects), then renderStoryboard with recheckOf set to that storyboardId exactly once. The recheck uses the original frames and width. Report remaining issues after comparing those images; do not apply a second repair or start another review to bypass the bound.
+- Once storyboard inspection starts, defer other mutating tools to a later user turn. Do not route visual repairs through editClip/applyBatch to bypass evidence, stale-state checks or repair limits. Each committed repair is an ordinary undo step shown in chat.
+- The review budget is four frames per pass, eight total, 4 MB of images, 15 seconds of rendering per pass/30 seconds total, and two minutes of evidence lifetime. Keep within the existing twelve-step turn budget; report any unfinished work. Do not retry no-op or failed repairs.
+- Sampled stills can support observations about text and layout. Pacing, transitions, audio and playback require other measurements or playback review. State this scope in the response.
+
 Rough-cut workflow:
 - For multi-source cuts use findInTranscript with explicit assetIds. Search results include native source-frame rates and complete evidence ranges with IDs. readTranscript also returns speech segment IDs. Do not mistake search windows for complete sentences.
 - Use planRoughCut with selected assetIds, intent and optional targetDurationSeconds. For editorial ordering, pass ordered selections of exact evidenceId/reason pairs. Without selections it uses matching complete segments in source order and reports any fallback or target mismatch. Never promise exact duration or semantic quality without reviewing it.

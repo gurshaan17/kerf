@@ -1,3 +1,5 @@
+import { prepareVisualMessages } from './visual-messages';
+import { storyboardImages } from '../tools/storyboard-images';
 import { sourceFilmstripImages } from '../tools/source-images';
 import type { SqliteDatabase } from '../db/connection';
 import { randomUUID } from 'node:crypto';
@@ -8,6 +10,8 @@ import { buildAgentSystemPrompt, credentialHint } from '@kerf/agent';
 import { sequenceDurationFrames } from '@kerf/engine';
 import { toolRegistry } from '@kerf/tools';
 import type { EditReceipt, ToolRenderedFrame } from '@kerf/tools';
+import type { StoryboardResult, VisualRepairResult } from '@kerf/tools';
+import type { ChatVisualReview } from '../../shared/contracts';
 import type { ChatEditVerification } from '../../shared/contracts';
 import type {
   ChatEvent,
@@ -108,6 +112,44 @@ function renderFrameModelOutput(output: unknown) {
   return { type: 'text' as const, value: text };
 }
 
+export function visualReviewActivity(
+  name: string,
+  output: unknown,
+): ChatVisualReview | undefined {
+  if (name === 'renderStoryboard') {
+    const result = output as StoryboardResult;
+    return {
+      storyboardId: result.storyboardId,
+      status: result.status,
+      pass: result.pass,
+      findings: result.findings,
+      structuralFindings: result.structuralFindings,
+      note: result.note,
+      scope: result.scope,
+      samplingTruncated: result.samplingTruncated,
+      objectsTruncated: result.objectsTruncated,
+      previews: storyboardImages(result).map((i) => ({
+        frame: i.frame,
+        dataUrl: `data:image/png;base64,${i.data}`,
+      })),
+    };
+  }
+  if (name === 'repairVisuals') {
+    const result = output as VisualRepairResult;
+    return {
+      storyboardId: result.storyboardId,
+      status: result.status,
+      findings: result.findings,
+      structuralFindings: [],
+      previews: [],
+      note: result.note,
+      scope:
+        'Model observations from sampled frames. Playback, audio and the whole video remain unverified.',
+    };
+  }
+  return undefined;
+}
+
 function chatModelMessage(
   message: string,
   mentions: readonly ChatAssetMention[] = [],
@@ -129,6 +171,9 @@ export function createAgentToolSet(
     typeof permissions.sourceImages === 'function'
       ? permissions.sourceImages()
       : permissions.sourceImages === true;
+  let initialStoryboard: string | null = null;
+  let storyboardCalls = 0;
+  let repairCalls = 0;
   const tools: ToolSet = {};
   for (const definition of toolRegistry.list()) {
     const base = {
@@ -141,15 +186,85 @@ export function createAgentToolSet(
         if (options.abortSignal?.aborted) {
           throw new Error('The turn was stopped before this tool ran.');
         }
-        if (definition.name === 'readSourceFilmstrip' && !canSendSourceImages())
+        const visual =
+          definition.name === 'renderStoryboard' ||
+          definition.name === 'repairVisuals';
+        const checkAccess = () => {
+          if (!canSendSourceImages())
+            throw new Error(
+              'Visual inspection requires vision and chat consent for the active provider. Enable it in AI settings or use structural checks.',
+            );
+        };
+        if (
+          (visual || definition.name === 'readSourceFilmstrip') &&
+          !canSendSourceImages()
+        ) {
           throw new Error(
-            'Source imagery requires vision consent for the chat provider. Enable it in AI settings or use text evidence.',
+            'Source imagery and visual refinement require vision consent for the chat provider. Enable it in AI settings or use text evidence.',
           );
-        const result = await executor.call(definition.name, input, 'agent');
-        if (definition.name === 'readSourceFilmstrip' && !canSendSourceImages())
+        }
+        if (
+          storyboardCalls &&
+          !definition.readOnly &&
+          definition.name !== 'repairVisuals' &&
+          definition.name !== 'cancelEditingJob'
+        )
           throw new Error(
-            'Source-image consent changed before the images could be delivered.',
+            'The bounded visual review has started. Use its single evidence-linked repair batch; defer other edits to a new turn.',
           );
+        if (
+          storyboardCalls &&
+          (definition.name === 'renderFrame' ||
+            definition.name === 'readSourceFilmstrip')
+        )
+          throw new Error(
+            'Use the bounded storyboard recheck; other image capture is deferred to a new turn.',
+          );
+        if (definition.name === 'renderStoryboard') {
+          const recheck = (input as { recheckOf?: string }).recheckOf;
+          if (
+            storyboardCalls === 0
+              ? Boolean(recheck)
+              : storyboardCalls !== 1 ||
+                recheck !== initialStoryboard ||
+                repairCalls !== 1
+          )
+            throw new Error(
+              'This turn allows one initial storyboard and one recheck after one repair.',
+            );
+          storyboardCalls++;
+        }
+        if (definition.name === 'repairVisuals') {
+          if (
+            !initialStoryboard ||
+            (input as { storyboardId?: string }).storyboardId !==
+              initialStoryboard ||
+            repairCalls !== 0
+          )
+            throw new Error(
+              'This turn allows one evidence-linked visual repair batch after inspection.',
+            );
+          repairCalls++;
+        }
+        const result = visual
+          ? await executor.call(definition.name, input, 'agent', undefined, {
+              signal: options.abortSignal,
+              checkAccess,
+            })
+          : await executor.call(definition.name, input, 'agent');
+        if (
+          (visual || definition.name === 'readSourceFilmstrip') &&
+          !canSendSourceImages()
+        )
+          throw new Error(
+            'Image consent changed before the result could be delivered.',
+          );
+        if (
+          definition.name === 'renderStoryboard' &&
+          storyboardCalls === 1 &&
+          (result as { status?: string }).status === 'ready'
+        )
+          initialStoryboard = (result as { storyboardId: string }).storyboardId;
         return result;
       },
     };
@@ -159,11 +274,15 @@ export function createAgentToolSet(
             ...base,
             toModelOutput: ({ output }) => renderFrameModelOutput(output),
           })
-        : definition.name === 'readSourceFilmstrip'
+        : definition.name === 'renderStoryboard'
           ? tool({
               ...base,
               toModelOutput: ({ output }) => {
-                const images = sourceFilmstripImages(output);
+                if (!canSendSourceImages())
+                  throw new Error(
+                    'Vision consent changed before storyboard delivery.',
+                  );
+                const images = storyboardImages(output);
                 return {
                   type: 'content' as const,
                   value: [
@@ -171,10 +290,10 @@ export function createAgentToolSet(
                       type: 'text' as const,
                       text: JSON.stringify({
                         result: output,
-                        deliveredSourceFrames: images.map((i) => i.frame),
+                        deliveredFrames: images.map((i) => i.frame),
                         note: images.length
-                          ? 'Source imagery only.'
-                          : 'No source images could be delivered.',
+                          ? 'Inspect these sampled timeline images only.'
+                          : 'No storyboard images were delivered. Do not invent visual findings or repairs.',
                       }),
                     },
                     ...images.map((i) => ({
@@ -186,7 +305,34 @@ export function createAgentToolSet(
                 };
               },
             })
-          : tool(base);
+          : definition.name === 'readSourceFilmstrip'
+            ? tool({
+                ...base,
+                toModelOutput: ({ output }) => {
+                  const images = sourceFilmstripImages(output);
+                  return {
+                    type: 'content' as const,
+                    value: [
+                      {
+                        type: 'text' as const,
+                        text: JSON.stringify({
+                          result: output,
+                          deliveredSourceFrames: images.map((i) => i.frame),
+                          note: images.length
+                            ? 'Source imagery only.'
+                            : 'No source images could be delivered.',
+                        }),
+                      },
+                      ...images.map((i) => ({
+                        type: 'file' as const,
+                        mediaType: i.mimeType,
+                        data: { type: 'data' as const, data: i.data },
+                      })),
+                    ],
+                  };
+                },
+              })
+            : tool(base);
   }
   return tools;
 }
@@ -545,6 +691,15 @@ export class AgentService {
     message: string,
     mentions: readonly ChatAssetMention[],
   ): Promise<void> {
+    const canSendImages = () => {
+      const current = this.options.providers.chatProvider();
+      return (
+        current?.id === provider.id &&
+        current.enabled &&
+        current.chatConsent &&
+        current.visionConsent
+      );
+    };
     const toolTimings = new Map<string, ToolTiming>();
     let text = '';
     let aborted = false;
@@ -563,7 +718,7 @@ export class AgentService {
         ],
         tools: createAgentToolSet(
           {
-            call: async (name, input, actor) => {
+            call: async (name, input, actor, _onCommit, execution) => {
               const receipts: EditReceipt[] = [];
               try {
                 const output = await this.options.tools.call(
@@ -590,6 +745,7 @@ export class AgentService {
                       },
                     });
                   },
+                  execution,
                 );
                 if (
                   name === 'planAutoCut' ||
@@ -607,23 +763,37 @@ export class AgentService {
                 }
                 return output;
               } finally {
-                for (const receipt of receipts)
-                  await this.verifyEdit(turn, receipt);
+                for (const receipt of receipts) {
+                  if (name === 'repairVisuals')
+                    this.emit({
+                      type: 'chat.tool',
+                      turnId: turn.turnId,
+                      tool: {
+                        id: receipt.commandId,
+                        name: 'Committed visual repair',
+                        input: {},
+                        status: 'succeeded',
+                        receipt,
+                        verification: {
+                          status: 'partial',
+                          findings: [],
+                          previews: [],
+                          note: 'Visual repair applied. Review its single storyboard recheck; sampled frames do not certify the whole edit.',
+                        },
+                      },
+                    });
+                  else await this.verifyEdit(turn, receipt);
+                }
               }
             },
           },
           {
-            sourceImages: () => {
-              const current = this.options.providers.chatProvider();
-              return (
-                current?.id === provider.id &&
-                current.enabled &&
-                current.chatConsent &&
-                current.visionConsent
-              );
-            },
+            sourceImages: canSendImages,
           },
         ),
+        prepareStep: ({ messages }) => ({
+          messages: prepareVisualMessages(messages, canSendImages),
+        }),
         stopWhen: stepCountIs(12),
         toolCallConcurrency: 1,
         maxRetries: 1,
@@ -674,6 +844,7 @@ export class AgentService {
                 status: 'succeeded',
                 input: timing?.input,
                 output: part.output,
+                visualReview: visualReviewActivity(part.toolName, part.output),
                 durationMs: timing ? this.now() - timing.startedAt : undefined,
               },
             });

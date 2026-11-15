@@ -65,6 +65,7 @@ export interface ToolSearchResponse {
 }
 
 export interface ToolRenderFrameRequest {
+  readonly signal?: AbortSignal;
   readonly frame: number;
   readonly maxWidth?: number;
 }
@@ -160,6 +161,10 @@ export interface ToolReferenceProfileRequest {
 }
 
 export interface ToolContext {
+  readonly actor?: ToolApplyOptions['actor'];
+  readonly signal?: AbortSignal;
+  checkAccess?(): void;
+  visualReview?(): import('./visual-review').ToolVisualReviewAccess;
   editing?(): ToolEditingAccess;
   snapshot(): ToolSnapshot | null;
   editor(): ToolEditorContext;

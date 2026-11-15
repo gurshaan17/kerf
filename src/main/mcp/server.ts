@@ -1,3 +1,4 @@
+import { storyboardImages } from '../tools/storyboard-images';
 import { sourceFilmstripImages } from '../tools/source-images';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -71,6 +72,24 @@ function textResult(value: unknown, toolName?: string) {
         // The path may have been pruned between the render and this call.
       }
     }
+  }
+  if (toolName === 'renderStoryboard') {
+    const images = storyboardImages(value);
+    for (const image of images)
+      content.push({
+        type: 'image',
+        data: image.data,
+        mimeType: image.mimeType,
+      });
+    content.push({
+      type: 'text',
+      text: JSON.stringify({
+        deliveredFrames: images.map((i) => i.frame),
+        note: images.length
+          ? 'Sampled composited timeline images only.'
+          : 'No storyboard images were delivered. Visual findings and repairs are unavailable.',
+      }),
+    });
   }
   if (toolName === 'readSourceFilmstrip') {
     const images = sourceFilmstripImages(value);

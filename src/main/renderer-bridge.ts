@@ -28,6 +28,7 @@ interface PendingRequest {
   readonly resolve: (value: unknown) => void;
   readonly reject: (error: Error) => void;
   readonly timer: ReturnType<typeof setTimeout>;
+  readonly cleanup?: () => void;
 }
 
 const FRAME_TIMEOUT_MS = 30_000;
@@ -83,6 +84,7 @@ export class RendererBridge implements ToolRendererBridge {
     }
     this.pending.delete(response.id);
     clearTimeout(item.timer);
+    item.cleanup?.();
     if (response.ok) {
       item.resolve(response.result);
     } else {
@@ -100,6 +102,7 @@ export class RendererBridge implements ToolRendererBridge {
         maxWidth: request.maxWidth ?? null,
       },
       FRAME_TIMEOUT_MS,
+      request.signal,
     );
     const frame = result as Partial<RendererFrameResult> | null;
     if (!frame || !(frame.bytes instanceof Uint8Array)) {
@@ -148,6 +151,7 @@ export class RendererBridge implements ToolRendererBridge {
   dispose(): void {
     for (const [id, item] of this.pending) {
       clearTimeout(item.timer);
+      item.cleanup?.();
       item.reject(new Error('The renderer bridge closed.'));
       this.pending.delete(id);
     }
@@ -161,7 +165,9 @@ export class RendererBridge implements ToolRendererBridge {
     kind: RendererRequest['kind'],
     payload: unknown,
     timeoutMs: number,
+    signal?: AbortSignal,
   ): Promise<unknown> {
+    if (signal?.aborted) return Promise.reject(signal.reason);
     const window = this.window();
     if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
       return Promise.reject(new Error('The editor window is not available.'));
@@ -169,13 +175,22 @@ export class RendererBridge implements ToolRendererBridge {
     const id = `render_request_${randomUUID()}`;
     const request: RendererRequest = { id, kind, payload };
     return new Promise<unknown>((resolve, reject) => {
+      const abort = () => {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        cleanup();
+        reject(signal?.reason ?? new Error('Render request stopped.'));
+      };
+      const cleanup = () => signal?.removeEventListener('abort', abort);
       const timer = setTimeout(() => {
+        cleanup();
         this.pending.delete(id);
         reject(
           new Error('The editor did not answer the render request in time.'),
         );
       }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, cleanup });
+      signal?.addEventListener('abort', abort, { once: true });
       window.webContents.send(KERF_IPC.renderer.request, request);
     });
   }

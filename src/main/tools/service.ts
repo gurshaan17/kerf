@@ -1,3 +1,4 @@
+import { VisualReviewService } from './visual-review';
 import { readFileSync } from 'node:fs';
 import type { ChatEditVerification } from '../../shared/contracts';
 import { roughCutEvidence } from '@kerf/tools';
@@ -69,6 +70,11 @@ export interface ToolExportSource {
   cancel(id: string): boolean;
 }
 
+export interface ToolExecutionOptions {
+  readonly signal?: AbortSignal;
+  readonly checkAccess?: () => void;
+}
+
 export interface ToolServiceOptions {
   readonly editing?: EditingService;
   readonly projects: ToolProjectSource;
@@ -124,6 +130,7 @@ function toToolStart(result: ExportStartResult): ToolExportStartResult {
 export class ToolService {
   private readonly options: ToolServiceOptions;
   private queue: Promise<unknown> = Promise.resolve();
+  private readonly visualReviews = new VisualReviewService();
   private editor: ToolEditorContext = DEFAULT_EDITOR_CONTEXT;
 
   constructor(options: ToolServiceOptions) {
@@ -147,10 +154,17 @@ export class ToolService {
     input: unknown,
     actor: 'agent' | 'mcp' | 'system' | 'user' = 'agent',
     onCommit?: (receipt: EditReceipt) => void,
+    execution?: ToolExecutionOptions,
   ): Promise<unknown> {
-    const run = this.queue.then(() =>
-      toolRegistry.call(name, input, this.context(actor, onCommit)),
-    );
+    const run = this.queue.then(() => {
+      execution?.signal?.throwIfAborted();
+      execution?.checkAccess?.();
+      return toolRegistry.call(
+        name,
+        input,
+        this.context(actor, onCommit, execution),
+      );
+    });
     this.queue = run.then(
       () => undefined,
       () => undefined,
@@ -280,8 +294,16 @@ export class ToolService {
   private context(
     actor: 'agent' | 'mcp' | 'system' | 'user',
     onCommit?: (receipt: EditReceipt) => void,
+    execution?: ToolExecutionOptions,
   ): ToolContext {
-    return {
+    const context: ToolContext = {
+      actor,
+      signal: execution?.signal,
+      checkAccess: execution?.checkAccess,
+      visualReview: () => ({
+        render: (input) => this.visualReviews.render(context, input),
+        repair: (input) => this.visualReviews.repair(context, input),
+      }),
       editing: this.options.editing ? () => this.options.editing! : undefined,
       snapshot: () => this.snapshot(),
       editor: () => this.editor,
@@ -301,6 +323,7 @@ export class ToolService {
       profileReference: (request) => this.profileReference(request),
       now: () => this.options.now?.() ?? Date.now(),
     };
+    return context;
   }
 
   private snapshot(): ToolSnapshot | null {

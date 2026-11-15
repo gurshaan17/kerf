@@ -206,6 +206,61 @@ checks and captures up to three representative 480-pixel previews for user revie
 it does not certify playback, audio or whole-video visual quality. Each mutating
 stage has its own undo step.
 
+### Bounded visual refinement
+
+`renderStoryboard` runs `verifyTimeline` first, then renders up to four composited
+sequence frames. Pass `frames` or `clipIds`; clip sampling prioritizes text,
+caption and overlay midpoints, then clip boundaries. Out-of-range frames and
+hidden/nonvisual clips are rejected. Structural errors block refinement. Results
+include PNG references, actual image content in chat/MCP, source-independent
+sequence timestamps, canvas dimensions, up to 32 active objects with their current
+visual properties, and a project revision. Omitted samples/objects are explicit.
+
+`repairVisuals` accepts a `storyboardId` and frame-linked `findings`, each with an
+exact `clipId`, rendered `frame`, category and observation. Categories cover text
+clipping, contrast, framing and layout. Findings may omit patches for inspection
+only. A patch can change transform, text style, image fit or overlay appearance;
+it cannot alter source media, speech text, timing or audio. Keyframed transform
+properties require separate motion review. Partial properties preserve the
+object's other settings.
+
+The shared service revalidates project/revision and object/frame evidence before
+committing at most four distinct object repairs as one atomic undo entry. Mixed
+batches containing a no-op are closed without committing any changes. Findings
+without patches are recorded without edits. One repair batch is allowed per
+review. The single `renderStoryboard({ recheckOf: storyboardId })` reuses the
+original frames and width, then closes the review. Remaining visual issues are
+reported to the user rather than repaired again.
+
+Budgets per review are four frames per pass/eight total, 960 pixels maximum width,
+4 MB combined unique rendered PNG bytes, 15 seconds of rendering per pass/30
+seconds total, and two minutes of evidence lifetime. At most 20 reviews are kept
+in memory; active evidence cannot be resumed after restarting Kerf. Rendering
+checks cancellation, access and revision between frames. A stopped render releases
+the serialized tool queue; already committed repairs remain undoable. Missing
+preview support, invalid/stale evidence, exhausted budgets or revoked consent stop
+refinement, with partial results clearly labeled.
+
+Built-in chat also limits each turn to one initial storyboard, one repair attempt
+and one recheck, within its existing 12-step cap. Other mutating tools and alternate image-capture tools are deferred
+after inspection starts, preventing repairs through a second editing path. MCP
+uses the same evidence, revision and per-review limits; ordinary edits invalidate
+a captured review. Starting a fresh review is an explicit new workflow, not a way
+to continue repairing the same request indefinitely.
+
+Before each model step, image tool results are forwarded as standard user image
+parts after all corresponding tool responses. This avoids adapters that stringify
+image tool content as JSON. Tool/frame associations and text metadata are retained,
+and both vision and chat consent for the active provider are rechecked before
+forwarding images. MCP receives explicit image content blocks. Cache paths or
+missing images never count as visual inspection.
+
+Chat saves inspection frames, model observations, affected objects, the committed
+repair receipt and recheck images. These are sampled observations, not proof of
+whole-video quality. Playback, pacing, transitions and audio still require playback
+or separate measurements. Deterministic fixture-provider tests establish the loop
+and its safeguards; they do not establish a model's aesthetic judgment.
+
 ### Beat and reference
 
 | Tool                | What it does                                                                |

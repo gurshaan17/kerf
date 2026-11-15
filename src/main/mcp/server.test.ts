@@ -267,3 +267,55 @@ it('delivers cached source filmstrip images over MCP', async () => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+it('delivers composited storyboards as PNG images with read-only annotations', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'kerf-mcp-storyboard-'));
+  const path = join(directory, 'frame.png');
+  const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  writeFileSync(path, bytes);
+  const host = new McpServerHost({
+    token: 'storyboard-token',
+    port: 0,
+    tools: {
+      call: async () => ({
+        storyboardId: 'visual_fixture',
+        frames: [
+          {
+            frame: 0,
+            path,
+            mimeType: 'image/png',
+            clipIds: ['clp_abcdefghijkl'],
+          },
+        ],
+      }),
+    },
+  });
+  hosts.push(host);
+  await host.start();
+  const { client } = await connect(host, 'storyboard-token');
+  try {
+    const tools = await client.listTools();
+    expect(
+      tools.tools.find((t) => t.name === 'renderStoryboard')?.annotations
+        ?.readOnlyHint,
+    ).toBe(true);
+    expect(
+      tools.tools.find((t) => t.name === 'repairVisuals')?.annotations
+        ?.readOnlyHint,
+    ).toBe(false);
+    const result = await client.callTool({
+      name: 'renderStoryboard',
+      arguments: { frames: [0] },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.content).toContainEqual({
+      type: 'image',
+      mimeType: 'image/png',
+      data: bytes.toString('base64'),
+    });
+    expect(JSON.stringify(result.content)).toContain('deliveredFrames');
+  } finally {
+    await client.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
