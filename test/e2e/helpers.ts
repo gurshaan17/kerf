@@ -56,22 +56,64 @@ export function ensureWhisperModel(): string {
   return destination;
 }
 
-export function ensureCaptionFixture(): string {
-  mkdirSync(cacheRoot, { recursive: true });
-  const video = join(cacheRoot, 'caption-source.mp4');
-  if (existsSync(video) && statSync(video).size > 1_000) {
-    return video;
+function usableCaptionFixture(video: string, ffprobe: string): boolean {
+  if (!existsSync(video) || statSync(video).size <= 1_000) return false;
+  try {
+    const metadata = JSON.parse(
+      execFileSync(
+        ffprobe,
+        [
+          '-v',
+          'error',
+          '-show_entries',
+          'format=duration:stream=codec_type,nb_frames,duration,width,height',
+          '-of',
+          'json',
+          video,
+        ],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ),
+    ) as {
+      format?: { duration?: string };
+      streams?: {
+        codec_type?: string;
+        nb_frames?: string;
+        duration?: string;
+        width?: number;
+        height?: number;
+      }[];
+    };
+    return (
+      Number(metadata.format?.duration) > 2 &&
+      Boolean(
+        metadata.streams?.some(
+          (stream) =>
+            stream.codec_type === 'video' &&
+            Number(stream.nb_frames) > 0 &&
+            Number(stream.width) > 0 &&
+            Number(stream.height) > 0,
+        ),
+      ) &&
+      Boolean(
+        metadata.streams?.some(
+          (stream) =>
+            stream.codec_type === 'audio' && Number(stream.duration) > 2,
+        ),
+      )
+    );
+  } catch {
+    return false;
   }
-  const speech = join(cacheRoot, 'caption-source.aiff');
-  execFileSync(
-    'say',
-    [
-      '-o',
-      speech,
-      'Kerf is a local first video editor. This clip has a short caption.',
-    ],
-    { stdio: 'inherit' },
-  );
+}
+
+export function ensureCaptionFixture(directory = cacheRoot): string {
+  mkdirSync(directory, { recursive: true });
+  const video = join(directory, 'caption-source.mp4');
+  const ffprobe = executable('ffprobe');
+  if (usableCaptionFixture(video, ffprobe)) return video;
+  // Hosted macOS can return success from `say` with only 10 ms of audio.
+  // Keep real speech checked in so CI never depends on installed system voices.
+  const speech = join(repoRoot, 'test', 'fixtures', 'caption-speech.wav');
   const ffmpeg = executable('ffmpeg');
   execFileSync(
     ffmpeg,
@@ -98,6 +140,10 @@ export function ensureCaptionFixture(): string {
     ],
     { stdio: 'inherit' },
   );
+  if (!usableCaptionFixture(video, ffprobe))
+    throw new Error(
+      'Caption fixture generation did not produce usable video frames and speech audio.',
+    );
   return video;
 }
 
