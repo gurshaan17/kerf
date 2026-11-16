@@ -351,3 +351,44 @@ tests cover compatibility, ownership, source replacement, desktop receipt-time
 identity, omission bounds, and exclusion of raw transcript/image results. These
 prove workflow behavior; manual editorial baseline measurements remain pending
 in the [baseline workbook](ai-editing-baseline-results.md).
+
+### Continuing completed editing jobs
+
+Chat-created editing jobs persist their originating project, conversation, task,
+turn, planning tool, and validated planning input in the existing `app_settings`
+store beside editing-review state. Ownership is independent of the ten-task
+memory window. Reading a job or proposal does not transfer its ownership.
+
+The review UI reconciles queue/review state on events, conversation open, and a
+local polling fallback. It shows one card per job in its originating chat;
+unowned jobs, including MCP jobs, stay in the existing project review UI.
+Interrupted provider work is shown as interrupted using the queue's existing
+failed/interrupted records, without implying it resumed after restart.
+
+Review result opens local evidence. Continue with this result submits one normal
+user-triggered chat turn with a project/conversation/job reference and a request
+ID. The main process checks ownership, current job/proposal eligibility and chat
+consent before starting the turn. Continuation allows inspection and desktop
+review requests, blocks fresh planning and direct timeline edits, and confines
+job-review tools to the selected result. Apply independently revalidates and
+retains its existing desktop approval, replay protection and undo behavior.
+
+Reanalyze is explicit and uses the original validated planning request at most
+once in its turn. Changed parameters or extra planning calls are rejected. There
+is no automatic provider retry on job completion or reopen. Ordinary typed user
+requests remain independent and are not globally deduplicated.
+
+Request IDs and claimed turn IDs persist with job ownership, preventing duplicate
+continuations across repeated events and reopen. Failed/cancelled turns release
+claims for a new deliberate attempt while retaining handled request IDs. Opening
+a saved conversation also releases claims left by interrupted turns, entirely
+locally. The renderer locks submission synchronously and disables continuation
+while another turn runs. Stale sources, revoked analysis consent, failed work and
+cancelled proposals expose their reason and an explicit reanalysis path.
+
+The deterministic continuation Electron journey holds an analysis response until
+the chat turn ends, switches chats, finishes the job, reopens its originating
+chat, double-clicks Continue, and confirms one analysis call, one continuation,
+explicit Apply, rejected replay, and exact undo. Service/store tests cover durable
+ownership, request replay, consent/stale rejection, explicit reanalysis limits,
+and the submission lock. These fixtures do not evaluate editorial judgment.
