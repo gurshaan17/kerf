@@ -1,5 +1,9 @@
 # Performance
 
+For manual AI editing quality, continuity, and provider-call measurements, use
+the [AI editing baseline protocol](ai-editing-baseline.md) and its
+[results workbook](ai-editing-baseline-results.md).
+
 Kerf is a local-first editor, so the important budgets are the ones a person
 feels while working on their own machine: time to a usable window, time to an
 ingested clip, preview responsiveness, and export throughput. These are

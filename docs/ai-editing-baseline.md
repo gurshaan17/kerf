@@ -4,6 +4,9 @@ Phase 0 establishes a repeatable manual comparison before editing continuity
 changes. Protocol prepared on 17 November 2026; measurements are pending.
 Passing automated tests does not establish editorial quality.
 
+Use the [results workbook](ai-editing-baseline-results.md) to track input
+readiness, all six trials, and the later paired comparison.
+
 ## Stage A: freeze the inputs
 
 Use three real projects: talking-head speech with pauses, a screen recording
