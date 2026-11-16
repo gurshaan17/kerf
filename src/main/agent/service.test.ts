@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { LanguageModel } from 'ai';
-import { createProject } from '@kerf/model';
+import { clipSchema, createProject, createTrack, newId } from '@kerf/model';
 import type {
   ChatEvent,
   ProjectSnapshot,
@@ -67,6 +67,7 @@ function provider(): ProviderAccount {
 
 function fakeModel(
   streams: readonly (readonly Record<string, unknown>[])[],
+  observe?: (input: unknown) => void,
 ): LanguageModel {
   let index = 0;
   return {
@@ -77,7 +78,8 @@ function fakeModel(
     doGenerate: async () => {
       throw new Error('The test only uses streaming.');
     },
-    doStream: async () => {
+    doStream: async (input: unknown) => {
+      observe?.(input);
       const chunks = streams[Math.min(index, streams.length - 1)] ?? [];
       index += 1;
       return {
@@ -138,8 +140,9 @@ function runner(
   resolveDone: () => void,
   tools: Pick<ToolService, 'call'> = { call: vi.fn(async () => ({})) },
 ) {
+  const current = snapshot();
   const service = new AgentService({
-    projects: { current: snapshot },
+    projects: { current: () => current },
     providers: {
       chatProvider: provider,
       chatModel: () => fakeModel([toolChunks(), textChunks('Done')]),
@@ -333,7 +336,7 @@ describe('AgentService', () => {
       { includeMarkers: true },
       'agent',
       expect.any(Function),
-      undefined,
+      expect.objectContaining({ checkAccess: expect.any(Function) }),
     );
     const deltas = events
       .filter((event) => event.type === 'chat.delta')
@@ -538,3 +541,129 @@ it('requires source-image consent and delivers cached filmstrip bytes to the mod
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+it.each([
+  { removed: false, stopped: false },
+  { removed: true, stopped: false },
+  { removed: false, stopped: true },
+])(
+  'retains actual commits across database reopen: %j',
+  async ({ removed, stopped }) => {
+    const root = mkdtempSync(join(tmpdir(), 'kerf-context-'));
+    const filename = join(root, 'test.db');
+    let db = openDatabase({ filename });
+    try {
+      const repository = new ProjectRepository({
+        database: db.connection,
+        projectsRoot: join(root, 'projects'),
+      });
+      const project = repository.create({ name: 'Continuity' }).project;
+      const current = { ...snapshot(), project };
+      const track = createTrack({ kind: 'overlay' });
+      const clip = clipSchema.parse({
+        id: newId('clip'),
+        trackId: track.id,
+        type: 'text',
+        text: 'Actual output',
+        startFrame: 0,
+        durationFrames: 40,
+      });
+      let resolve = () => {};
+      let completed = new Promise<void>((r) => {
+        resolve = r;
+      });
+      const broadcast = (event: ChatEvent) => {
+        if (['chat.done', 'chat.error', 'chat.aborted'].includes(event.type))
+          resolve();
+      };
+      const tools = {
+        call: vi.fn<ToolService['call']>(
+          async (name, _input, _actor, onCommit) => {
+            if (name === 'verifyTimeline')
+              return { findings: [], durationFrames: 40 };
+            project.sequence.tracks = [{ ...track, clips: [clip] }];
+            onCommit?.({
+              projectId: project.id,
+              commandId: 'committed-before-error',
+              label: 'Title',
+              frameRate: project.sequence.frameRate,
+              undoable: true,
+              beforeDurationFrames: 0,
+              afterDurationFrames: 40,
+              changes: [
+                {
+                  clipId: clip.id,
+                  label: 'Title',
+                  kind: 'added',
+                  startFrame: 0,
+                  endFrame: 40,
+                  visual: false,
+                },
+              ],
+            });
+            if (stopped) first.abort();
+            throw new Error('Tool failed after commit');
+          },
+        ),
+      } as unknown as ToolService;
+      const first = new AgentService({
+        database: db.connection,
+        projects: { current: () => current },
+        providers: {
+          chatProvider: provider,
+          chatModel: () =>
+            fakeModel([
+              toolChunks(),
+              [{ type: 'error', error: new Error('Provider failed') }],
+            ]),
+        },
+        tools,
+        broadcast,
+      });
+      first.start({ message: 'Create a title, keep it short.' });
+      await completed;
+      const saved = first.conversations()[0]!;
+      expect(saved.turns[0]?.status).toBe(stopped ? 'aborted' : 'error');
+      expect(saved.editingContext?.tasks[0]).toMatchObject({
+        state: 'applied',
+        turnState: stopped ? 'aborted' : 'error',
+        commandIds: ['committed-before-error'],
+      });
+      db.close();
+      db = openDatabase({ filename });
+      if (removed) project.sequence.tracks = [];
+      const requests: unknown[] = [];
+      completed = new Promise<void>((r) => {
+        resolve = r;
+      });
+      const second = new AgentService({
+        database: db.connection,
+        projects: { current: () => current },
+        providers: {
+          chatProvider: provider,
+          chatModel: () =>
+            fakeModel([textChunks('Which change should I make?')], (input) =>
+              requests.push(input),
+            ),
+        },
+        tools,
+        broadcast,
+      });
+      second.openConversation(saved.id);
+      expect(requests).toHaveLength(0);
+      second.start({ message: 'Shorten that title.' });
+      await completed;
+      expect(requests).toHaveLength(1);
+      const prompt = JSON.stringify(requests[0]);
+      expect(prompt).toContain(clip.id);
+      expect(prompt).toContain('committed-before-error');
+      const retained = second.conversations()[0]!.editingContext!.tasks[0]!;
+      expect(retained.references[0]?.stale).toBe(removed);
+      expect(retained.commandIds).toEqual(['committed-before-error']);
+      expect(tools.call).toHaveBeenCalledTimes(stopped ? 1 : 2);
+    } finally {
+      db.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);

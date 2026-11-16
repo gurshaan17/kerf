@@ -843,6 +843,7 @@ export interface ChatTurn {
 }
 
 export interface ChatConversation {
+  readonly editingContext?: import('./editing-context').EditingContext;
   readonly id: string;
   readonly title: string;
   readonly updatedAt: number;

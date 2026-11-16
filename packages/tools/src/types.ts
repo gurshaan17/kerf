@@ -197,6 +197,8 @@ export interface EditReceipt {
     clipId: string;
     label: string;
     kind: 'added' | 'changed' | 'removed';
+    /** Post-commit clip/source identity; absent on older receipts. */
+    fingerprint?: string | null;
     startFrame: number;
     endFrame: number;
     visual: boolean;

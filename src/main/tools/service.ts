@@ -1,3 +1,4 @@
+import { referenceFingerprint } from '../projects/reference-fingerprint';
 import { VisualReviewService } from './visual-review';
 import { readFileSync } from 'node:fs';
 import type { ChatEditVerification } from '../../shared/contracts';
@@ -307,10 +308,16 @@ export class ToolService {
       editing: this.options.editing ? () => this.options.editing! : undefined,
       snapshot: () => this.snapshot(),
       editor: () => this.editor,
-      apply: (command, options) =>
-        this.apply(command, actor, options?.label, onCommit),
-      applyBatch: (commands, options) =>
-        this.applyBatch(commands, actor, options?.label, onCommit),
+      apply: (command, options) => {
+        execution?.signal?.throwIfAborted();
+        execution?.checkAccess?.();
+        return this.apply(command, actor, options?.label, onCommit);
+      },
+      applyBatch: (commands, options) => {
+        execution?.signal?.throwIfAborted();
+        execution?.checkAccess?.();
+        return this.applyBatch(commands, actor, options?.label, onCommit);
+      },
       search: (request) => this.search(request),
       renderer: () => this.options.renderer?.() ?? null,
       exports: () => this.exports(),
@@ -377,6 +384,7 @@ export class ToolService {
           clipId: id,
           label: clip.label || clip.type,
           kind: !old ? 'added' : !next ? 'removed' : 'changed',
+          fingerprint: referenceFingerprint(result.snapshot, 'clip', id),
           startFrame: clip.startFrame,
           endFrame: clip.startFrame + clip.durationFrames,
           visual: clip.type !== 'audio',

@@ -405,3 +405,39 @@ describe('committed edit receipts', () => {
     expect(committed).not.toHaveBeenCalled();
   });
 });
+
+it.each(['insertText', 'applyBatch'])(
+  'rechecks turn access immediately before %s commits',
+  async (name) => {
+    const state = withTextClip(makeSnapshot());
+    const { service, applied } = makeService(state);
+    const clip = state.project.sequence.tracks.flatMap((t) => t.clips)[0]!;
+    let checks = 0;
+    const input =
+      name === 'insertText'
+        ? { text: 'Title', durationFrames: 48 }
+        : {
+            commands: [
+              {
+                type: 'clip.update',
+                clipId: clip.id,
+                patch: { text: 'Changed' },
+              },
+              {
+                type: 'clip.update',
+                clipId: clip.id,
+                patch: { label: 'Changed' },
+              },
+            ],
+          };
+    await expect(
+      service.call(name, input, 'agent', undefined, {
+        checkAccess: () => {
+          if (++checks > 1) throw new Error('Project changed');
+        },
+      }),
+    ).rejects.toThrow('Project changed');
+    expect(checks).toBe(2);
+    expect(applied).toEqual([]);
+  },
+);
