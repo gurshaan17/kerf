@@ -119,6 +119,15 @@ const providerSaveSchema = z.object({
 });
 const modelIdSchema = z.string().min(1).max(40);
 const chatSendSchema = z.object({
+  continuation: z
+    .object({
+      requestId: z.string().min(1).max(80),
+      projectId: idSchema('project'),
+      conversationId: z.string().min(1),
+      jobId: idSchema('job'),
+      action: z.enum(['continue', 'reanalyze']),
+    })
+    .optional(),
   mentions: z
     .array(
       z.object({
@@ -232,8 +241,10 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       .parse(request);
     return options.tools.finishRoughCut(parsed.jobId, parsed.stage);
   });
-  ipcMain.handle(KERF_IPC.editing.reviews, () =>
-    options.tools.editingReviews(),
+  ipcMain.handle(KERF_IPC.editing.reviews, (_event, conversationId: unknown) =>
+    options.tools.editingReviews(
+      z.string().min(1).nullable().optional().parse(conversationId),
+    ),
   );
   ipcMain.handle(KERF_IPC.editing.confirm, (_event, request: unknown) => {
     const parsed = z

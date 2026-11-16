@@ -410,7 +410,16 @@ export interface ChatAssetMention {
   readonly end: number;
 }
 
+export interface ChatContinuation {
+  readonly requestId: string;
+  readonly projectId: string;
+  readonly conversationId: string;
+  readonly jobId: string;
+  readonly action: 'continue' | 'reanalyze';
+}
+
 export interface ChatSendRequest {
+  readonly continuation?: ChatContinuation;
   readonly mentions?: readonly ChatAssetMention[];
   readonly message: string;
 }
@@ -710,7 +719,9 @@ export interface KerfBridge {
       verification?: ChatEditVerification;
     }>;
     cancel(jobId: string): Promise<unknown>;
-    reviews(): Promise<readonly import('@kerf/tools').EditingReview[]>;
+    reviews(
+      conversationId?: string | null,
+    ): Promise<readonly import('@kerf/tools').EditingReview[]>;
     confirm(request: {
       jobId: string;
       changeIds: readonly string[];

@@ -8,26 +8,47 @@ import { useStudio } from '../state/StudioProvider';
 
 export function EditingReviews() {
   const snapshot = useStudio((s) => s.snapshot);
+  const conversationId = useStudio((s) => s.chatConversationId);
   const [reviews, setReviews] = useState<readonly EditingReview[]>([]);
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
+    let revision = 0;
     const refresh = async () => {
+      const request = ++revision;
       try {
-        const result = (await window.kerf.editing?.reviews()) ?? [];
-        if (active) setReviews(result);
+        const result =
+          (await window.kerf.editing?.reviews(conversationId)) ?? [];
+        if (active && request === revision) {
+          setReviews(
+            result.filter(
+              (r) => !r.origin || r.origin.conversationId === conversationId,
+            ),
+          );
+          setError('');
+        }
       } catch (cause) {
-        if (active) setError(String(cause));
+        if (active && request === revision) setError(String(cause));
       }
     };
     setReviews([]);
+    setError('');
     void refresh();
+    const unsubscribe = window.kerf.events.subscribe((event) => {
+      if (
+        event.type === 'jobs.changed' ||
+        event.type === 'chat.done' ||
+        event.type === 'chat.tool'
+      )
+        void refresh();
+    });
     const timer = setInterval(() => void refresh(), 1500);
     return () => {
       active = false;
       clearInterval(timer);
+      unsubscribe();
     };
-  }, [snapshot?.project.id]);
+  }, [snapshot?.project.id, conversationId]);
   if (!reviews.length && !error) return null;
   return (
     <div
@@ -40,12 +61,139 @@ export function EditingReviews() {
           {error}
         </p>
       )}
-      {reviews.map((review) => (
-        <Review
-          key={`${review.job.projectId}-${review.job.id}`}
-          review={review}
-        />
-      ))}
+      {reviews.map((review) =>
+        review.origin ? (
+          <ChatJob
+            key={`${review.job.projectId}-${review.job.id}`}
+            review={review}
+          />
+        ) : (
+          <Review
+            key={`${review.job.projectId}-${review.job.id}`}
+            review={review}
+          />
+        ),
+      )}
+    </div>
+  );
+}
+
+function ChatJob({ review }: { review: EditingReview }) {
+  const send = useStudio((s) => s.sendChat);
+  const activeTurn = useStudio((s) => s.chatActiveTurnId);
+  const sending = useStudio((s) => s.chatSending);
+  const provider = useStudio((s) => s.chatProvider?.provider);
+  const [expanded, setExpanded] = useState(false);
+  const [pending, setPending] = useState(false);
+  const lock = useRef(false);
+  const origin = review.origin!;
+  const running =
+    ['queued', 'running'].includes(review.job.status) &&
+    review.job.reviewStatus !== 'cancelled';
+  const interrupted =
+    review.job.status === 'failed' &&
+    /interrupted/i.test(review.job.error ?? '');
+  const canContinue = review.eligibility?.eligible && !origin.continuedTurnId;
+  const canRetry =
+    !running && review.job.reviewStatus !== 'applied' && !origin.retryTurnId;
+  const disabled =
+    pending ||
+    sending ||
+    activeTurn !== null ||
+    !provider?.enabled ||
+    !provider.chatConsent;
+  const act = async (action: 'continue' | 'reanalyze') => {
+    if (lock.current || disabled) return;
+    lock.current = true;
+    setPending(true);
+    try {
+      await send(
+        action === 'continue'
+          ? 'Continue with this result and show it for review.'
+          : 'Reanalyze this job explicitly using its original request.',
+        [],
+        {
+          projectId: origin.projectId,
+          conversationId: origin.conversationId,
+          jobId: review.job.id,
+          requestId: crypto.randomUUID(),
+          action,
+        },
+      );
+    } finally {
+      setPending(false);
+      lock.current = false;
+    }
+  };
+  return (
+    <div
+      className="grid gap-2 border-b border-line py-2 text-[11px] text-ink-muted"
+      aria-label={`Editing job ${review.job.id}`}
+    >
+      <p className="font-semibold text-ink">
+        {review.job.kind === 'analysis.roughCut'
+          ? 'Rough cut'
+          : review.job.kind === 'analysis.autoCut'
+            ? 'Auto cut'
+            : 'Screen polish'}{' '}
+        ·{' '}
+        {review.job.reviewStatus === 'applied'
+          ? 'Applied'
+          : review.job.reviewStatus === 'cancelled'
+            ? 'Cancelled'
+            : interrupted
+              ? 'Interrupted'
+              : review.job.status === 'succeeded'
+                ? 'Completed'
+                : review.job.status}
+      </p>
+      <p>
+        {review.job.stage} · {Math.round(review.job.progress * 100)}%
+      </p>
+      {review.eligibility?.reason && !running && (
+        <p>{review.eligibility.reason}</p>
+      )}
+      {origin.continuedTurnId &&
+        !['applied', 'cancelled'].includes(review.job.reviewStatus) && (
+          <p>Continued in chat. Apply remains in review.</p>
+        )}
+      {origin.retryTurnId && <p>Reanalysis requested in chat.</p>}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? 'Hide result' : 'Review result'}
+        </Button>
+        {canContinue && (
+          <Button
+            size="sm"
+            disabled={disabled}
+            onClick={() => void act('continue')}
+          >
+            Continue with this result
+          </Button>
+        )}
+        {canRetry && (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={disabled}
+            onClick={() => void act('reanalyze')}
+          >
+            Reanalyze
+          </Button>
+        )}
+      </div>
+      {(activeTurn || sending) && (
+        <p>Wait for the current response or stop it before continuing.</p>
+      )}
+      {!provider?.chatConsent && (
+        <p>Enable a chat provider in AI settings to continue.</p>
+      )}
+      {expanded && <Review review={review} />}
     </div>
   );
 }
@@ -149,6 +297,9 @@ function Review({ review }: { review: EditingReview }) {
         {review.job.stage} · {Math.round(review.job.progress * 100)}%
       </p>
       {review.job.error && <p role="alert">{review.job.error}</p>}
+      {!terminal && !running && review.eligibility?.reason && (
+        <p>{review.eligibility.reason}</p>
+      )}
       {(receipt || review.receipt) && (
         <p>
           Applied: {(receipt ?? review.receipt)!.label} · One undo step. Preview
@@ -313,7 +464,9 @@ function Review({ review }: { review: EditingReview }) {
           </div>
           <Button
             size="sm"
-            disabled={busy || !selected.length}
+            disabled={
+              busy || !selected.length || review.eligibility?.eligible === false
+            }
             onClick={() => void apply()}
           >
             Apply {selected.length} reviewed{' '}

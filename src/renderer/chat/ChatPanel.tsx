@@ -180,6 +180,7 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const turns = useStudio((state) => state.chatTurns);
   const activeTurnId = useStudio((state) => state.chatActiveTurnId);
+  const sending = useStudio((state) => state.chatSending);
   const chatError = useStudio((state) => state.chatError);
   const chatProvider = useStudio((state) => state.chatProvider);
   const sendChat = useStudio((state) => state.sendChat);
@@ -251,7 +252,7 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
     });
   };
   const scrollRef = useRef<HTMLDivElement>(null);
-  const busy = activeTurnId !== null;
+  const busy = activeTurnId !== null || sending;
 
   useEffect(() => {
     if (!settingsOpen) {

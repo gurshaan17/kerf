@@ -667,3 +667,179 @@ it.each([
     }
   },
 );
+
+it('continues a selected result without permitting another planning call', async () => {
+  const state = snapshot();
+  const jobId = newId('job');
+  const source = {
+    projectId: state.project.id,
+    conversationId: '',
+    taskId: 'original',
+    turnId: 'original',
+    toolName: 'planAutoCut',
+    input: { clipId: newId('clip'), providerId: 'provider', purpose: '' },
+  };
+  const attemptedPlan = [
+    { type: 'stream-start', warnings: [] },
+    {
+      type: 'tool-call',
+      toolCallId: 'duplicate-plan',
+      toolName: 'planAutoCut',
+      input: JSON.stringify(source.input),
+    },
+    finish('tool-calls'),
+  ];
+  let resolve = () => {};
+  let completed = new Promise<void>((r) => {
+    resolve = r;
+  });
+  let modelCalls = 0;
+  const tools = {
+    call: vi.fn(async () => ({})),
+    editingContinuation: vi.fn(() => source),
+    claimEditingContinuation: vi.fn(),
+    releaseEditingContinuation: vi.fn(),
+  };
+  const service = new AgentService({
+    projects: { current: () => state },
+    providers: {
+      chatProvider: provider,
+      chatModel: () =>
+        ++modelCalls === 1
+          ? fakeModel([textChunks('Original analysis')])
+          : fakeModel([attemptedPlan, textChunks('Use the completed result.')]),
+    },
+    tools: tools as unknown as ToolService,
+    broadcast: (event) => {
+      if (['chat.done', 'chat.error', 'chat.aborted'].includes(event.type))
+        resolve();
+    },
+  });
+  const original = service.start({ message: 'Original analysis' });
+  await completed;
+  source.conversationId = original.sessionId;
+  completed = new Promise<void>((r) => {
+    resolve = r;
+  });
+  const continuation = {
+    projectId: state.project.id,
+    conversationId: original.sessionId,
+    jobId,
+    requestId: 'click',
+    action: 'continue' as const,
+  };
+  service.start({ message: 'Continue with this result.', continuation });
+  expect(() =>
+    service.start({ message: 'Continue with this result.', continuation }),
+  ).toThrow('current turn');
+  await completed;
+  expect(tools.call).not.toHaveBeenCalled();
+  expect(tools.claimEditingContinuation).toHaveBeenCalledOnce();
+  expect(tools.editingContinuation).toHaveBeenCalledWith(
+    jobId,
+    state.project.id,
+    original.sessionId,
+    'continue',
+    'click',
+  );
+  expect(() =>
+    service.start({
+      message: 'Wrong chat',
+      continuation: { ...continuation, conversationId: 'other' },
+    }),
+  ).toThrow('originating project and conversation');
+  expect(modelCalls).toBe(2);
+});
+
+it('allows one explicit reanalysis using the original planning request', async () => {
+  const state = snapshot();
+  const originalJob = newId('job');
+  const retryJob = newId('job');
+  const source = {
+    projectId: state.project.id,
+    conversationId: '',
+    taskId: 'original',
+    turnId: 'original',
+    toolName: 'planAutoCut',
+    input: { clipId: newId('clip'), providerId: 'provider', purpose: '' },
+  };
+  const plan = (id: string, input = source.input) => [
+    { type: 'stream-start', warnings: [] },
+    {
+      type: 'tool-call',
+      toolCallId: id,
+      toolName: 'planAutoCut',
+      input: JSON.stringify(input),
+    },
+    finish('tool-calls'),
+  ];
+  let resolve = () => {};
+  let completed = new Promise<void>((r) => {
+    resolve = r;
+  });
+  let models = 0;
+  const tools = {
+    call: vi.fn(async () => ({ id: retryJob, projectId: state.project.id })),
+    editingContinuation: vi.fn(() => source),
+    claimEditingContinuation: vi.fn(),
+    releaseEditingContinuation: vi.fn(),
+    associateEditingJob: vi.fn(),
+  };
+  const service = new AgentService({
+    projects: { current: () => state },
+    providers: {
+      chatProvider: provider,
+      chatModel: () =>
+        ++models === 1
+          ? fakeModel([textChunks('Original')])
+          : fakeModel([
+              plan('wrong', {
+                ...source.input,
+                purpose: 'Silently changed intent',
+              }),
+              plan('retry'),
+              plan('duplicate'),
+              textChunks('Reanalysis started.'),
+            ]),
+    },
+    tools: tools as unknown as ToolService,
+    broadcast: (event) => {
+      if (['chat.done', 'chat.error', 'chat.aborted'].includes(event.type))
+        resolve();
+    },
+  });
+  const original = service.start({ message: 'Original' });
+  await completed;
+  source.conversationId = original.sessionId;
+  completed = new Promise<void>((r) => {
+    resolve = r;
+  });
+  service.start({
+    message: 'Reanalyze explicitly',
+    continuation: {
+      projectId: state.project.id,
+      conversationId: original.sessionId,
+      jobId: originalJob,
+      requestId: 'retry-click',
+      action: 'reanalyze',
+    },
+  });
+  await completed;
+  expect(tools.call).toHaveBeenCalledTimes(1);
+  expect(tools.call).toHaveBeenCalledWith(
+    'planAutoCut',
+    source.input,
+    'agent',
+    expect.any(Function),
+    expect.any(Object),
+  );
+  expect(tools.associateEditingJob).toHaveBeenCalledWith(
+    retryJob,
+    expect.objectContaining({
+      conversationId: original.sessionId,
+      toolName: 'planAutoCut',
+      input: source.input,
+    }),
+  );
+  expect(tools.releaseEditingContinuation).not.toHaveBeenCalled();
+});

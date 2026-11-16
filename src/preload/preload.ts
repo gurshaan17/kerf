@@ -51,7 +51,8 @@ const bridge: KerfBridge = {
   editing: {
     finish: (request) => invoke(KERF_IPC.editing.finish, request),
     cancel: (jobId) => invoke(KERF_IPC.editing.cancel, jobId),
-    reviews: () => invoke(KERF_IPC.editing.reviews),
+    reviews: (conversationId) =>
+      invoke(KERF_IPC.editing.reviews, conversationId),
     confirm: (request) => invoke(KERF_IPC.editing.confirm, request),
   },
   screenPolish: {

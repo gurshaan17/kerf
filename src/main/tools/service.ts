@@ -173,8 +173,50 @@ export class ToolService {
     return run;
   }
 
-  editingReviews() {
-    return this.options.editing?.reviews() ?? [];
+  associateEditingJob(
+    jobId: string,
+    origin: import('@kerf/tools').EditingJobOrigin,
+  ) {
+    if (!this.options.editing)
+      throw new Error('Editing analysis is unavailable.');
+    this.options.editing.associate(jobId, origin);
+  }
+  editingContinuation(
+    jobId: string,
+    projectId: string,
+    conversationId: string,
+    action: 'continue' | 'reanalyze',
+    requestId: string,
+  ) {
+    if (!this.options.editing)
+      throw new Error('Editing analysis is unavailable.');
+    return this.options.editing.continuation(
+      jobId,
+      projectId,
+      conversationId,
+      action,
+      requestId,
+    );
+  }
+  claimEditingContinuation(
+    jobId: string,
+    turnId: string,
+    action: 'continue' | 'reanalyze',
+    requestId: string,
+  ) {
+    this.options.editing!.claimContinuation(jobId, turnId, action, requestId);
+  }
+
+  releaseEditingContinuation(
+    jobId: string,
+    turnId: string,
+    action: 'continue' | 'reanalyze',
+  ) {
+    this.options.editing?.releaseContinuation(jobId, turnId, action);
+  }
+
+  editingReviews(conversationId?: string | null) {
+    return this.options.editing?.reviews(conversationId) ?? [];
   }
 
   confirmEditing(jobId: string, changeIds: readonly string[]) {

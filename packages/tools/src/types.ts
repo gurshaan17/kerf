@@ -247,7 +247,24 @@ export interface EditingProposal {
   }[];
   readonly frameSpace: 'source' | 'sequence';
 }
+export interface EditingJobOrigin {
+  readonly projectId: string;
+  readonly conversationId: string;
+  readonly turnId: string;
+  readonly taskId: string;
+  readonly toolName: string;
+  readonly input: unknown;
+  readonly handledRequests?: readonly string[];
+  readonly continuedTurnId?: string;
+  readonly retryTurnId?: string;
+}
+
 export interface EditingReview {
+  readonly origin?: EditingJobOrigin;
+  readonly eligibility?: {
+    readonly eligible: boolean;
+    readonly reason: string | null;
+  };
   readonly job: EditingJob;
   readonly proposal: EditingProposal | null;
   readonly selectedIds: readonly string[];

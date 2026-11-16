@@ -507,3 +507,53 @@ describe('studio store', () => {
     expect(store.getState().toasts.at(-1)?.tone).toBe('error');
   });
 });
+
+it('locks continuation submission before IPC resolves and rejects another conversation', async () => {
+  const snapshot = makeSnapshot();
+  const { bridge } = makeBridge(snapshot);
+  let resolve!: (
+    value: Awaited<ReturnType<KerfBridge['chat']['send']>>,
+  ) => void;
+  const send = vi.fn(
+    () =>
+      new Promise<Awaited<ReturnType<KerfBridge['chat']['send']>>>((r) => {
+        resolve = r;
+      }),
+  );
+  const store = createStudioStore({
+    ...bridge,
+    chat: { ...bridge.chat, send },
+  });
+  store.setState({ snapshot, chatConversationId: 'chat' });
+  const continuation = {
+    projectId: snapshot.project.id,
+    conversationId: 'chat',
+    jobId: 'job',
+    requestId: 'click',
+    action: 'continue' as const,
+  };
+  const first = store.getState().sendChat('Continue', [], continuation);
+  expect(store.getState().chatSending).toBe(true);
+  expect(await store.getState().sendChat('Continue', [], continuation)).toBe(
+    false,
+  );
+  expect(send).toHaveBeenCalledTimes(1);
+  resolve({
+    turnId: 'turn',
+    sessionId: 'chat',
+    provider: {
+      id: 'provider',
+      label: 'Provider',
+      kind: 'ollama',
+      model: 'model',
+    },
+  });
+  expect(await first).toBe(true);
+  expect(store.getState().chatSending).toBe(false);
+  expect(
+    await store
+      .getState()
+      .sendChat('Wrong chat', [], { ...continuation, conversationId: 'other' }),
+  ).toBe(false);
+  expect(send).toHaveBeenCalledTimes(1);
+});

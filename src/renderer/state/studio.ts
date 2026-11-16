@@ -8,6 +8,7 @@ import { findSequenceFrame } from './sequence-map';
 import type {
   AnalysisKind,
   ChatProviderSetting,
+  ChatContinuation,
   ChatAssetMention,
   ChatTurn,
   ChatConversation,
@@ -64,6 +65,8 @@ export interface StudioState {
   readonly playing: boolean;
   readonly exports: ExportRecord[];
   readonly compositionTrees: Readonly<Record<string, SceneTree>>;
+  readonly chatConversationId: string | null;
+  readonly chatSending: boolean;
   readonly chatConversations: readonly ChatConversation[];
   loadChatHistory: (restore?: boolean) => Promise<void>;
   openChat: (id: string) => Promise<void>;
@@ -118,6 +121,7 @@ export interface StudioState {
   sendChat: (
     message: string,
     mentions?: readonly ChatAssetMention[],
+    continuation?: ChatContinuation,
   ) => Promise<boolean>;
   stopChat: () => Promise<void>;
   refreshChatProvider: () => Promise<void>;
@@ -290,6 +294,8 @@ export function createStudioStore(bridge: KerfBridge) {
         ...(projectChanged
           ? {
               chatConversations: [],
+              chatConversationId: null,
+              chatSending: false,
               chatTurns: [],
               chatActiveTurnId: null,
               chatError: null,
@@ -301,6 +307,8 @@ export function createStudioStore(bridge: KerfBridge) {
 
     return {
       chatConversations: [],
+      chatConversationId: null,
+      chatSending: false,
       async loadChatHistory(restore = false) {
         const projectId = get().snapshot?.project.id;
         if (!projectId) return;
@@ -321,21 +329,25 @@ export function createStudioStore(bridge: KerfBridge) {
         }
       },
       async openChat(id) {
-        if (get().chatActiveTurnId) return;
+        if (get().chatActiveTurnId || get().chatSending) return;
         const projectId = get().snapshot?.project.id;
         try {
           const conversation = await bridge.chat.open(id);
           if (get().snapshot?.project.id === projectId)
-            set({ chatTurns: conversation.turns, chatError: null });
+            set({
+              chatTurns: conversation.turns,
+              chatConversationId: conversation.id,
+              chatError: null,
+            });
         } catch (cause) {
           fail(cause, 'Could not open chat');
         }
       },
       async newChat() {
-        if (get().chatActiveTurnId) return;
+        if (get().chatActiveTurnId || get().chatSending) return;
         try {
           await bridge.chat.new();
-          set({ chatTurns: [], chatError: null });
+          set({ chatTurns: [], chatConversationId: null, chatError: null });
         } catch (cause) {
           fail(cause, 'Could not start chat');
         }
@@ -382,6 +394,7 @@ export function createStudioStore(bridge: KerfBridge) {
       handleEvent(event) {
         if (event.type === 'chat.started') {
           set((state) => ({
+            chatConversationId: event.sessionId,
             chatTurns: [
               ...state.chatTurns,
               {
@@ -917,17 +930,28 @@ export function createStudioStore(bridge: KerfBridge) {
         }
       },
 
-      async sendChat(message, mentions) {
+      async sendChat(message, mentions, continuation) {
+        if (get().chatActiveTurnId || get().chatSending) return false;
+        const projectId = get().snapshot?.project.id;
+        const conversationId = get().chatConversationId;
+        if (
+          continuation &&
+          (continuation.projectId !== projectId ||
+            continuation.conversationId !== conversationId)
+        )
+          return false;
         const trimmed = message.trim();
         if (!trimmed) {
           return false;
         }
-        set({ chatError: null });
+        set({ chatError: null, chatSending: true });
         try {
           const result = await bridge.chat.send({
+            ...(continuation ? { continuation } : {}),
             message,
             ...(mentions?.length ? { mentions } : {}),
           });
+          if (get().snapshot?.project.id !== projectId) return false;
           set((state) =>
             state.chatTurns.find(
               (turn) =>
@@ -938,13 +962,12 @@ export function createStudioStore(bridge: KerfBridge) {
           );
           return true;
         } catch (cause) {
-          set({
-            chatError: {
-              message: errorMessage(cause),
-              hint: null,
-            },
-          });
+          if (get().snapshot?.project.id !== projectId) return false;
+          set({ chatError: { message: errorMessage(cause), hint: null } });
           return false;
+        } finally {
+          if (get().snapshot?.project.id === projectId)
+            set({ chatSending: false });
         }
       },
 

@@ -15,10 +15,10 @@ function fixture(kind: 'autoCut' | 'screenPolish' = 'autoCut') {
     id: newId('job'),
     projectId: project.id,
     kind: `analysis.${kind}`,
-    status: 'succeeded' as const,
+    status: 'succeeded' as import('../../shared/contracts').JobStatus,
     stage: 'Done',
     progress: 1,
-    error: null,
+    error: null as string | null,
     targetId: null,
     createdAt: 1,
     updatedAt: 1,
@@ -211,4 +211,183 @@ describe('editing review lifecycle', () => {
       ),
     ).rejects.toThrow('unavailable');
   });
+});
+
+function origin(f: ReturnType<typeof fixture>) {
+  return {
+    projectId: f.job.projectId,
+    conversationId: 'chat-origin',
+    taskId: 'turn-origin',
+    turnId: 'turn-origin',
+    toolName: 'planAutoCut',
+    input: { clipId: f.proposal.clipId, providerId: 'provider', purpose: '' },
+  };
+}
+
+it('persists job ownership independently of chat task retention and rejects other chats/projects', () => {
+  const f = fixture();
+  f.service.associate(f.job.id, origin(f));
+  const restarted = new EditingService(f.options);
+  expect(restarted.reviews()[0]?.origin).toEqual(origin(f));
+  expect(() =>
+    restarted.continuation(
+      f.job.id,
+      'other-project',
+      'chat-origin',
+      'continue',
+      'click',
+    ),
+  ).toThrow('another project or conversation');
+  expect(() =>
+    restarted.continuation(
+      f.job.id,
+      f.job.projectId,
+      'other-chat',
+      'continue',
+      'click',
+    ),
+  ).toThrow('another project or conversation');
+  expect(() =>
+    restarted.associate(f.job.id, {
+      ...origin(f),
+      conversationId: 'other-chat',
+    }),
+  ).toThrow('another chat turn');
+  expect(
+    restarted.continuation(
+      f.job.id,
+      f.job.projectId,
+      'chat-origin',
+      'continue',
+      'click',
+    ),
+  ).toEqual(origin(f));
+});
+
+it('deduplicates continuation requests durably but allows an explicit retry after a failed turn', () => {
+  const f = fixture();
+  f.service.associate(f.job.id, origin(f));
+  f.service.claimContinuation(f.job.id, 'continued', 'continue', 'click-1');
+  expect(() =>
+    f.service.continuation(
+      f.job.id,
+      f.job.projectId,
+      'chat-origin',
+      'continue',
+      'click-2',
+    ),
+  ).toThrow('already continued');
+  f.service.releaseContinuation(f.job.id, 'continued', 'continue');
+  const restarted = new EditingService(f.options);
+  expect(() =>
+    restarted.continuation(
+      f.job.id,
+      f.job.projectId,
+      'chat-origin',
+      'continue',
+      'click-1',
+    ),
+  ).toThrow('already handled');
+  expect(
+    restarted.continuation(
+      f.job.id,
+      f.job.projectId,
+      'chat-origin',
+      'continue',
+      'click-2',
+    ),
+  ).toBeDefined();
+});
+
+it.each(['source changed', 'consent revoked'])(
+  'blocks continuation when %s and exposes an explicit reanalysis path',
+  (reason) => {
+    const f = fixture();
+    f.service.associate(f.job.id, origin(f));
+    f.prepare.mockImplementation(() => {
+      throw new Error(reason);
+    });
+    expect(f.service.reviews()[0]?.eligibility).toEqual({
+      eligible: false,
+      reason,
+    });
+    expect(() =>
+      f.service.continuation(
+        f.job.id,
+        f.job.projectId,
+        'chat-origin',
+        'continue',
+        'click',
+      ),
+    ).toThrow(reason);
+    expect(
+      f.service.continuation(
+        f.job.id,
+        f.job.projectId,
+        'chat-origin',
+        'reanalyze',
+        'retry',
+      ),
+    ).toBeDefined();
+    expect(f.options.autoCut.generate).not.toHaveBeenCalled();
+  },
+);
+
+it('reports interrupted and cancelled jobs without retrying them', () => {
+  const f = fixture();
+  f.service.associate(f.job.id, origin(f));
+  f.job.status = 'failed';
+  f.job.error = 'Auto cut was interrupted. Analyse again explicitly.';
+  expect(f.service.reviews()[0]?.job).toMatchObject({
+    status: 'failed',
+    error: f.job.error,
+  });
+  expect(() =>
+    f.service.continuation(
+      f.job.id,
+      f.job.projectId,
+      'chat-origin',
+      'continue',
+      'click',
+    ),
+  ).toThrow('interrupted');
+  expect(
+    f.service.continuation(
+      f.job.id,
+      f.job.projectId,
+      'chat-origin',
+      'reanalyze',
+      'retry',
+    ),
+  ).toBeDefined();
+  f.service.cancel(f.job.id);
+  expect(f.service.reviews()[0]?.job.reviewStatus).toBe('cancelled');
+  expect(f.options.autoCut.generate).not.toHaveBeenCalled();
+});
+
+it('filters ownership before limiting results so other chats cannot hide a result', () => {
+  const f = fixture();
+  const unowned = { ...f.job, id: newId('job') };
+  const other = Array.from({ length: 45 }, () => ({
+    ...f.job,
+    id: newId('job'),
+  }));
+  const jobs = [unowned, ...other, f.job];
+  const service = new EditingService({
+    ...f.options,
+    jobs: {
+      ...f.options.jobs,
+      get: (id) => jobs.find((j) => j.id === id) ?? null,
+      list: () => jobs,
+    },
+  });
+  service.associate(f.job.id, origin(f));
+  for (const job of other)
+    service.associate(job.id, { ...origin(f), conversationId: 'other-chat' });
+  expect(service.reviews().some((r) => r.job.id === f.job.id)).toBe(false);
+  expect(service.reviews('chat-origin').map((r) => r.job.id)).toEqual([
+    f.job.id,
+    unowned.id,
+  ]);
+  expect(service.reviews(null).map((r) => r.job.id)).toEqual([unowned.id]);
 });

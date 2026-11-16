@@ -4,6 +4,7 @@ import type { EditReceipt } from '@kerf/tools';
 import type { EditCommand } from '@kerf/model';
 import type {
   EditingJob,
+  EditingJobOrigin,
   EditingProposal,
   EditingReview,
   ToolContext,
@@ -44,6 +45,156 @@ export class EditingService implements ToolEditingAccess {
     )
       throw new Error('That editing job does not belong to the open project.');
     return job;
+  }
+  private origin(jobId: string): EditingJobOrigin | undefined {
+    const row = this.options.database
+      .prepare('SELECT value_json FROM app_settings WHERE key = ?')
+      .get(`editing-origin:${jobId}`) as { value_json: string } | undefined;
+    return row ? JSON.parse(row.value_json) : undefined;
+  }
+  private saveOrigin(jobId: string, origin: EditingJobOrigin) {
+    this.options.database
+      .prepare(
+        'INSERT INTO app_settings (key, value_json, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at',
+      )
+      .run(`editing-origin:${jobId}`, JSON.stringify(origin), Date.now());
+  }
+  associate(jobId: string, origin: EditingJobOrigin) {
+    this.job(jobId);
+    if (origin.projectId !== this.options.projects.current()?.project.id)
+      throw new Error('The job belongs to another project.');
+    const existing = this.origin(jobId);
+    if (existing) {
+      if (
+        existing.conversationId !== origin.conversationId ||
+        existing.turnId !== origin.turnId
+      )
+        throw new Error('The job already belongs to another chat turn.');
+      return;
+    }
+    this.saveOrigin(jobId, origin);
+  }
+  continuation(
+    jobId: string,
+    projectId: string,
+    conversationId: string,
+    action: 'continue' | 'reanalyze',
+    requestId: string,
+  ) {
+    this.job(jobId);
+    const origin = this.origin(jobId);
+    if (
+      !origin ||
+      origin.projectId !== projectId ||
+      origin.conversationId !== conversationId
+    )
+      throw new Error(
+        'This result belongs to another project or conversation.',
+      );
+    if (origin.handledRequests?.includes(requestId))
+      throw new Error('This continuation request was already handled.');
+    if (action === 'continue' && origin.continuedTurnId)
+      throw new Error('This result was already continued in chat.');
+    if (action === 'reanalyze' && origin.retryTurnId)
+      throw new Error('Reanalysis was already requested. Review the new job.');
+    const review = this.review(jobId);
+    if (action === 'continue' && !review.eligibility?.eligible)
+      throw new Error(
+        review.eligibility?.reason ?? 'This result is not ready to continue.',
+      );
+    if (
+      action === 'reanalyze' &&
+      ['queued', 'running'].includes(review.job.status) &&
+      review.job.reviewStatus !== 'cancelled'
+    )
+      throw new Error('Cancel the running job before requesting reanalysis.');
+    return origin;
+  }
+  claimContinuation(
+    jobId: string,
+    turnId: string,
+    action: 'continue' | 'reanalyze',
+    requestId: string,
+  ) {
+    const origin = this.origin(jobId);
+    if (!origin) throw new Error('The job has no originating chat.');
+    this.saveOrigin(jobId, {
+      ...origin,
+      handledRequests: [...(origin.handledRequests ?? []), requestId],
+      ...(action === 'continue'
+        ? { continuedTurnId: turnId }
+        : { retryTurnId: turnId }),
+    });
+  }
+  releaseContinuation(
+    jobId: string,
+    turnId: string,
+    action: 'continue' | 'reanalyze',
+  ) {
+    const origin = this.origin(jobId);
+    if (!origin) return;
+    if (action === 'continue' && origin.continuedTurnId === turnId)
+      this.saveOrigin(jobId, { ...origin, continuedTurnId: undefined });
+    if (action === 'reanalyze' && origin.retryTurnId === turnId)
+      this.saveOrigin(jobId, { ...origin, retryTurnId: undefined });
+  }
+  private review(jobId: string): EditingReview {
+    const job = this.read(jobId);
+    const proposal = this.proposal(jobId);
+    let eligibility: NonNullable<EditingReview['eligibility']> = {
+      eligible: false,
+      reason: 'Wait for analysis to finish.',
+    };
+    if (
+      job.status === 'succeeded' &&
+      proposal &&
+      job.reviewStatus !== 'applied' &&
+      job.reviewStatus !== 'cancelled'
+    ) {
+      if (!proposal.changes.length)
+        eligibility = {
+          eligible: false,
+          reason:
+            'No changes suggested. Review the result or explicitly reanalyze.',
+        };
+      else
+        try {
+          this.validate(
+            jobId,
+            proposal.changes.map((c) => c.id),
+          );
+          eligibility = { eligible: true, reason: null };
+        } catch (cause) {
+          eligibility = {
+            eligible: false,
+            reason: cause instanceof Error ? cause.message : String(cause),
+          };
+        }
+    } else if (job.reviewStatus === 'applied')
+      eligibility = {
+        eligible: false,
+        reason: 'Already applied. Review the timeline.',
+      };
+    else if (job.reviewStatus === 'cancelled' || job.status === 'cancelled')
+      eligibility = {
+        eligible: false,
+        reason: 'Cancelled. Reanalyze explicitly to try again.',
+      };
+    else if (job.status === 'failed')
+      eligibility = {
+        eligible: false,
+        reason:
+          job.error ?? 'Analysis failed. Reanalyze explicitly to try again.',
+      };
+    return {
+      job,
+      proposal,
+      origin: this.origin(jobId),
+      eligibility,
+      receipt: this.receipt(jobId),
+      selectedIds:
+        this.selections.get(jobId) ?? proposal?.changes.map((c) => c.id) ?? [],
+    };
   }
   private state(jobId: string): 'applied' | 'cancelled' | null {
     const row = this.options.database
@@ -205,10 +356,10 @@ export class EditingService implements ToolEditingAccess {
     this.selections.set(jobId, [...changeIds]);
     return { status: 'awaiting-review' as const, jobId };
   }
-  reviews(): EditingReview[] {
+  reviews(conversationId?: string | null): EditingReview[] {
     const projectId = this.options.projects.current()?.project.id;
     if (!projectId) return [];
-    return this.options.jobs
+    const jobs = this.options.jobs
       .list(projectId)
       .filter((j) =>
         [
@@ -216,21 +367,16 @@ export class EditingService implements ToolEditingAccess {
           'analysis.screenPolish',
           'analysis.roughCut',
         ].includes(j.kind),
-      )
-      .slice(0, 40)
-      .map((job) => {
-        const proposal = this.proposal(job.id);
-        return {
-          job: this.read(job.id),
-          proposal,
-          receipt: this.receipt(job.id),
-          selectedIds:
-            this.selections.get(job.id) ??
-            proposal?.changes.map((c) => c.id) ??
-            [],
-        };
-      });
+      );
+    if (conversationId === undefined)
+      return jobs.slice(0, 40).map((job) => this.review(job.id));
+    const owned = jobs
+      .filter((job) => this.origin(job.id)?.conversationId === conversationId)
+      .slice(0, 40);
+    const unowned = jobs.filter((job) => !this.origin(job.id)).slice(0, 40);
+    return [...owned, ...unowned].map((job) => this.review(job.id));
   }
+
   roughCutClipIds(jobId: string): readonly string[] {
     const job = this.job(jobId);
     const receipt = this.receipt(jobId);
