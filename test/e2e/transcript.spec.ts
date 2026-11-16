@@ -98,7 +98,12 @@ test('verifies a transcript in the side panel', async () => {
     await page.getByLabel('Find in transcript').fill('');
     await expect(segments).toHaveCount(2);
 
-    await page.getByRole('button', { name: 'Copy transcript' }).click();
+    const copyTranscript = page.getByRole('button', {
+      name: 'Copy transcript',
+    });
+    await expect(copyTranscript).toHaveText('Copy transcript');
+    await copyTranscript.click();
+    await expect(copyTranscript).toHaveText('Copied');
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
       .toContain('local first video editor');

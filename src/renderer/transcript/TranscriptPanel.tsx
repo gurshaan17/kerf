@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Captions, Check, Copy, X } from 'lucide-react';
 import type { FrameRate, TranscriptSegment } from '@kerf/model';
 import { framesToSeconds, secondsToFrames } from '@kerf/model';
-import { IconButton, Panel } from '@kerf/ui';
+import { Button, IconButton, Panel } from '@kerf/ui';
 import { SourcePreview } from '../analysis/SourcePreview';
 import type { SourcePreviewHandle } from '../analysis/SourcePreview';
 import { findSequenceFrame } from '../state/sequence-map';
@@ -92,15 +92,16 @@ export function TranscriptPanel({ assetId, onClose }: TranscriptPanelProps) {
       bodyClassName="flex min-h-0 flex-col p-0"
       actions={
         <>
-          <IconButton
-            label="Copy transcript"
-            tooltip="Copy transcript"
-            tooltipSide="bottom"
+          <Button
+            aria-label="Copy transcript"
             size="sm"
+            className="shrink-0"
             disabled={!transcript}
-            icon={copied ? <Check size={14} /> : <Copy size={14} />}
+            leadingIcon={copied ? <Check size={14} /> : <Copy size={14} />}
             onClick={() => void copyTranscript()}
-          />
+          >
+            <span role="status">{copied ? 'Copied' : 'Copy transcript'}</span>
+          </Button>
           <IconButton
             label="Close transcript"
             tooltip="Close transcript"
