@@ -6,7 +6,7 @@ import type { EditingReview } from '@kerf/tools';
 import { Button } from '@kerf/ui';
 import { useStudio } from '../state/StudioProvider';
 
-export function EditingReviews() {
+export function useEditingReviews() {
   const snapshot = useStudio((s) => s.snapshot);
   const conversationId = useStudio((s) => s.chatConversationId);
   const [reviews, setReviews] = useState<readonly EditingReview[]>([]);
@@ -49,6 +49,18 @@ export function EditingReviews() {
       unsubscribe();
     };
   }, [snapshot?.project.id, conversationId]);
+  return { reviews, error };
+}
+
+export function EditingReviews({
+  reviews,
+  error,
+  reviewJobId,
+}: {
+  reviews: readonly EditingReview[];
+  error: string;
+  reviewJobId?: string | null;
+}) {
   if (!reviews.length && !error) return null;
   return (
     <div
@@ -66,6 +78,7 @@ export function EditingReviews() {
           <ChatJob
             key={`${review.job.projectId}-${review.job.id}`}
             review={review}
+            reveal={reviewJobId === review.job.id}
           />
         ) : (
           <Review
@@ -78,12 +91,21 @@ export function EditingReviews() {
   );
 }
 
-function ChatJob({ review }: { review: EditingReview }) {
+function ChatJob({
+  review,
+  reveal,
+}: {
+  review: EditingReview;
+  reveal?: boolean;
+}) {
   const send = useStudio((s) => s.sendChat);
   const activeTurn = useStudio((s) => s.chatActiveTurnId);
   const sending = useStudio((s) => s.chatSending);
   const provider = useStudio((s) => s.chatProvider?.provider);
   const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (reveal) setExpanded(true);
+  }, [reveal]);
   const [pending, setPending] = useState(false);
   const lock = useRef(false);
   const origin = review.origin!;
@@ -128,6 +150,7 @@ function ChatJob({ review }: { review: EditingReview }) {
   return (
     <div
       className="grid gap-2 border-b border-line py-2 text-[11px] text-ink-muted"
+      id={`editing-job-${review.job.id}`}
       aria-label={`Editing job ${review.job.id}`}
     >
       <p className="font-semibold text-ink">
@@ -284,7 +307,10 @@ function Review({ review }: { review: EditingReview }) {
     }
   };
   return (
-    <section className="grid gap-2 rounded-sm border border-line bg-surface-0 p-2 text-[11px] text-ink-muted">
+    <section
+      id={review.origin ? undefined : `editing-job-${review.job.id}`}
+      className="grid gap-2 rounded-sm border border-line bg-surface-0 p-2 text-[11px] text-ink-muted"
+    >
       <p className="font-semibold text-ink">
         {review.job.kind === 'analysis.roughCut'
           ? 'Rough cut'

@@ -391,3 +391,13 @@ it('filters ownership before limiting results so other chats cannot hide a resul
   ]);
   expect(service.reviews(null).map((r) => r.job.id)).toEqual([unowned.id]);
 });
+
+it('checks the submitted scope before creating a desktop review request', () => {
+  const f = fixture();
+  expect(() =>
+    f.service.requestApply(f.job.id, ['change-1'], () => {
+      throw new Error('Outside scope');
+    }),
+  ).toThrow('Outside scope');
+  expect(f.service.read(f.job.id).reviewStatus).toBe('none');
+});

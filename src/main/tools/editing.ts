@@ -196,6 +196,10 @@ export class EditingService implements ToolEditingAccess {
         this.selections.get(jobId) ?? proposal?.changes.map((c) => c.id) ?? [],
     };
   }
+  scope(jobId: string) {
+    this.job(jobId);
+    return this.origin(jobId)?.scope;
+  }
   private state(jobId: string): 'applied' | 'cancelled' | null {
     const row = this.options.database
       .prepare('SELECT value_json FROM app_settings WHERE key = ?')
@@ -351,8 +355,13 @@ export class EditingService implements ToolEditingAccess {
       suggestions: stored.suggestions.filter((s) => changeIds.includes(s.id)),
     });
   }
-  requestApply(jobId: string, changeIds: readonly string[]) {
-    this.validate(jobId, changeIds);
+  requestApply(
+    jobId: string,
+    changeIds: readonly string[],
+    checkCommand?: (command: EditCommand) => void,
+  ) {
+    const command = this.validate(jobId, changeIds);
+    checkCommand?.(command);
     this.selections.set(jobId, [...changeIds]);
     return { status: 'awaiting-review' as const, jobId };
   }

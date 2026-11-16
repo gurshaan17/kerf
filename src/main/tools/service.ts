@@ -1,3 +1,5 @@
+import { createEditScope } from '../projects/edit-scope';
+import { chatScopeSchema } from '../../shared/chat-scope';
 import { referenceFingerprint } from '../projects/reference-fingerprint';
 import { VisualReviewService } from './visual-review';
 import { readFileSync } from 'node:fs';
@@ -72,6 +74,7 @@ export interface ToolExportSource {
 }
 
 export interface ToolExecutionOptions {
+  readonly checkCommand?: (command: EditCommand) => void;
   readonly signal?: AbortSignal;
   readonly checkAccess?: () => void;
 }
@@ -224,12 +227,24 @@ export class ToolService {
       if (!this.options.editing)
         throw new Error('AI editing analysis is unavailable.');
       let receipt: EditReceipt | undefined;
+      const savedScope = this.options.editing.scope(jobId);
+      const snapshot = this.options.projects.current();
+      const scope =
+        savedScope && snapshot
+          ? createEditScope(chatScopeSchema.parse(savedScope), snapshot, () =>
+              this.options.projects.current(),
+            )
+          : undefined;
       this.options.editing.confirm(
         jobId,
         changeIds,
-        this.context('user', (value) => {
-          receipt = value;
-        }),
+        this.context(
+          'user',
+          (value) => {
+            receipt = value;
+          },
+          { checkCommand: scope?.checkCommand },
+        ),
       );
       if (receipt) this.options.editing.recordReceipt(jobId, receipt);
       return { receipt };
@@ -343,6 +358,7 @@ export class ToolService {
       actor,
       signal: execution?.signal,
       checkAccess: execution?.checkAccess,
+      checkCommand: execution?.checkCommand,
       visualReview: () => ({
         render: (input) => this.visualReviews.render(context, input),
         repair: (input) => this.visualReviews.repair(context, input),
@@ -353,11 +369,13 @@ export class ToolService {
       apply: (command, options) => {
         execution?.signal?.throwIfAborted();
         execution?.checkAccess?.();
+        execution?.checkCommand?.(command);
         return this.apply(command, actor, options?.label, onCommit);
       },
       applyBatch: (commands, options) => {
         execution?.signal?.throwIfAborted();
         execution?.checkAccess?.();
+        execution?.checkCommand?.({ type: 'batch', commands: [...commands] });
         return this.applyBatch(commands, actor, options?.label, onCommit);
       },
       search: (request) => this.search(request),

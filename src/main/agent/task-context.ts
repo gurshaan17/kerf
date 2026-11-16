@@ -1,3 +1,4 @@
+import type { ChatScope } from '../../shared/chat-scope';
 import { referenceFingerprint as fingerprint } from '../projects/reference-fingerprint';
 import type { EditReceipt, EditingReview } from '@kerf/tools';
 import type { ChatAssetMention, ProjectSnapshot } from '../../shared/contracts';
@@ -23,6 +24,7 @@ export function beginTask(
   request: string,
   mentions: readonly ChatAssetMention[],
   snapshot: ProjectSnapshot,
+  scope?: ChatScope,
 ): EditingTask {
   const task: EditingTask = {
     turnId,
@@ -39,6 +41,12 @@ export function beginTask(
     verification: 'unverified',
     unresolvedConstraints: [],
   };
+  if (scope?.kind === 'targets') {
+    for (const id of scope.clipIds)
+      addReference(task, snapshot, 'clip', id, 'scope');
+    for (const id of scope.assetIds)
+      addReference(task, snapshot, 'asset', id, 'scope');
+  }
   context.tasks.push(task);
   for (const mention of mentions)
     addReference(task, snapshot, 'asset', mention.assetId, 'scope');

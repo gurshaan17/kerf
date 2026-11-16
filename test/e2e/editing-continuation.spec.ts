@@ -200,9 +200,13 @@ test('finishes analysis after a turn, reopens one owned card, continues without 
     const before = await page.evaluate(
       async () => (await window.kerf.projects.active())!.project.sequence,
     );
-    await card
-      .getByRole('button', { name: 'Review result', exact: true })
+    await page
+      .getByLabel('Suggested actions')
+      .getByRole('button', { name: 'Review completed analysis', exact: true })
       .click();
+    await expect(
+      card.getByRole('button', { name: 'Hide result', exact: true }),
+    ).toBeVisible();
     expect(analysisCalls).toBe(1);
     await page.setViewportSize({ width: 1100, height: 800 });
     await page.screenshot({

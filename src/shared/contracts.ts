@@ -419,6 +419,7 @@ export interface ChatContinuation {
 }
 
 export interface ChatSendRequest {
+  readonly scope?: import('./chat-scope').ChatScope;
   readonly continuation?: ChatContinuation;
   readonly mentions?: readonly ChatAssetMention[];
   readonly message: string;
@@ -507,6 +508,7 @@ export interface ReferencePacingResult {
 export type ChatEvent =
   | {
       readonly type: 'chat.started';
+      readonly scope?: import('./chat-scope').ChatScope;
       readonly mentions?: readonly ChatAssetMention[];
       readonly turnId: string;
       readonly sessionId: string;
@@ -841,6 +843,7 @@ export interface KerfBridge {
 export type ChatTurnStatus = 'streaming' | 'done' | 'aborted' | 'error';
 
 export interface ChatTurn {
+  readonly scope?: import('./chat-scope').ChatScope;
   readonly mentions?: readonly ChatAssetMention[];
   readonly id: string;
   readonly message: string;

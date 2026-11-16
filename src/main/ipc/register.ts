@@ -1,3 +1,4 @@
+import { chatScopeSchema } from '../../shared/chat-scope';
 import type { ScreenPolishService } from '../analysis/screen-polish-service';
 import {
   polishGenerateSchema,
@@ -119,6 +120,7 @@ const providerSaveSchema = z.object({
 });
 const modelIdSchema = z.string().min(1).max(40);
 const chatSendSchema = z.object({
+  scope: chatScopeSchema.optional(),
   continuation: z
     .object({
       requestId: z.string().min(1).max(80),

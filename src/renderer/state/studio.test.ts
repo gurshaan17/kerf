@@ -557,3 +557,36 @@ it('locks continuation submission before IPC resolves and rejects another conver
   ).toBe(false);
   expect(send).toHaveBeenCalledTimes(1);
 });
+
+it('keeps drafts separate and migrates a new-chat draft when streaming starts', () => {
+  const snapshot = makeSnapshot();
+  const { bridge } = makeBridge(snapshot);
+  const store = createStudioStore(bridge);
+  store.setState({ snapshot });
+  const key = (conversationId: string | null) =>
+    JSON.stringify([snapshot.project.id, conversationId]);
+  store.getState().setChatDraft(key(null), {
+    text: 'Next message typed while sending',
+    mentions: [],
+  });
+  store.getState().handleEvent({
+    type: 'chat.started',
+    turnId: 'turn',
+    sessionId: 'chat-A',
+    message: 'Sent message',
+    providerLabel: 'Test',
+  });
+  expect(store.getState().chatDrafts[key('chat-A')]?.text).toBe(
+    'Next message typed while sending',
+  );
+  expect(store.getState().chatDrafts[key(null)]).toBeUndefined();
+  store.getState().setChatDraft(key('chat-B'), { text: 'Other draft' });
+  store
+    .getState()
+    .handleEvent({ type: 'chat.delta', turnId: 'turn', text: 'Streaming' });
+  store.getState().handleEvent({ type: 'chat.aborted', turnId: 'turn' });
+  expect(store.getState().chatDrafts[key('chat-A')]?.text).toBe(
+    'Next message typed while sending',
+  );
+  expect(store.getState().chatDrafts[key('chat-B')]?.text).toBe('Other draft');
+});

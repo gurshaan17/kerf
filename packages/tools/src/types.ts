@@ -164,6 +164,7 @@ export interface ToolContext {
   readonly actor?: ToolApplyOptions['actor'];
   readonly signal?: AbortSignal;
   checkAccess?(): void;
+  checkCommand?(command: EditCommand): void;
   visualReview?(): import('./visual-review').ToolVisualReviewAccess;
   editing?(): ToolEditingAccess;
   snapshot(): ToolSnapshot | null;
@@ -247,7 +248,17 @@ export interface EditingProposal {
   }[];
   readonly frameSpace: 'source' | 'sequence';
 }
+export type EditingScope =
+  | { readonly kind: 'project' }
+  | {
+      readonly kind: 'targets';
+      readonly clipIds: readonly string[];
+      readonly assetIds: readonly string[];
+      readonly revision: number;
+    };
+
 export interface EditingJobOrigin {
+  readonly scope?: EditingScope;
   readonly projectId: string;
   readonly conversationId: string;
   readonly turnId: string;
@@ -291,5 +302,6 @@ export interface ToolEditingAccess {
   requestApply(
     jobId: string,
     changeIds: readonly string[],
+    checkCommand?: (command: EditCommand) => void,
   ): { status: 'awaiting-review'; jobId: string };
 }

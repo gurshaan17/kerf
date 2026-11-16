@@ -75,6 +75,11 @@ export const EDITING_TOOLS = [
     execute: (
       context: ToolContext,
       input: { jobId: string; changeIds: string[] },
-    ) => access(context).requestApply(input.jobId, input.changeIds),
+    ) =>
+      access(context).requestApply(
+        input.jobId,
+        input.changeIds,
+        context.checkCommand,
+      ),
   },
 ];

@@ -1,3 +1,6 @@
+import { chatDraftKey, EMPTY_CHAT_DRAFT } from '../chat/drafts';
+import type { ChatDraft } from '../chat/drafts';
+import type { ChatScope } from '../../shared/chat-scope';
 import { create } from 'zustand';
 import { useStore } from 'zustand';
 import { fpsToNumber } from '@kerf/model';
@@ -51,6 +54,8 @@ export interface ChatError {
 }
 
 export interface StudioState {
+  readonly chatDrafts: Readonly<Record<string, ChatDraft>>;
+  setChatDraft: (key: string, patch: Partial<ChatDraft>) => void;
   readonly projects: ProjectSummary[];
   readonly snapshot: ProjectSnapshot | null;
   readonly busy: boolean;
@@ -122,6 +127,7 @@ export interface StudioState {
     message: string,
     mentions?: readonly ChatAssetMention[],
     continuation?: ChatContinuation,
+    scope?: ChatScope,
   ) => Promise<boolean>;
   stopChat: () => Promise<void>;
   refreshChatProvider: () => Promise<void>;
@@ -306,6 +312,15 @@ export function createStudioStore(bridge: KerfBridge) {
     };
 
     return {
+      chatDrafts: {},
+      setChatDraft(key, patch) {
+        set((state) => ({
+          chatDrafts: {
+            ...state.chatDrafts,
+            [key]: { ...(state.chatDrafts[key] ?? EMPTY_CHAT_DRAFT), ...patch },
+          },
+        }));
+      },
       chatConversations: [],
       chatConversationId: null,
       chatSending: false,
@@ -347,6 +362,10 @@ export function createStudioStore(bridge: KerfBridge) {
         if (get().chatActiveTurnId || get().chatSending) return;
         try {
           await bridge.chat.new();
+          get().setChatDraft(
+            chatDraftKey(get().snapshot?.project.id, null),
+            EMPTY_CHAT_DRAFT,
+          );
           set({ chatTurns: [], chatConversationId: null, chatError: null });
         } catch (cause) {
           fail(cause, 'Could not start chat');
@@ -393,26 +412,40 @@ export function createStudioStore(bridge: KerfBridge) {
 
       handleEvent(event) {
         if (event.type === 'chat.started') {
-          set((state) => ({
-            chatConversationId: event.sessionId,
-            chatTurns: [
-              ...state.chatTurns,
-              {
-                id: event.turnId,
-                message: event.message,
-                mentions: event.mentions,
-                text: '',
-                tools: [],
-                status: 'streaming',
-                providerLabel: event.providerLabel,
-                error: null,
-                hint: null,
-                durationMs: null,
-              },
-            ],
-            chatActiveTurnId: event.turnId,
-            chatError: null,
-          }));
+          set((state) => {
+            const drafts = { ...state.chatDrafts };
+            if (state.chatConversationId === null) {
+              const oldKey = chatDraftKey(state.snapshot?.project.id, null);
+              const key = chatDraftKey(
+                state.snapshot?.project.id,
+                event.sessionId,
+              );
+              if (drafts[oldKey]) drafts[key] = drafts[oldKey];
+              delete drafts[oldKey];
+            }
+            return {
+              chatDrafts: drafts,
+              chatConversationId: event.sessionId,
+              chatTurns: [
+                ...state.chatTurns,
+                {
+                  id: event.turnId,
+                  message: event.message,
+                  mentions: event.mentions,
+                  scope: event.scope,
+                  text: '',
+                  tools: [],
+                  status: 'streaming',
+                  providerLabel: event.providerLabel,
+                  error: null,
+                  hint: null,
+                  durationMs: null,
+                },
+              ],
+              chatActiveTurnId: event.turnId,
+              chatError: null,
+            };
+          });
           return;
         }
 
@@ -930,7 +963,7 @@ export function createStudioStore(bridge: KerfBridge) {
         }
       },
 
-      async sendChat(message, mentions, continuation) {
+      async sendChat(message, mentions, continuation, scope) {
         if (get().chatActiveTurnId || get().chatSending) return false;
         const projectId = get().snapshot?.project.id;
         const conversationId = get().chatConversationId;
@@ -948,6 +981,7 @@ export function createStudioStore(bridge: KerfBridge) {
         try {
           const result = await bridge.chat.send({
             ...(continuation ? { continuation } : {}),
+            ...(scope ? { scope } : {}),
             message,
             ...(mentions?.length ? { mentions } : {}),
           });

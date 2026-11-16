@@ -5,7 +5,7 @@ const digest = (value: unknown) =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 export function referenceFingerprint(
-  snapshot: ProjectSnapshot,
+  snapshot: Pick<ProjectSnapshot, 'project' | 'assets'>,
   kind: 'clip' | 'asset',
   id: string,
 ): string | null {

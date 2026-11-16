@@ -1,5 +1,11 @@
 import { VisualReviewCard } from './VisualReviewCard';
-import { EditingReviews } from './EditingReviews';
+import { EditingReviews, useEditingReviews } from './EditingReviews';
+import { chatDraftKey, EMPTY_CHAT_DRAFT } from './drafts';
+import { composerScope, scopeError, scopeLabel } from './scope';
+import { ScopeControls } from './ScopeControls';
+import { chatStarters } from './starters';
+import { useChatScroll } from './use-chat-scroll';
+import type { ChatScope } from '../../shared/chat-scope';
 import { formatTimecode } from '@kerf/model';
 import { useEffect, useRef, useState } from 'react';
 import { ChatMarkdown } from './ChatMarkdown';
@@ -24,19 +30,12 @@ import type {
   ChatToolActivity,
 } from '../../shared/contracts';
 import { Button, IconButton } from '@kerf/ui';
-import { useStudio } from '../state/StudioProvider';
+import { useStudio, useStudioStoreApi } from '../state/StudioProvider';
 
 export interface ChatPanelProps {
   readonly settingsOpen: boolean;
   readonly onOpenSettings: () => void;
 }
-
-const SUGGESTIONS = [
-  'Remove pauses and caption this',
-  'Make a 20-second rough cut',
-  'Cut this to the beat',
-  'Give it a warmer grade from the reference',
-];
 
 function pretty(value: unknown): string {
   if (value === undefined) {
@@ -187,9 +186,35 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
   const stopChat = useStudio((state) => state.stopChat);
   const refreshChatProvider = useStudio((state) => state.refreshChatProvider);
   const dismissChatError = useStudio((state) => state.dismissChatError);
-  const [input, setInput] = useState('');
   const snapshot = useStudio((state) => state.snapshot);
-  const [mentions, setMentions] = useState<ChatAssetMention[]>([]);
+  const conversationId = useStudio((state) => state.chatConversationId);
+  const selectedIds = useStudio((state) => state.selection.clipIds);
+  const importFootage = useStudio((state) => state.importFootage);
+  const store = useStudioStoreApi();
+  const draftKey = chatDraftKey(snapshot?.project.id, conversationId);
+  const draft = useStudio(
+    (state) => state.chatDrafts[draftKey] ?? EMPTY_CHAT_DRAFT,
+  );
+  const setDraft = useStudio((state) => state.setChatDraft);
+  const input = draft.text;
+  const mentions = draft.mentions;
+  const setInput = (text: string) => setDraft(draftKey, { text });
+  const setMentions = (tags: readonly ChatAssetMention[]) =>
+    setDraft(draftKey, { mentions: tags });
+  const scope = composerScope(snapshot, selectedIds, draft.scope, mentions);
+  const scopeIssue = scopeError(scope, snapshot);
+  const { reviews, error: reviewError } = useEditingReviews();
+  const [reviewJobId, setReviewJobId] = useState<string | null>(null);
+  const starters = chatStarters(
+    snapshot,
+    selectedIds,
+    chatProvider?.provider,
+    reviews,
+  );
+  const { scrollRef, contentRef, onScroll, showJump, jump } = useChatScroll(
+    draftKey,
+    turns,
+  );
   const [caret, setCaret] = useState(0);
   const [mentionDismissed, setMentionDismissed] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState(0);
@@ -212,10 +237,10 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
     );
 
   useEffect(() => {
-    setInput('');
-    setMentions([]);
     setCaret(0);
-  }, [snapshot?.project.id]);
+    setMentionDismissed(true);
+    setReviewJobId(null);
+  }, [draftKey]);
 
   useEffect(() => {
     document
@@ -251,7 +276,6 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
       inputRef.current?.setSelectionRange(position, position);
     });
   };
-  const scrollRef = useRef<HTMLDivElement>(null);
   const busy = activeTurnId !== null || sending;
 
   useEffect(() => {
@@ -260,37 +284,33 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
     }
   }, [settingsOpen, refreshChatProvider]);
 
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (element) {
-      element.scrollTop = element.scrollHeight;
-    }
-  }, [turns, activeTurnId]);
-
   const send = async (
     value: string,
     tags: readonly ChatAssetMention[] = [],
+    submittedScope: ChatScope = scope,
   ) => {
-    if (!value.trim() || busy) {
-      return;
-    }
-    const ok = await sendChat(value, tags);
+    if (!value.trim() || busy || scopeError(submittedScope, snapshot)) return;
+    jump();
+    const ok = await sendChat(value, tags, undefined, submittedScope);
     if (!ok) {
-      setInput(value);
-      setMentions([...tags]);
+      const state = store.getState();
+      const current = state.chatDrafts[draftKey];
+      if (
+        state.snapshot?.project.id === snapshot?.project.id &&
+        state.chatConversationId === conversationId &&
+        !current?.text
+      )
+        setDraft(draftKey, { text: value, mentions: [...tags] });
     }
   };
-
   const submit = () => {
+    if (!input.trim() || busy || scopeIssue) return;
     const value = input;
-    if (!value.trim() || busy) {
-      return;
-    }
-    const tags = mentions;
-    setInput('');
-    setMentions([]);
+    const tags = [...mentions];
+    const submittedScope = scope;
+    setDraft(draftKey, { text: '', mentions: [] });
     setMentionDismissed(true);
-    void send(value, tags);
+    void send(value, tags, submittedScope);
   };
 
   const providerLabel = chatProvider?.provider?.label ?? null;
@@ -391,99 +411,143 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-auto px-3 py-3"
+        onScroll={onScroll}
+        className="min-h-0 flex-1 overflow-auto px-3 py-3 [overflow-anchor:none]"
+        aria-label="Chat messages"
         aria-live="polite"
       >
-        <EditingReviews />
-        {turns.length === 0 ? (
-          <div className="grid gap-3">
-            <div className="rounded-sm border border-line bg-surface-0 p-3">
-              <div className="flex items-center gap-2 text-ink">
-                <Sparkles
-                  size={14}
-                  className="text-accent"
-                  aria-hidden="true"
-                />
-                <p className="text-[11px] font-semibold">
-                  Edit by describing the cut
-                </p>
-              </div>
-              <p className="mt-1.5 text-[10px] leading-relaxed text-ink-muted">
-                Kerf plans with the tools it has, reads the timeline, then
-                applies edits as ordinary undoable commands.
-              </p>
-            </div>
-            <div className="grid gap-1.5">
-              {SUGGESTIONS.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  className="rounded-sm border border-line bg-surface-0 px-2.5 py-2 text-left text-[10px] leading-relaxed text-ink-muted transition-colors hover:border-line-strong hover:text-ink disabled:opacity-40"
-                  disabled={busy}
-                  onClick={() => void send(suggestion)}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {turns.map((turn) => (
-              <section key={turn.id} className="grid gap-2">
-                <div className="ml-5 rounded-sm border border-accent/20 bg-accent/10 px-2.5 py-2">
-                  <p className="text-[11px] leading-relaxed whitespace-pre-wrap text-ink">
-                    {turn.message}
+        <div ref={contentRef} className="grid gap-3">
+          <EditingReviews
+            reviews={reviews}
+            error={reviewError}
+            reviewJobId={reviewJobId}
+          />
+          {turns.length === 0 ? (
+            <div className="grid gap-3">
+              <div className="rounded-sm border border-line bg-surface-0 p-3">
+                <div className="flex items-center gap-2 text-ink">
+                  <Sparkles
+                    size={14}
+                    className="text-accent"
+                    aria-hidden="true"
+                  />
+                  <p className="text-[11px] font-semibold">
+                    Edit by describing the cut
                   </p>
                 </div>
-
-                {turn.tools.length > 0 ? (
-                  <div className="grid gap-1">
-                    {turn.tools.map((tool) => (
-                      <ToolCard key={tool.id} tool={tool} />
-                    ))}
-                  </div>
-                ) : null}
-
-                {turn.text ? (
-                  <div className="flex items-start gap-2">
-                    <MessageSquare
-                      size={13}
-                      className="mt-0.5 shrink-0 text-ink-faint"
-                      aria-hidden="true"
-                    />
-                    <div className="chat-markdown min-w-0 flex-1 text-[11px] leading-relaxed text-ink-muted">
-                      <ChatMarkdown text={turn.text} />
-                    </div>
-                  </div>
-                ) : turn.status === 'streaming' ? (
-                  <p className="flex items-center gap-1.5 pl-5 text-[10px] text-ink-faint">
-                    <Loader2 size={11} className="animate-spin" />
-                    Working through the timeline…
-                  </p>
-                ) : null}
-
-                {turn.status === 'aborted' ? (
-                  <p className="pl-5 text-[10px] text-ink-faint">Stopped.</p>
-                ) : null}
-
-                {turn.error ? (
-                  <div className="ml-5 rounded-sm border border-danger/30 bg-danger/10 px-2.5 py-2">
-                    <p className="text-[10px] leading-relaxed text-danger">
-                      {turn.error}
+                <p className="mt-1.5 text-[10px] leading-relaxed text-ink-muted">
+                  Kerf plans with the tools it has, reads the timeline, then
+                  applies edits as ordinary undoable commands.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {turns.map((turn) => (
+                <section key={turn.id} className="grid gap-2">
+                  <div className="ml-5 rounded-sm border border-accent/20 bg-accent/10 px-2.5 py-2">
+                    <p className="text-[11px] leading-relaxed whitespace-pre-wrap text-ink">
+                      {turn.message}
                     </p>
-                    {turn.hint ? (
-                      <p className="mt-1 text-[9px] leading-relaxed text-ink-muted">
-                        {turn.hint}
+                    {turn.scope && (
+                      <p
+                        className="mt-1 text-[10px] text-ink-muted"
+                        aria-label="Submitted scope"
+                        title={JSON.stringify(turn.scope)}
+                      >
+                        Scope: {scopeLabel(turn.scope)}
                       </p>
-                    ) : null}
+                    )}
                   </div>
-                ) : null}
-              </section>
-            ))}
-          </div>
-        )}
+
+                  {turn.tools.length > 0 ? (
+                    <div className="grid gap-1">
+                      {turn.tools.map((tool) => (
+                        <ToolCard key={tool.id} tool={tool} />
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {turn.text ? (
+                    <div className="flex items-start gap-2">
+                      <MessageSquare
+                        size={13}
+                        className="mt-0.5 shrink-0 text-ink-faint"
+                        aria-hidden="true"
+                      />
+                      <div className="chat-markdown min-w-0 flex-1 text-[11px] leading-relaxed text-ink-muted">
+                        <ChatMarkdown text={turn.text} />
+                      </div>
+                    </div>
+                  ) : turn.status === 'streaming' ? (
+                    <p className="flex items-center gap-1.5 pl-5 text-[10px] text-ink-faint">
+                      <Loader2 size={11} className="animate-spin" />
+                      Working through the timeline…
+                    </p>
+                  ) : null}
+
+                  {turn.status === 'aborted' ? (
+                    <p className="pl-5 text-[10px] text-ink-faint">Stopped.</p>
+                  ) : null}
+
+                  {turn.error ? (
+                    <div className="ml-5 rounded-sm border border-danger/30 bg-danger/10 px-2.5 py-2">
+                      <p className="text-[10px] leading-relaxed text-danger">
+                        {turn.error}
+                      </p>
+                      {turn.hint ? (
+                        <p className="mt-1 text-[9px] leading-relaxed text-ink-muted">
+                          {turn.hint}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </section>
+              ))}
+            </div>
+          )}
+          {starters.length > 0 && (
+            <div className="grid gap-1.5" aria-label="Suggested actions">
+              {starters.map((starter) => (
+                <Button
+                  key={starter.kind}
+                  size="sm"
+                  variant="secondary"
+                  disabled={starter.kind !== 'review' && busy}
+                  onClick={() => {
+                    if (starter.kind === 'import') void importFootage();
+                    else if (starter.kind === 'review' && starter.jobId) {
+                      setReviewJobId(starter.jobId);
+                      requestAnimationFrame(() =>
+                        document
+                          .getElementById(`editing-job-${starter.jobId}`)
+                          ?.scrollIntoView({ block: 'nearest' }),
+                      );
+                    } else if (starter.message)
+                      void send(
+                        starter.message,
+                        [],
+                        composerScope(snapshot, selectedIds, undefined, []),
+                      );
+                  }}
+                >
+                  {starter.label}
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+      {showJump && (
+        <Button
+          size="sm"
+          variant="secondary"
+          className="mx-3 mb-2"
+          onClick={jump}
+        >
+          Jump to latest
+        </Button>
+      )}
 
       {chatError ? (
         <div className="mx-3 mb-2 rounded-sm border border-danger/30 bg-danger/10 px-2.5 py-2">
@@ -524,6 +588,17 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
           submit();
         }}
       >
+        <ScopeControls
+          scope={scope}
+          snapshot={snapshot}
+          selectedIds={selectedIds}
+          onChange={(next) =>
+            setDraft(draftKey, {
+              scope: next.kind === 'targets' ? { ...next, assetIds: [] } : next,
+            })
+          }
+          error={scopeIssue}
+        />
         {pickerOpen ? (
           <div
             className="max-h-48 overflow-auto rounded-sm border border-line bg-surface-0"
@@ -653,7 +728,7 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
           className="min-h-[64px] w-full resize-none rounded-sm border border-line bg-surface-0 px-2.5 py-2 text-[11px] leading-relaxed text-ink transition-[border-color,box-shadow] placeholder:text-ink-faint hover:border-line-strong focus:border-accent-dim focus:ring-[3px] focus:ring-accent/15 focus:outline-none"
           placeholder="Describe an edit, or @ tag a video…"
           aria-label="Message the assistant"
-          disabled={busy}
+          aria-describedby={scopeIssue ? 'chat-scope-error' : undefined}
         />
         {mentions.length ? (
           <div className="flex flex-wrap gap-1" aria-label="Tagged videos">
@@ -691,7 +766,7 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
           <span className="min-w-0 flex-1 text-[9px] leading-snug text-ink-faint">
             @ tags a video · Enter sends · Shift+Enter adds a line
           </span>
-          {busy ? (
+          {busy && (
             <Button
               variant="secondary"
               size="sm"
@@ -700,17 +775,16 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
             >
               Stop
             </Button>
-          ) : (
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              leadingIcon={<Send size={11} />}
-              disabled={!input.trim()}
-            >
-              Send
-            </Button>
           )}
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            leadingIcon={<Send size={11} />}
+            disabled={busy || !input.trim() || Boolean(scopeIssue)}
+          >
+            Send
+          </Button>
         </div>
       </form>
     </aside>
