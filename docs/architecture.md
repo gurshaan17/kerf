@@ -392,3 +392,49 @@ chat, double-clicks Continue, and confirms one analysis call, one continuation,
 explicit Apply, rejected replay, and exact undo. Service/store tests cover durable
 ownership, request replay, consent/stale rejection, explicit reanalysis limits,
 and the submission lock. These fixtures do not evaluate editorial judgment.
+
+### Chat drafting, scrolling and submitted scope
+
+The studio store keeps drafts in memory by project and conversation, including
+text, source mentions and any explicit scope choice. A new-chat draft moves to
+its real conversation ID on `chat.started`. Streaming, completion, cancellation
+and panel unmounting preserve the draft; switching chats restores that chat's
+own draft. The composer remains editable while busy. Send stays disabled and
+Stop remains available; there is no send queue. Failed submission never replaces
+a newer draft with the older attempted message.
+
+Chat follows the latest content when the reader is within 64 pixels of the
+bottom or submits a message. Reading earlier content preserves scroll position,
+including when tool/review content changes size. Jump to latest restores
+following. A ResizeObserver handles streamed text, expanded cards and resizing.
+
+Scope chips choose the project, captured clip IDs, and tagged source assets.
+Submission validates the target IDs and project revision, and stores the scope
+on the turn and linked editing-job origin. Later timeline selection changes do
+not change that scope. Empty, missing or explicitly stale targets require a
+scope correction; removing the last target never silently grants project scope.
+Existing conversations without scope retain project scope for compatibility.
+
+The main process previews ordinary engine commands without mutating the live
+project before a scoped edit commits. It rejects changes to unrelated clips,
+global sequence/track settings and inserted media outside the permitted source
+ranges. Committed output IDs become eligible for further edits in the same turn;
+external changes to scoped clips/sources invalidate further edits. Review
+requests and desktop Apply use the same command check, preserving ordinary
+approval and undo. Supporting project inspection remains available regardless
+of edit scope. No additional editing representation or provider call is used.
+
+Contextual actions derive from actual project state: local import for an empty
+project, analysis for one supported ready video with the required consent and
+speech evidence, local review of completed analysis, or inspection/refinement of
+an existing cut. Unsupported analysis and concurrent analysis are not offered.
+
+Deterministic Electron coverage verifies drafting during streaming, completion,
+Stop, conversation switching, keyboard activation of Jump to latest, fixed
+submitted IDs despite selection changes, rejected out-of-scope edits and stale/
+missing selection recovery. Pure/service tests cover command boundaries, atomic
+rejection, draft migration and capability-aware starters. Together with the
+restart continuity and explicit continuation journeys, these prove the phases
+1–3 workflow slice. Manual editorial baseline measurements remain pending in the
+[baseline workbook](ai-editing-baseline-results.md); fixture passes do not
+establish better editorial judgment.
