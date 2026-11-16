@@ -312,3 +312,42 @@ local source media. Apply checks the source/timeline fingerprint, resolves only
 stored removal IDs, and uses the pure engine's `autoCutCommand` to create one
 ordinary reversible batch. There is no separate editing engine or cloud fallback.
 See [Auto cut](auto-cut.md) for the user flow and supported timeline shapes.
+
+## Editing task continuity
+
+Saved chat payloads optionally contain a versioned `editingContext`, scoped to
+both the project and conversation. Old conversations start with empty task
+context; assistant text is never migrated into edit facts. The existing SQLite
+conversation row owns its storage and lifetime; no separate memory database or
+provider summarization is used.
+
+The agent retains up to ten tasks and twenty object references per task, along
+with bounded command/job/proposal identifiers. It captures the explicit request
+(including user constraints), tagged source scope, validated editing results,
+and commit receipts. Requested, pending, applied, failed and cancelled work are
+separate from turn outcome and verification coverage. Applied work remains
+recorded if a later tool, provider call or cancellation ends the turn. Unmet
+rough-cut constraints are retained separately. Truncation and omitted history
+are marked explicitly.
+
+Each new turn receives at most 8 KiB of serialized task context, prioritizing the
+latest output, current request and pending work. Whole records are selected;
+identifiers are never cut in half. The context is a navigation aid and untrusted
+request/source text remains data. It grants no edit or provider authorization.
+Ambiguous output references require clarification and proposal application still
+requires the desktop approval path.
+
+On conversation open and before a turn, local editing-review records reconcile
+linked desktop approvals. Receipts include post-commit clip/source fingerprints;
+changed, deleted, undone or replaced outputs are marked stale against live state.
+Older receipts without fingerprints are treated conservatively. Reopening never
+starts analysis, calls a provider or applies edits. Project changes stop further
+tool dispatch from the old turn. Existing project/job tools remain the retrieval
+path for omitted context; this is bounded editing continuity, not personal memory.
+
+Focused deterministic provider/service tests cover commit-before-failure,
+database reopen, precise follow-up IDs and stale output handling. Pure context
+tests cover compatibility, ownership, source replacement, desktop receipt-time
+identity, omission bounds, and exclusion of raw transcript/image results. These
+prove workflow behavior; manual editorial baseline measurements remain pending
+in the [baseline workbook](ai-editing-baseline-results.md).
