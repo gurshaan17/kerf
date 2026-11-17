@@ -497,3 +497,27 @@ chat context immediately; saved IDs and receipts never authorize replay.
 
 See [Audio finishing](audio-finishing.md) for units, limits, cache lifetime,
 existing export-limiter scope, regression evidence and manual listening checks.
+
+### Semantic highlight discovery and outputs
+
+`HighlightService` reuses the persisted job queue, provider store, reviewed speech
+and ordinary rough-cut engine commands. One bounded text request selects contiguous
+sentence/segment evidence IDs from one source; server code resolves exact frames,
+excerpts and durations and rejects unknown IDs, overlap or invalid ranges. Fixed
+preload operations expose review, cancellation and desktop-only approval. The
+shared catalog exposes planning/read/review requests to chat and MCP.
+
+Approved outputs are independent ordinary single-sequence projects. Creation,
+cloned asset/transcript rows, typed command snapshots and a durable replay ledger
+publish in one SQLite transaction. Failed creation removes staged folders. Child
+assets reuse original source paths and clear parent-generated cache paths.
+Optional versioned `Project.highlightOrigin` metadata records source provenance
+and output IDs without a schema/database migration. Existing documents remain
+valid. Ordinary edits/Undo operate within the explicitly opened child project.
+
+ToolService publishes actual created output identities to the originating chat
+context immediately using the same scoped persistence helper as reviewed audio
+receipts. Models retain bounded IDs rather than candidate transcripts. Restart
+interrupts queued/running discovery without restarting provider work. Completed
+jobs and replay protection persist. See [Highlights](highlights.md) for limits,
+output ownership and the separate human editorial evaluation.

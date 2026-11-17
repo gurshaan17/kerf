@@ -118,6 +118,24 @@ so kind-specific fields remain type-checked.
 | `duckUnderSpeech`  | Apply attack/release envelopes under indexed speech; reject existing background volume automation                              |
 | `assembleRoughCut` | Build a video track from spoken segments, dropping false starts and repeated takes                                             |
 
+### Semantic highlights
+
+| Tool                      | Behavior                                                                               |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| `startClipDiscovery`      | One bounded transcript-based provider job for a ready speech video                     |
+| `readClipDiscovery`       | Read candidate evidence, rationales, durations, warnings and current eligibility       |
+| `createClipsFromProposal` | Request desktop review only; no project creation                                       |
+| `readClipOutputs`         | Read approved independent project/clip IDs and deletion status                         |
+| `verifyClipOutput`        | Check source identity and original output structure without claiming editorial quality |
+| `cancelClipDiscovery`     | Cancel discovery/review without removing created projects                              |
+
+Desktop **Create selected projects** is the only creation boundary. Each selected
+candidate becomes an ordinary independent project with synchronized video/audio;
+source timeline and Undo history stay intact. Repeated Apply cannot duplicate
+outputs. Whole-source discovery requires source/project scope, reviewed speech
+and an explicitly configured provider with Chat consent. See
+[Highlights](highlights.md) for limits, persistence and human review criteria.
+
 ### Audio finishing
 
 | Tool                     | Behavior                                                                                                                      |

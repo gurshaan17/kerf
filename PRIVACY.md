@@ -57,6 +57,14 @@ the job queue, including when no cuts are suggested. Analysis does not change
 the timeline until you apply the reviewed proposal. Interrupted Auto cut jobs
 require a new explicit request rather than resuming provider use on restart.
 
+Highlight discovery sends reviewed transcript evidence, source timing, requested
+count/duration and optional topic/audience to the text provider you explicitly
+select. It requires Chat consent and sends no frames, original audio or video.
+There is one bounded request with no automatic retry. Queued/running discovery is
+marked interrupted after restart rather than resuming provider use. Proposals,
+evidence and approved output identities stay in the local job/project database.
+Creating outputs requires desktop approval and links existing source files.
+
 Ollama and OpenAI-compatible endpoints can point at a local server such as
 `http://127.0.0.1:11434/v1`, in which case no traffic leaves the machine.
 
