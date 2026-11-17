@@ -18,3 +18,5 @@ export * from './narration';
 export * from './auto-cut';
 
 export * from './recipes';
+
+export * from './audio';

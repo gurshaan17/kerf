@@ -35,6 +35,8 @@ export function beginTask(
     references: [],
     omittedReferences: 0,
     omittedDetails: false,
+    audioPlanIds: [],
+    audioMeasurementIds: [],
     commandIds: [],
     jobIds: [],
     proposalJobIds: [],
@@ -147,6 +149,8 @@ export function captureTool(
       ['clipId', 'clip'],
       ['assetId', 'asset'],
       ['clipIds', 'clip'],
+      ['speechClipIds', 'clip'],
+      ['backgroundClipIds', 'clip'],
       ['assetIds', 'asset'],
     ] as const) {
       const values = Array.isArray(fields[field])
@@ -159,6 +163,30 @@ export function captureTool(
   }
   if (!output || typeof output !== 'object') return;
   const result = output as Record<string, unknown>;
+  if (
+    result.projectId === snapshot.project.id &&
+    typeof result.id === 'string'
+  ) {
+    if (name === 'measureAudio') {
+      task.omittedDetails ||= task.audioMeasurementIds.length >= 20;
+      task.audioMeasurementIds = [
+        ...new Set([...task.audioMeasurementIds, result.id]),
+      ].slice(-20);
+    }
+    if (name === 'planAudioGain' || name === 'planAudioDucking') {
+      task.omittedDetails ||= task.audioPlanIds.length >= 20;
+      task.audioPlanIds = [...new Set([...task.audioPlanIds, result.id])].slice(
+        -20,
+      );
+      if (!task.commandIds.length)
+        task.state = result.status === 'unattainable' ? 'failed' : 'pending';
+      if (result.status === 'unattainable' && Array.isArray(result.warnings))
+        task.unresolvedConstraints = result.warnings
+          .filter((w): w is string => typeof w === 'string')
+          .slice(0, 20)
+          .map((w) => w.slice(0, 200));
+    }
+  }
   if (name === 'planRoughCut' && result.proposal)
     captureTool(task, 'readEditProposal', {}, result.proposal, snapshot);
   if (

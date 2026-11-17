@@ -843,3 +843,85 @@ it('allows one explicit reanalysis using the original planning request', async (
   );
   expect(tools.releaseEditingContinuation).not.toHaveBeenCalled();
 });
+
+it('persists reviewed audio commits to an inactive originating conversation without a provider call', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'kerf-audio-chat-'));
+  const filename = join(root, 'test.db');
+  let db = openDatabase({ filename });
+  try {
+    const repository = new ProjectRepository({
+      database: db.connection,
+      projectsRoot: join(root, 'projects'),
+    });
+    const project = repository.create({ name: 'Audio continuity' }).project;
+    const current = { ...snapshot(), project };
+    let receive: Parameters<
+      ToolService['subscribeReviewedCommit']
+    >[0] = () => {};
+    const unsubscribe = vi.fn();
+    const tools = {
+      call: vi.fn(async () => ({})),
+      subscribeReviewedCommit: (listener: typeof receive) => {
+        receive = listener;
+        return unsubscribe;
+      },
+    } as unknown as ToolService;
+    const { done, resolveDone } = waitForTurn();
+    const chatModel = vi.fn(() =>
+      fakeModel([textChunks('Review the audio plan.')]),
+    );
+    const service = new AgentService({
+      database: db.connection,
+      projects: { current: () => current },
+      tools,
+      providers: { chatProvider: provider, chatModel },
+      broadcast: (event) => {
+        if (event.type === 'chat.done') resolveDone();
+      },
+    });
+    service.start({ message: 'Finish this audio at -16 LUFS.' });
+    await done;
+    const original = service.conversations()[0]!;
+    service.newConversation();
+    const receipt = {
+      projectId: project.id,
+      commandId: 'reviewed-audio-command',
+      label: 'Audio gain',
+      frameRate: project.sequence.frameRate,
+      undoable: true,
+      beforeDurationFrames: 0,
+      afterDurationFrames: 0,
+      changes: [],
+    };
+    receive(
+      { conversationId: original.id, turnId: original.turns[0]!.id },
+      receipt,
+    );
+    expect(chatModel).toHaveBeenCalledOnce();
+    expect(service.conversations()[0]!.editingContext!.tasks[0]).toMatchObject({
+      state: 'applied',
+      commandIds: ['reviewed-audio-command'],
+      verification: 'unverified',
+    });
+    service.dispose();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    db.close();
+    db = openDatabase({ filename });
+    const reopened = new AgentService({
+      database: db.connection,
+      projects: { current: () => current },
+      tools,
+      providers: { chatProvider: provider, chatModel },
+      broadcast: () => {},
+    });
+    reopened.openConversation(original.id);
+    expect(
+      reopened.conversations()[0]!.editingContext!.tasks[0]!.commandIds,
+    ).toEqual(['reviewed-audio-command']);
+    expect(chatModel).toHaveBeenCalledOnce();
+    reopened.dispose();
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -30,7 +30,7 @@ function atempoFilters(speed: number): string[] {
   return filters;
 }
 
-function audioFilter(clip: ExportAudioClip, input: number): string {
+export function audioFilter(clip: ExportAudioClip, input: number): string {
   const filters = [
     'asetpts=PTS-STARTPTS',
     `atrim=0:${seconds(clip.sourceDurationSeconds)}`,
@@ -43,13 +43,16 @@ function audioFilter(clip: ExportAudioClip, input: number): string {
     filters.push(...atempoFilters(clip.speed));
   }
   filters.push(`atrim=0:${seconds(clip.timelineDurationSeconds)}`);
-  if (clip.volume !== 1) {
+  if (clip.gainExpression) {
+    filters.push(`aeval=exprs='val(ch)*(${clip.gainExpression})':c=same`);
+  }
+  if (!clip.gainExpression && clip.volume !== 1) {
     filters.push(`volume=${clip.volume.toFixed(4)}`);
   }
-  if (clip.fadeInSeconds > 0) {
+  if (!clip.gainExpression && clip.fadeInSeconds > 0) {
     filters.push(`afade=t=in:st=0:d=${seconds(clip.fadeInSeconds)}`);
   }
-  if (clip.fadeOutSeconds > 0) {
+  if (!clip.gainExpression && clip.fadeOutSeconds > 0) {
     const start = Math.max(
       0,
       clip.timelineDurationSeconds - clip.fadeOutSeconds,
@@ -130,6 +133,10 @@ export function buildExportArgs(plan: ExportEncodePlan): string[] {
         `alimiter=limit=0.98,atrim=0:${seconds(plan.durationSeconds)},` +
         'asetpts=PTS-STARTPTS[aout]',
     );
+    if (filters.join(';').length > 100_000)
+      throw new Error(
+        'Audio automation exceeds the export filter budget. Export fewer clips or simplify the volume curves.',
+      );
     args.push(
       '-filter_complex',
       filters.join(';'),

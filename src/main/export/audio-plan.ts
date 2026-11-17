@@ -1,8 +1,10 @@
+import { audioGainExpression } from './audio-gain';
 import type { Asset, Sequence } from '@kerf/model';
 import { fpsToNumber } from '@kerf/model';
 import { sourceFrameAt } from '@kerf/engine';
 
 export interface ExportAudioClip {
+  readonly gainExpression?: string;
   readonly path: string;
   readonly sourceStartSeconds: number;
   readonly sourceDurationSeconds: number;
@@ -72,6 +74,16 @@ export function buildExportAudioPlan(
         speed: sourceDuration / timelineDuration,
         reversed: sourceB < sourceA,
         volume: Math.max(0, Math.min(4, clip.volume)),
+        gainExpression:
+          clip.keyframes.volume.length ||
+          clip.fade.inFrames ||
+          clip.fade.outFrames
+            ? audioGainExpression(
+                clip,
+                sequenceFps,
+                clipStart - clip.startFrame,
+              )
+            : undefined,
         fadeInSeconds: includesClipStart
           ? Math.min(clip.fade.inFrames, clip.durationFrames) / sequenceFps
           : 0,

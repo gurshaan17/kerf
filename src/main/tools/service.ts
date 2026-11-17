@@ -1,3 +1,11 @@
+import type { AudioFinishingService } from '../audio/finishing';
+import type {
+  AudioFinishPlan,
+  AudioGainRequest,
+  AudioDuckRequest,
+  MeasureAudioRequest,
+  AudioMeasurement,
+} from '@kerf/tools';
 import { createHash } from 'node:crypto';
 import { applyCommand } from '@kerf/engine';
 import {
@@ -83,12 +91,14 @@ export interface ToolExportSource {
 }
 
 export interface ToolExecutionOptions {
+  readonly origin?: { conversationId: string; turnId: string };
   readonly checkCommand?: (command: EditCommand) => void;
   readonly signal?: AbortSignal;
   readonly checkAccess?: () => void;
 }
 
 export interface ToolServiceOptions {
+  readonly audio?: AudioFinishingService;
   readonly editing?: EditingService;
   readonly projects: ToolProjectSource;
   readonly repository: ToolRepositorySource;
@@ -142,12 +152,83 @@ function toToolStart(result: ExportStartResult): ToolExportStartResult {
  */
 export class ToolService {
   private readonly options: ToolServiceOptions;
+  private readonly reviewedCommitListeners = new Set<
+    (
+      origin: NonNullable<AudioFinishPlan['origin']>,
+      receipt: EditReceipt,
+    ) => void
+  >();
   private queue: Promise<unknown> = Promise.resolve();
   private readonly visualReviews = new VisualReviewService();
   private editor: ToolEditorContext = DEFAULT_EDITOR_CONTEXT;
 
   constructor(options: ToolServiceOptions) {
     this.options = options;
+  }
+
+  subscribeReviewedCommit(
+    listener: (
+      origin: NonNullable<AudioFinishPlan['origin']>,
+      receipt: EditReceipt,
+    ) => void,
+  ) {
+    this.reviewedCommitListeners.add(listener);
+    return () => {
+      this.reviewedCommitListeners.delete(listener);
+    };
+  }
+  audioReviews(conversationId?: string | null) {
+    return this.options.audio?.reviews(conversationId) ?? [];
+  }
+  audioMeasure(input: MeasureAudioRequest) {
+    return this.call(
+      'measureAudio',
+      input,
+      'user',
+    ) as Promise<AudioMeasurement>;
+  }
+  audioGain(input: AudioGainRequest) {
+    return this.call(
+      'planAudioGain',
+      input,
+      'user',
+    ) as Promise<AudioFinishPlan>;
+  }
+  audioDucking(input: AudioDuckRequest) {
+    return this.call(
+      'planAudioDucking',
+      input,
+      'user',
+    ) as Promise<AudioFinishPlan>;
+  }
+  audioCancel(requestId: string) {
+    this.options.audio?.cancel(requestId);
+  }
+  audioConfirm(planId: string) {
+    const run = this.queue.then(() => {
+      if (!this.options.audio)
+        throw new Error('Audio finishing is unavailable.');
+      const plan = this.options.audio.read(planId);
+      let receipt: EditReceipt | undefined;
+      this.options.audio.confirm(
+        planId,
+        this.context('user', (value) => {
+          receipt = value;
+        }),
+      );
+      if (receipt) {
+        this.options.audio.receipt(planId, receipt);
+        if (plan.origin)
+          for (const listener of this.reviewedCommitListeners)
+            listener(plan.origin, receipt);
+      }
+      return { receipt };
+    });
+    this.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   names(): readonly string[] {
@@ -433,6 +514,25 @@ export class ToolService {
   ): ToolContext {
     const context: ToolContext = {
       actor,
+      audioFinishing: this.options.audio
+        ? () => ({
+            measure: (input) =>
+              this.options.audio!.measure(input, execution?.signal),
+            planGain: (input) =>
+              this.options.audio!.planGain(
+                input,
+                execution?.checkCommand,
+                execution?.origin,
+              ),
+            planDucking: (input) =>
+              this.options.audio!.planDucking(
+                input,
+                execution?.checkCommand,
+                execution?.origin,
+              ),
+            read: (id) => this.options.audio!.read(id),
+          })
+        : undefined,
       signal: execution?.signal,
       checkAccess: execution?.checkAccess,
       checkCommand: execution?.checkCommand,

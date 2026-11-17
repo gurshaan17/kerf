@@ -48,6 +48,15 @@ const invoke = <Result>(channel: string, ...args: unknown[]): Promise<Result> =>
 // Keep the renderer sandboxed: expose only the specific operations the UI
 // needs instead of handing over Node.js or the whole `electron` module.
 const bridge: KerfBridge = {
+  audioFinishing: {
+    measure: (input) => invoke(KERF_IPC.audioFinishing.measure, input),
+    gain: (input) => invoke(KERF_IPC.audioFinishing.gain, input),
+    duck: (input) => invoke(KERF_IPC.audioFinishing.duck, input),
+    reviews: (conversationId) =>
+      invoke(KERF_IPC.audioFinishing.reviews, conversationId),
+    confirm: (planId) => invoke(KERF_IPC.audioFinishing.confirm, planId),
+    cancel: (requestId) => invoke(KERF_IPC.audioFinishing.cancel, requestId),
+  },
   editing: {
     preview: (request) => invoke(KERF_IPC.editing.preview, request),
     finish: (request) => invoke(KERF_IPC.editing.finish, request),

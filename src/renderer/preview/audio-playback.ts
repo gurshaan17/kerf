@@ -1,3 +1,5 @@
+import { MediaAudioGain } from './media-audio-gain';
+import { clipAudioGain } from '@kerf/model';
 import type { Asset, Sequence } from '@kerf/model';
 import { fpsToNumber } from '@kerf/model';
 import { clipsAtFrame, sourceFrameAt } from '@kerf/engine';
@@ -5,6 +7,7 @@ import { assetMediaUrl } from '@kerf/canvas';
 
 /** Separate elements keep audio edits independent of the visual decoder. */
 export class AudioPlayback {
+  private readonly gains = new MediaAudioGain();
   private readonly elements = new Map<string, HTMLAudioElement>();
 
   constructor(
@@ -21,9 +24,10 @@ export class AudioPlayback {
     const active = new Set<string>();
     const fps = fpsToNumber(sequence.frameRate);
     for (const track of sequence.tracks) {
-      if (track.kind !== 'audio' || track.muted) continue;
+      if (!['audio', 'video'].includes(track.kind) || track.muted) continue;
       for (const clip of clipsAtFrame(track, frame)) {
-        if (clip.type !== 'audio' || clip.volume <= 0) continue;
+        if (clip.type !== 'audio' && clip.type !== 'video') continue;
+        if (clip.volume <= 0 && !clip.keyframes.volume.length) continue;
         const asset = assets.find((asset) => asset.id === clip.assetId);
         if (!asset?.hasAudio || asset.status !== 'ready') continue;
         active.add(clip.id);
@@ -31,6 +35,7 @@ export class AudioPlayback {
         if (!audio) {
           audio = this.createAudio();
           audio.preload = 'auto';
+          audio.crossOrigin = 'anonymous';
           audio.src = assetMediaUrl(
             asset,
             asset.cache.proxyPath ? 'proxy' : 'source',
@@ -53,13 +58,13 @@ export class AudioPlayback {
           );
         }
         const local = frame - clip.startFrame;
-        const fadeIn = clip.fade.inFrames
-          ? Math.min(1, local / clip.fade.inFrames)
-          : 1;
-        const fadeOut = clip.fade.outFrames
-          ? Math.min(1, (clip.durationFrames - local) / clip.fade.outFrames)
-          : 1;
-        audio.volume = Math.max(0, Math.min(1, clip.volume * fadeIn * fadeOut));
+        this.gains.set(
+          audio,
+          clipAudioGain(clip, local),
+          clipAudioGain(clip, local + 1),
+          1 / fps,
+          force,
+        );
         audio.muted = false;
         audio.preservesPitch = true;
         if (audio.paused) void audio.play().catch(() => undefined);
@@ -68,6 +73,7 @@ export class AudioPlayback {
     for (const [id, audio] of this.elements) {
       if (!active.has(id)) {
         audio.pause();
+        this.gains.remove(audio);
         audio.removeAttribute('src');
         audio.load();
         this.elements.delete(id);
@@ -86,5 +92,6 @@ export class AudioPlayback {
       audio.load();
     }
     this.elements.clear();
+    this.gains.dispose();
   }
 }

@@ -1,3 +1,4 @@
+import { speechDuckingCommand } from '@kerf/engine';
 import { writeScopedCaptions, duckScopedSpeech } from './scoped-speech';
 import { z } from 'zod';
 import type {
@@ -319,55 +320,6 @@ function rebuildTrackCommands(
   return shift;
 }
 
-function mergeRanges(
-  ranges: Array<{ start: number; end: number }>,
-): Array<{ start: number; end: number }> {
-  ranges.sort((left, right) => left.start - right.start);
-  const merged: Array<{ start: number; end: number }> = [];
-  for (const range of ranges) {
-    const previous = merged.at(-1);
-    if (previous && range.start <= previous.end) {
-      previous.end = Math.max(previous.end, range.end);
-    } else {
-      merged.push({ ...range });
-    }
-  }
-  return merged;
-}
-
-function timelineSpeechRanges(
-  sequence: Sequence,
-  transcript: Transcript,
-): Array<{ start: number; end: number }> {
-  const ranges: Array<{ start: number; end: number }> = [];
-  for (const track of sequence.tracks) {
-    for (const clip of track.clips) {
-      if (
-        (clip.type !== 'video' && clip.type !== 'audio') ||
-        clip.assetId !== transcript.assetId ||
-        clip.speed !== 1 ||
-        clip.timeMap.length > 0
-      ) {
-        continue;
-      }
-      for (const speech of speechRanges(transcript)) {
-        const start = clip.startFrame + (speech.start - clip.sourceInFrame);
-        const end = clip.startFrame + (speech.end - clip.sourceInFrame);
-        if (
-          end > clip.startFrame &&
-          start < clip.startFrame + clip.durationFrames
-        ) {
-          ranges.push({
-            start: Math.max(clip.startFrame, start),
-            end: Math.min(clip.startFrame + clip.durationFrames, end),
-          });
-        }
-      }
-    }
-  }
-  return mergeRanges(ranges);
-}
-
 function assetFrameToTimeline(
   sequence: Sequence,
   assetId: string,
@@ -677,7 +629,7 @@ export const cutSilencesTool = {
 export const duckUnderSpeechTool = {
   name: 'duckUnderSpeech',
   description:
-    'Lower non-speech audio clips that overlap transcribed speech. Pass clipIds to scope to selected normal-speed video clips, protecting all known source speech. Use a gain between 0 and 1.',
+    'Apply attack/release volume envelopes to non-speech audio under indexed speech. Existing volume automation is preserved by rejecting conflicts. Pass clipIds to scope to selected normal-speed video clips, protecting all known source speech. Use a gain between 0 and 1.',
   input: z.object({
     assetId: assetIdSchema.optional(),
     transcriptId: transcriptIdSchema.optional(),
@@ -706,47 +658,47 @@ export const duckUnderSpeechTool = {
       input.assetId,
       input.transcriptId,
     );
-    const speech = timelineSpeechRanges(snapshot.project.sequence, transcript);
-    if (speech.length === 0) {
-      throw new Error('The transcript has no speech to duck under.');
-    }
-    const commands: EditCommand[] = [];
-    for (const track of snapshot.project.sequence.tracks) {
-      if (track.kind !== 'audio') {
-        continue;
-      }
-      for (const clip of track.clips) {
-        if (clip.type !== 'audio' || clip.assetId === transcript.assetId) {
-          continue;
-        }
-        const start = clip.startFrame;
-        const end = clip.startFrame + clip.durationFrames;
-        const overlaps = speech.some(
-          (range) => range.start < end && range.end > start,
-        );
-        if (!overlaps) {
-          continue;
-        }
-        commands.push({
-          type: 'clip.update',
-          clipId: clip.id,
-          patch: { volume: Math.max(0, input.gain) },
-        });
-      }
-    }
-    if (commands.length === 0) {
-      return {
-        ...summary(context, 'Duck under speech'),
-        duckedClipCount: 0,
-      };
-    }
-    const result = context.applyBatch(commands, {
-      label: 'Duck under speech',
-    });
+    const speechClipIds = snapshot.project.sequence.tracks
+      .flatMap((t) => t.clips)
+      .filter(
+        (c) =>
+          (c.type === 'video' || c.type === 'audio') &&
+          c.assetId === transcript.assetId &&
+          c.speed === 1 &&
+          !c.timeMap.length,
+      )
+      .map((c) => c.id);
+    const speechAssets = new Set(
+      snapshot.transcripts
+        .filter((t) => t.source === 'speech')
+        .map((t) => t.assetId),
+    );
+    const backgrounds = snapshot.project.sequence.tracks
+      .filter((t) => t.kind === 'audio' && !t.muted)
+      .flatMap((t) => t.clips)
+      .filter((c) => c.type === 'audio' && !speechAssets.has(c.assetId))
+      .map((c) => c.id);
+    if (!backgrounds.length)
+      return { ...summary(context, 'Duck under speech'), duckedClipCount: 0 };
+    const duck = speechDuckingCommand(
+      snapshot.project.sequence,
+      snapshot.assets,
+      snapshot.transcripts,
+      {
+        speechClipIds,
+        backgroundClipIds: backgrounds,
+        gain: input.gain,
+        attackMs: 100,
+        releaseMs: 250,
+      },
+    );
+    if (!duck.backgroundClipIds.length)
+      return { ...summary(context, 'Duck under speech'), duckedClipCount: 0 };
+    const result = context.apply(duck.command, { label: 'Duck under speech' });
     return {
       ...summary(context, result.command.label || 'Duck under speech'),
       commandId: result.command.id,
-      duckedClipCount: commands.length,
+      duckedClipCount: duck.backgroundClipIds.length,
       gain: input.gain,
     };
   },

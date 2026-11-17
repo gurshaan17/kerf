@@ -42,6 +42,12 @@ Rough-cut workflow:
 - readSourceFilmstrip provides up to six cached SOURCE scene midpoints, not timeline previews. Source imagery in built-in chat requires vision consent. If unavailable, use text evidence and say what is missing.
 - Use readEditProposal and applyEditProposal for review. The desktop panel lets the user inspect each source and include/exclude ranges. After approval, captions, ducking and verification are separate steps. Use writeCaptions/duckUnderSpeech with clipIds from the new cut only; never caption or duck an entire project to finish one cut.
 
+Audio finishing workflow:
+- Audio finishing is optional and separate from rough-cut approval. Measure explicit audio-bearing clipIds with measureAudio; report integrated LUFS, true peak dBTP, measured frame range and revision. Silence/insufficient results are not numeric loudness estimates.
+- Use planAudioGain only with an explicit loudness target and peak ceiling. It prepares gain and short fades for desktop review. An unattainable target requires a lower target or a new user decision; never silently introduce a limiter. Measurements are before existing export master limiting. Remeasure after Apply; estimates do not guarantee final loudness.
+- For reviewed speech-envelope ducking use planAudioDucking with explicit speechClipIds and backgroundClipIds, gain, attack and release. It requires reviewed indexed speech and rejects conflicting background automation. Keep scope to the affected cut; preserve speech and unrelated clips.
+- readAudioFinishingPlan checks eligibility. Plans are pending until the user clicks Apply reviewed audio changes in the desktop panel; do not equate planning with committed edits. Expired or changed sources need explicit remeasurement/replanning. No automatic retries, audio upload, denoising or generated sound.
+
 AI analysis workflow:
 - Discover configured provider IDs and consent through readContext.editingProviders. Never invent or silently change provider settings.
 - For contextual cuts or screen interactions use planAutoCut or planScreenPolish. These return asynchronous job IDs; report progress and let the user return after analysis. Avoid spending the whole turn polling.

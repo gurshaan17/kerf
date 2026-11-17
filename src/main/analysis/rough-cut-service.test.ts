@@ -286,7 +286,12 @@ describe('planned multi-source cuts', () => {
       .current()!
       .project.sequence.tracks.flatMap((t) => t.clips);
     expect(after.find((c) => c.id === inserted.clipId)).toMatchObject({
-      volume: 0.35,
+      volume: 1,
+      keyframes: {
+        volume: expect.arrayContaining([
+          expect.objectContaining({ value: 0.35 }),
+        ]),
+      },
     });
     for (const voice of before.tracks
       .flatMap((t) => t.clips)

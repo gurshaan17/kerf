@@ -1,3 +1,4 @@
+import { AudioFinishingService } from './audio/finishing';
 import { RoughCutService } from './analysis/rough-cut-service';
 import { EditingService } from './tools/editing';
 import { app, shell } from 'electron';
@@ -130,7 +131,9 @@ export function createKerfServices(
       providers: analysis.providers,
       database: database.connection,
     });
+    const audio = new AudioFinishingService({ projects });
     const tools = new ToolService({
+      audio,
       editing,
       projects,
       repository,
@@ -177,7 +180,8 @@ export function createKerfServices(
         screenPolish.dispose();
         autoCut.dispose();
         tts.dispose();
-        agent.abort();
+        agent.dispose();
+        audio.dispose();
         mcp.dispose();
         renderer.dispose();
         exportService.dispose();

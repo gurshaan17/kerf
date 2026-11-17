@@ -1,3 +1,5 @@
+import { AUDIO_FINISHING_TOOLS } from './audio';
+export * from './audio';
 import { VISUAL_REVIEW_TOOLS } from './visual-review';
 export * from './visual-review';
 import { planRoughCutTool, readSourceFilmstripTool } from './rough-cut';
@@ -30,6 +32,7 @@ export * from './types';
 
 export const TOOL_DEFINITIONS = [
   ...READ_TOOLS,
+  ...AUDIO_FINISHING_TOOLS,
   ...VISUAL_REVIEW_TOOLS,
   planRoughCutTool,
   readSourceFilmstripTool,

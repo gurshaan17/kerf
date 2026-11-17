@@ -1,3 +1,4 @@
+import { AudioFinishingPanel } from './AudioFinishingPanel';
 import { VisualReviewCard } from './VisualReviewCard';
 import { EditingReviews, useEditingReviews } from './EditingReviews';
 import { chatDraftKey, EMPTY_CHAT_DRAFT } from './drafts';
@@ -417,6 +418,7 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
         aria-live="polite"
       >
         <div ref={contentRef} className="grid gap-3">
+          <AudioFinishingPanel />
           <EditingReviews
             reviews={reviews}
             error={reviewError}

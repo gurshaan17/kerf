@@ -367,6 +367,7 @@ export function createAgentToolSet(
  * process and always goes through ToolService.
  */
 export class AgentService {
+  private readonly unsubscribeReviewedCommit?: () => void;
   private readonly options: AgentServiceOptions;
   private readonly now: () => number;
   private sessionId = `chat_${randomUUID()}`;
@@ -379,6 +380,73 @@ export class AgentService {
   constructor(options: AgentServiceOptions) {
     this.options = options;
     this.now = options.now ?? Date.now;
+    this.unsubscribeReviewedCommit = options.tools.subscribeReviewedCommit?.(
+      (origin, receipt) => this.rememberReviewedCommit(origin, receipt),
+    );
+  }
+
+  dispose() {
+    this.abort();
+    this.unsubscribeReviewedCommit?.();
+  }
+  private rememberReviewedCommit(
+    origin: { conversationId: string; turnId: string },
+    receipt: EditReceipt,
+  ) {
+    const snapshot = this.options.projects.current();
+    if (!snapshot || snapshot.project.id !== receipt.projectId) return;
+    const active =
+      this.conversation?.id === origin.conversationId &&
+      this.projectId === receipt.projectId;
+    const row = !active
+      ? (this.options.database
+          ?.prepare(
+            'SELECT payload_json FROM chat_conversations WHERE id = ? AND project_id = ?',
+          )
+          .get(origin.conversationId, receipt.projectId) as
+          | { payload_json: string }
+          | undefined)
+      : undefined;
+    const conversation = active
+      ? this.conversation
+      : row
+        ? (JSON.parse(row.payload_json) as ChatConversation)
+        : null;
+    const turn = conversation?.turns.find((t) => t.id === origin.turnId);
+    if (!conversation || !turn) return;
+    const context =
+      active && this.taskContext
+        ? this.taskContext
+        : loadContext(
+            conversation.editingContext,
+            receipt.projectId,
+            conversation.id,
+          );
+    const task =
+      context.tasks.find((t) => t.turnId === turn.id) ??
+      beginTask(
+        context,
+        turn.id,
+        turn.message,
+        turn.mentions ?? [],
+        snapshot,
+        turn.scope,
+      );
+    task.turnState = turn.status;
+    captureReceipt(task, receipt, snapshot);
+    if (active) {
+      this.taskContext = context;
+      this.persistConversation();
+    } else
+      this.options.database
+        ?.prepare(
+          'UPDATE chat_conversations SET payload_json = ? WHERE id = ? AND project_id = ?',
+        )
+        .run(
+          JSON.stringify({ ...conversation, editingContext: context }),
+          conversation.id,
+          receipt.projectId,
+        );
   }
 
   conversations(): ChatConversation[] {
@@ -1006,6 +1074,10 @@ export class AgentService {
                     signal: turn.controller.signal,
                     checkAccess,
                     checkCommand: turn.editScope.checkCommand,
+                    origin: {
+                      conversationId: this.sessionId,
+                      turnId: turn.turnId,
+                    },
                   },
                 );
                 const task = this.taskContext?.tasks.find(

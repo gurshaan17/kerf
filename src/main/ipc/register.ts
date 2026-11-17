@@ -1,3 +1,8 @@
+import {
+  measureAudioSchema,
+  planAudioGainSchema,
+  planAudioDuckingSchema,
+} from '@kerf/tools';
 import { chatScopeSchema } from '../../shared/chat-scope';
 import type { ScreenPolishService } from '../analysis/screen-polish-service';
 import {
@@ -226,6 +231,28 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
+  ipcMain.handle(KERF_IPC.audioFinishing.measure, (_event, input: unknown) =>
+    options.tools.audioMeasure(measureAudioSchema.parse(input)),
+  );
+  ipcMain.handle(KERF_IPC.audioFinishing.gain, (_event, input: unknown) =>
+    options.tools.audioGain(planAudioGainSchema.parse(input)),
+  );
+  ipcMain.handle(KERF_IPC.audioFinishing.duck, (_event, input: unknown) =>
+    options.tools.audioDucking(planAudioDuckingSchema.parse(input)),
+  );
+  ipcMain.handle(
+    KERF_IPC.audioFinishing.reviews,
+    (_event, conversationId: unknown) =>
+      options.tools.audioReviews(
+        z.string().min(1).nullable().optional().parse(conversationId),
+      ),
+  );
+  ipcMain.handle(KERF_IPC.audioFinishing.confirm, (_event, id: unknown) =>
+    options.tools.audioConfirm(z.string().min(1).max(100).parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.audioFinishing.cancel, (_event, id: unknown) =>
+    options.tools.audioCancel(z.string().min(1).max(80).parse(id)),
+  );
   ipcMain.handle(KERF_IPC.editing.cancel, (_event, jobId: unknown) =>
     options.tools.call(
       'cancelEditingJob',
@@ -797,6 +824,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     unsubscribe();
     for (const channel of [
       ...Object.values(KERF_IPC.editing),
+      ...Object.values(KERF_IPC.audioFinishing),
       ...Object.values(KERF_IPC.screenPolish),
       ...Object.values(KERF_IPC.autoCut),
       ...Object.values(KERF_IPC.projects),

@@ -580,6 +580,14 @@ export interface RendererEditorContext {
 export type KerfEvent = ProjectEvent | JobEvent | ExportEvent | ChatEvent;
 
 export const KERF_IPC = {
+  audioFinishing: {
+    measure: 'kerf:audio:measure',
+    gain: 'kerf:audio:gain',
+    duck: 'kerf:audio:duck',
+    reviews: 'kerf:audio:reviews',
+    confirm: 'kerf:audio:confirm',
+    cancel: 'kerf:audio:cancel',
+  },
   editing: {
     preview: 'kerf:editing:preview',
     reviews: 'kerf:editing:reviews',
@@ -712,6 +720,22 @@ export interface KerfEventEnvelope {
 
 /** The complete surface exposed on `window.kerf`. Keep this allowlist small. */
 export interface KerfBridge {
+  readonly audioFinishing?: {
+    measure(
+      input: import('@kerf/tools').MeasureAudioRequest,
+    ): Promise<import('@kerf/tools').AudioMeasurement>;
+    gain(
+      input: import('@kerf/tools').AudioGainRequest,
+    ): Promise<import('@kerf/tools').AudioFinishPlan>;
+    duck(
+      input: import('@kerf/tools').AudioDuckRequest,
+    ): Promise<import('@kerf/tools').AudioFinishPlan>;
+    reviews(
+      conversationId?: string | null,
+    ): Promise<readonly import('@kerf/tools').AudioFinishPlan[]>;
+    confirm(planId: string): Promise<{ receipt?: EditReceipt }>;
+    cancel(requestId: string): Promise<void>;
+  };
   readonly editing?: {
     preview(request: {
       jobId: string;

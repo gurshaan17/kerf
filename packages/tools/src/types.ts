@@ -165,6 +165,7 @@ export interface ToolContext {
   readonly signal?: AbortSignal;
   checkAccess?(): void;
   checkCommand?(command: EditCommand): void;
+  audioFinishing?(): import('./audio').ToolAudioFinishingAccess;
   visualReview?(): import('./visual-review').ToolVisualReviewAccess;
   editing?(): ToolEditingAccess;
   snapshot(): ToolSnapshot | null;

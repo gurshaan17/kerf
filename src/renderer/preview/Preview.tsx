@@ -50,7 +50,6 @@ function syncVideos(
   sequence: Sequence,
   frame: number,
   pool: MediaPool,
-  allowAudio: boolean,
   syncedClips: Map<string, string>,
   force = false,
 ): void {
@@ -72,7 +71,7 @@ function syncVideos(
     syncedClips.set(clip.assetId, clip.id);
 
     video.volume = Math.max(0, Math.min(1, clip.volume));
-    video.muted = !allowAudio || track.muted || clip.volume <= 0;
+    video.muted = true;
     video.preservesPitch = true;
 
     if (video.seeking && !force && !clipChanged) {
@@ -296,8 +295,8 @@ export function Preview({
         return;
       }
       const frame = startFrame + ((performance.now() - startedAt) / 1000) * fps;
-      const rounded = Math.min(Math.round(frame), duration);
-      if (rounded >= duration) {
+      const rounded = Math.min(Math.floor(frame), Math.max(0, duration - 1));
+      if (frame >= duration) {
         current.setPlayhead(duration);
         current.setPlaying(false);
         pauseVideos(sequence, pool);
@@ -308,12 +307,12 @@ export function Preview({
         lastRounded = rounded;
         current.setPlayhead(rounded);
       }
-      syncVideos(sequence, rounded, pool, true, syncedClipsRef.current);
-      audioRef.current?.sync(sequence, assetsRef.current, rounded);
+      syncVideos(sequence, rounded, pool, syncedClipsRef.current);
+      audioRef.current?.sync(sequence, assetsRef.current, frame);
       frameHandle = requestAnimationFrame(tick);
     };
     syncedClipsRef.current.clear();
-    syncVideos(sequence, startFrame, pool, true, syncedClipsRef.current, true);
+    syncVideos(sequence, startFrame, pool, syncedClipsRef.current, true);
     audioRef.current?.sync(sequence, assetsRef.current, startFrame, true);
     frameHandle = requestAnimationFrame(tick);
     return () => {

@@ -16,6 +16,8 @@ const task = z.object({
   references: z.array(reference).max(20),
   omittedReferences: z.number(),
   omittedDetails: z.boolean().default(false),
+  audioPlanIds: z.array(z.string()).max(20).default([]),
+  audioMeasurementIds: z.array(z.string()).max(20).default([]),
   commandIds: z.array(z.string()).max(20),
   jobIds: z.array(z.string()).max(20),
   proposalJobIds: z.array(z.string()).max(20),

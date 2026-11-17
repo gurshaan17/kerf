@@ -346,7 +346,10 @@ describe('timing macros', () => {
       .snapshot()
       .project.sequence.tracks.flatMap((track) => track.clips)
       .find((clip) => clip.type === 'audio' && clip.assetId === music.id);
-    expect(musicClip?.type === 'audio' ? musicClip.volume : null).toBe(0.25);
+    expect(musicClip?.type === 'audio' ? musicClip.volume : null).toBe(1);
+    expect(musicClip?.keyframes.volume.some((k) => k.value === 0.25)).toBe(
+      true,
+    );
   });
 
   it('assembles a rough cut and drops a repeated take', async () => {

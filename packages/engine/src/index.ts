@@ -20,3 +20,5 @@ export * from './screen-polish';
 export * from './transcript-edit';
 
 export * from './rough-cut';
+
+export * from './audio-finishing';

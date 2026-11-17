@@ -1,3 +1,4 @@
+import { speechDuckingCommand } from '@kerf/engine';
 import {
   clipSchema,
   createTrack,
@@ -158,73 +159,45 @@ export function duckScopedSpeech(
       .filter((t) => t.source === 'speech')
       .map((t) => t.assetId),
   );
-  const ranges: { start: number; end: number }[] = [];
-  for (const clip of clips) {
-    const asset = snapshot.assets.find((a) => a.id === clip.assetId);
-    const rate = asset?.frameRate ?? sequence.frameRate;
-    for (const transcript of snapshot.transcripts.filter(
-      (t) =>
-        t.assetId === clip.assetId &&
-        t.source === 'speech' &&
-        t.status === 'reviewed',
-    ))
-      for (const segment of transcript.segments) {
-        const start = Math.max(
-          clip.startFrame,
-          clip.startFrame +
-            secondsToFrames(
-              segment.startFrame / fpsToNumber(rate),
-              sequence.frameRate,
-              'floor',
-            ) -
-            clip.sourceInFrame,
-        );
-        const end = Math.min(
-          clip.startFrame + clip.durationFrames,
-          clip.startFrame +
-            secondsToFrames(
-              segment.endFrame / fpsToNumber(rate),
-              sequence.frameRate,
-              'ceil',
-            ) -
-            clip.sourceInFrame,
-        );
-        if (end > start) ranges.push({ start, end });
-      }
-  }
-  if (!ranges.length)
-    throw new Error('No transcribed speech overlaps these clips.');
-  const commands: EditCommand[] = [];
-  for (const track of sequence.tracks.filter((t) => t.kind === 'audio'))
-    for (const clip of track.clips) {
-      if (
-        clip.type !== 'audio' ||
-        speechAssets.has(clip.assetId) ||
-        clips.some((c) => c.assetId === clip.assetId) ||
-        !ranges.some(
-          (r) =>
-            r.start < clip.startFrame + clip.durationFrames &&
-            r.end > clip.startFrame,
-        )
-      )
-        continue;
-      commands.push({
-        type: 'clip.update',
-        clipId: clip.id,
-        patch: { volume: gain },
-      });
-    }
-  if (!commands.length)
+  const backgroundClipIds = sequence.tracks
+    .filter((t) => t.kind === 'audio' && !t.muted)
+    .flatMap((t) => t.clips)
+    .filter(
+      (c) =>
+        c.type === 'audio' &&
+        !speechAssets.has(c.assetId) &&
+        !clips.some((s) => s.assetId === c.assetId),
+    )
+    .map((c) => c.id);
+  if (!backgroundClipIds.length)
     return {
       duckedClipCount: 0,
       note: 'No overlapping background audio; source speech was preserved.',
     };
-  const result = context.applyBatch(commands, {
+  const duck = speechDuckingCommand(
+    sequence,
+    snapshot.assets,
+    snapshot.transcripts,
+    {
+      speechClipIds: clipIds,
+      backgroundClipIds,
+      gain,
+      attackMs: 100,
+      releaseMs: 250,
+    },
+  );
+  if (!duck.backgroundClipIds.length)
+    return {
+      duckedClipCount: 0,
+      note: 'No overlapping background audio; source speech was preserved.',
+    };
+  const result = context.apply(duck.command, {
     label: 'Duck background under selected speech',
   });
   return {
     commandId: result.command.id,
-    duckedClipCount: commands.length,
+    duckedClipCount: duck.backgroundClipIds.length,
     gain,
+    intervalCount: duck.intervalCount,
   };
 }
