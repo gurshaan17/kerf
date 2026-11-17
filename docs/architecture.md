@@ -479,3 +479,21 @@ resource limits. The rough-cut Electron journey auditions real source audio,
 checks direct-close decoder cleanup, selection and source invalidation, expiry,
 keyboard isolation, explicit Apply, replay rejection and exact undo. These are
 workflow and synchronization checks, not an editorial-quality evaluation.
+
+### Audio finishing
+
+`AudioFinishingService` owns local FFmpeg measurement and bounded, revision-bound
+review plans. It reuses `runProcess`, export audio planning, the shared tool
+registry and ordinary engine batches. Fixed preload operations expose desktop
+measurement, cancellation, review and Apply; renderer code never reads files or
+launches processes. No database migration or provider is involved.
+
+Volume automation remains absolute gain in clip-local frames. Shared model
+sampling feeds Web Audio playback gain nodes and sample-level FFmpeg expressions
+for export/measurement, including fades and partial-window offsets. Reviewed gain
+rejects unattainable headroom, and speech ducking rejects conflicting automation.
+ToolService serializes Apply and publishes its actual receipt to the originating
+chat context immediately; saved IDs and receipts never authorize replay.
+
+See [Audio finishing](audio-finishing.md) for units, limits, cache lifetime,
+existing export-limiter scope, regression evidence and manual listening checks.

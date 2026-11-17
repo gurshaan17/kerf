@@ -115,8 +115,24 @@ so kind-specific fields remain type-checked.
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | `writeCaptions`    | Create caption clips from a transcript with the clean, bold, or boxed preset; replaces existing captions for those transcripts |
 | `cutSilences`      | Remove spoken pauses from one transcribed asset and close the gaps                                                             |
-| `duckUnderSpeech`  | Lower non-speech audio that overlaps transcribed speech                                                                        |
+| `duckUnderSpeech`  | Apply attack/release envelopes under indexed speech; reject existing background volume automation                              |
 | `assembleRoughCut` | Build a video track from spoken segments, dropping false starts and repeated takes                                             |
+
+### Audio finishing
+
+| Tool                     | Behavior                                                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `measureAudio`           | Measure the explicit clip mix locally: integrated LUFS, true peak dBTP, frame range, revision and silence/insufficient states |
+| `planAudioGain`          | Prepare gain/fades from a current measurement and explicit target/ceiling; unattainable targets remain unapplied              |
+| `planAudioDucking`       | Prepare reviewed speech-envelope ducking for explicit speech/background IDs with attack/release ramps                         |
+| `readAudioFinishingPlan` | Read current review eligibility without editing or processing media                                                           |
+
+The planning tools require **Apply reviewed audio changes** in desktop review;
+MCP and chat cannot bypass it. Every Apply creates one ordinary undo step.
+Measurements are before existing export master limiting; remeasure after applying
+gain/fades. Plans expire after five minutes, reject changed project/source/index
+revisions, and never overwrite conflicting volume automation. See
+[Audio finishing](audio-finishing.md) for scope, limits and audition checks.
 
 ### AI editing analysis and review
 

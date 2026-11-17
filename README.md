@@ -29,6 +29,9 @@ agent edits, and MCP edits share one undo history.
   transcription. See [Auto cut](docs/auto-cut.md) for limits.
 - **Preview.** A canvas compositor renders transforms, effects, masks, blend
   modes, fades, keyframes, text, captions, and saved motion compositions.
+- **Audio finishing.** Measure selected audio locally in LUFS/dBTP, review gain
+  and short fades, or duck background under indexed speech with attack/release
+  envelopes. Apply uses ordinary undo. See [Audio finishing](docs/audio-finishing.md).
 - **Analysis.** Local transcription through `whisper.cpp`, scene detection,
   beat detection, and full-text search over transcripts and scene
   descriptions. Vision descriptions are optional and require a provider you
