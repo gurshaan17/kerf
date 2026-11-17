@@ -438,3 +438,44 @@ restart continuity and explicit continuation journeys, these prove the phases
 1–3 workflow slice. Manual editorial baseline measurements remain pending in the
 [baseline workbook](ai-editing-baseline-results.md); fixture passes do not
 establish better editorial judgment.
+
+### Rough-cut proposal playback
+
+Rough-cut reviews offer local sequence playback before Apply. The existing draft
+player supports isolated snapshots through an unhydrated studio store; its
+implementation now lives in `preview/IsolatedPreview.tsx`. It reuses Preview,
+MediaPool and AudioPlayback, including source-frame mapping and synchronized
+source-audio clips. No renderer restructuring, temporary live edits, export,
+provider call or alternate editing representation is required.
+
+The desktop-only `editing.preview` operation validates the stored proposal and
+selected change IDs, enforces its originating scope, builds the ordinary
+rough-cut command, and applies it only to an in-memory sequence. It returns an
+isolated snapshot and identity bound to the project/source fingerprint and
+canonical selected changes. Preview clip/track IDs are ephemeral; Apply builds
+and revalidates its own command, producing the same source ranges, ordering,
+timing and audio independently of preview availability.
+
+Only one proposal preview is active in the review UI. It starts at the appended
+cut and offers playback and a scrubber over the candidate timeline, while source
+evidence playback remains in review. The native dialog pauses live playback,
+labels the result as not applied and prevents editor shortcuts from changing the
+live project. It has no Apply control; approval remains in desktop review.
+
+Preview state stays in memory and creates no rendered-file cache. Its serialized
+snapshot is limited to 8 MiB, its decoder input list to forty project assets,
+and its lifetime to two minutes. This follows the existing bounded local-render
+cache approach, with a single candidate instead of retained frame files. Larger
+projects can still use ordinary reviewed Apply. Closing, expiry, project/source
+revision changes or changed proposal selections unmount the isolated player,
+cancel animation work, and dispose detached audio/video elements. Superseded
+build responses are ignored. Source changes outside app metadata are detected
+by existing proposal eligibility polling and filesystem fingerprint validation.
+No invalidation automatically rebuilds a preview or retries provider work.
+
+Service tests prove no live project/review/undo mutation, selected-range identity,
+matching preview/Apply video and audio order, source/project rejection and
+resource limits. The rough-cut Electron journey auditions real source audio,
+checks direct-close decoder cleanup, selection and source invalidation, expiry,
+keyboard isolation, explicit Apply, replay rejection and exact undo. These are
+workflow and synchronization checks, not an editorial-quality evaluation.
