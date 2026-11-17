@@ -1,3 +1,4 @@
+import { HighlightService } from './analysis/highlight-service';
 import { AudioFinishingService } from './audio/finishing';
 import { RoughCutService } from './analysis/rough-cut-service';
 import { EditingService } from './tools/editing';
@@ -131,8 +132,16 @@ export function createKerfServices(
       providers: analysis.providers,
       database: database.connection,
     });
+    const highlights = new HighlightService({
+      projects,
+      repository,
+      jobs,
+      providers: analysis.providers,
+      database: database.connection,
+    });
     const audio = new AudioFinishingService({ projects });
     const tools = new ToolService({
+      highlights,
       audio,
       editing,
       projects,
@@ -182,6 +191,7 @@ export function createKerfServices(
         tts.dispose();
         agent.dispose();
         audio.dispose();
+        highlights.dispose();
         mcp.dispose();
         renderer.dispose();
         exportService.dispose();

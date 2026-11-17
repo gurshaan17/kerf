@@ -1,3 +1,9 @@
+import type { HighlightService } from '../analysis/highlight-service';
+import type {
+  ClipDiscoveryRequest,
+  HighlightSelection,
+  HighlightOutput,
+} from '@kerf/tools';
 import type { AudioFinishingService } from '../audio/finishing';
 import type {
   AudioFinishPlan,
@@ -92,12 +98,14 @@ export interface ToolExportSource {
 
 export interface ToolExecutionOptions {
   readonly origin?: { conversationId: string; turnId: string };
+  readonly scope?: import('@kerf/tools').EditingScope;
   readonly checkCommand?: (command: EditCommand) => void;
   readonly signal?: AbortSignal;
   readonly checkAccess?: () => void;
 }
 
 export interface ToolServiceOptions {
+  readonly highlights?: HighlightService;
   readonly audio?: AudioFinishingService;
   readonly editing?: EditingService;
   readonly projects: ToolProjectSource;
@@ -158,6 +166,23 @@ export class ToolService {
       receipt: EditReceipt,
     ) => void
   >();
+  private readonly highlightListeners = new Set<
+    (
+      origin: { conversationId: string; turnId: string },
+      result: { projectId: string; jobId: string; outputs: HighlightOutput[] },
+    ) => void
+  >();
+  subscribeHighlightOutputs(
+    listener: (
+      origin: { conversationId: string; turnId: string },
+      result: { projectId: string; jobId: string; outputs: HighlightOutput[] },
+    ) => void,
+  ) {
+    this.highlightListeners.add(listener);
+    return () => {
+      this.highlightListeners.delete(listener);
+    };
+  }
   private queue: Promise<unknown> = Promise.resolve();
   private readonly visualReviews = new VisualReviewService();
   private editor: ToolEditorContext = DEFAULT_EDITOR_CONTEXT;
@@ -231,6 +256,34 @@ export class ToolService {
     return run;
   }
 
+  highlightReviews(conversationId?: string | null) {
+    return this.options.highlights?.reviews(conversationId) ?? [];
+  }
+  highlightStart(input: ClipDiscoveryRequest) {
+    return this.call('startClipDiscovery', input, 'user');
+  }
+  highlightCancel(jobId: string) {
+    return this.options.highlights?.cancel(jobId);
+  }
+  highlightConfirm(input: HighlightSelection) {
+    const run = this.queue.then(() => {
+      if (!this.options.highlights)
+        throw new Error('Highlight discovery is unavailable.');
+      const result = this.options.highlights.confirm(input);
+      if (result.origin)
+        for (const listener of this.highlightListeners)
+          listener(result.origin, result);
+      return result;
+    });
+    this.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+  highlightOutputs(jobId: string) {
+    return this.options.highlights?.outputs(jobId);
+  }
   names(): readonly string[] {
     return toolRegistry.names();
   }
@@ -514,6 +567,26 @@ export class ToolService {
   ): ToolContext {
     const context: ToolContext = {
       actor,
+      highlights: this.options.highlights
+        ? () => ({
+            start: (input) => {
+              const scope = execution?.scope;
+              if (
+                scope?.kind === 'targets' &&
+                !scope.assetIds.includes(input.assetId)
+              )
+                throw new Error(
+                  'Highlight discovery uses the whole source. Include that source in the submitted scope or choose project scope.',
+                );
+              return this.options.highlights!.start(input, execution?.origin);
+            },
+            read: (id) => this.options.highlights!.read(id),
+            request: (input) => this.options.highlights!.request(input),
+            outputs: (id) => this.options.highlights!.outputs(id),
+            verify: (id) => this.options.highlights!.verify(id),
+            cancel: (id) => this.options.highlights!.cancel(id),
+          })
+        : undefined,
       audioFinishing: this.options.audio
         ? () => ({
             measure: (input) =>

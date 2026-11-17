@@ -1,3 +1,5 @@
+import { HIGHLIGHT_TOOLS } from './highlights';
+export * from './highlights';
 import { AUDIO_FINISHING_TOOLS } from './audio';
 export * from './audio';
 import { VISUAL_REVIEW_TOOLS } from './visual-review';
@@ -32,6 +34,7 @@ export * from './types';
 
 export const TOOL_DEFINITIONS = [
   ...READ_TOOLS,
+  ...HIGHLIGHT_TOOLS,
   ...AUDIO_FINISHING_TOOLS,
   ...VISUAL_REVIEW_TOOLS,
   planRoughCutTool,

@@ -35,6 +35,8 @@ export function beginTask(
     references: [],
     omittedReferences: 0,
     omittedDetails: false,
+    highlightJobIds: [],
+    highlightOutputs: [],
     audioPlanIds: [],
     audioMeasurementIds: [],
     commandIds: [],
@@ -163,6 +165,31 @@ export function captureTool(
   }
   if (!output || typeof output !== 'object') return;
   const result = output as Record<string, unknown>;
+  if (
+    ['startClipDiscovery', 'readClipDiscovery', 'cancelClipDiscovery'].includes(
+      name,
+    ) &&
+    result.projectId === snapshot.project.id &&
+    typeof result.id === 'string'
+  ) {
+    task.highlightJobIds = [
+      ...new Set([...task.highlightJobIds, result.id]),
+    ].slice(-20);
+    if (!task.commandIds.length && !task.highlightOutputs.length)
+      task.state =
+        result.cancelled || result.status === 'cancelled'
+          ? 'cancelled'
+          : result.status === 'failed'
+            ? 'failed'
+            : 'pending';
+  }
+  if (
+    ['readClipOutputs', 'readClipDiscovery'].includes(name) &&
+    result.projectId === snapshot.project.id &&
+    Array.isArray(result.outputs)
+  )
+    captureHighlightOutputs(task, result.outputs);
+
   if (
     result.projectId === snapshot.project.id &&
     typeof result.id === 'string'
@@ -301,4 +328,33 @@ export function contextPrompt(context: EditingContext): string {
     if (Buffer.byteLength(serialize(), 'utf8') > 8192) tasks.pop();
   }
   return serialize();
+}
+
+export function captureHighlightOutputs(
+  task: EditingTask,
+  outputs: readonly unknown[],
+) {
+  for (const value of outputs) {
+    if (!value || typeof value !== 'object') continue;
+    const o = value as Record<string, unknown>;
+    if (
+      typeof o.projectId !== 'string' ||
+      typeof o.candidateId !== 'string' ||
+      typeof o.videoClipId !== 'string' ||
+      typeof o.audioClipId !== 'string'
+    )
+      continue;
+    task.omittedDetails ||= task.highlightOutputs.length >= 20;
+    task.highlightOutputs = [
+      ...task.highlightOutputs.filter((p) => p.projectId !== o.projectId),
+      {
+        projectId: o.projectId,
+        candidateId: o.candidateId,
+        videoClipId: o.videoClipId,
+        audioClipId: o.audioClipId,
+      },
+    ].slice(-20);
+    task.state = 'applied';
+    task.verification = 'unverified';
+  }
 }

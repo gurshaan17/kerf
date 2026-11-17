@@ -137,6 +137,7 @@ export const readContextTool = {
       project: {
         id: snapshot.project.id,
         name: snapshot.project.name,
+        highlightOrigin: snapshot.project.highlightOrigin,
         width: sequence.width,
         height: sequence.height,
         frameRate: sequence.frameRate,

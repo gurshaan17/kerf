@@ -925,3 +925,86 @@ it('persists reviewed audio commits to an inactive originating conversation with
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it('retains approved highlight project and clip IDs in the originating inactive chat', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'kerf-highlight-chat-'));
+  const db = openDatabase({ filename: join(root, 'test.db') });
+  try {
+    const repository = new ProjectRepository({
+      database: db.connection,
+      projectsRoot: join(root, 'projects'),
+    });
+    const project = repository.create({ name: 'Highlight source' }).project;
+    const current = { ...snapshot(), project };
+    let receive: Parameters<
+      ToolService['subscribeHighlightOutputs']
+    >[0] = () => {};
+    const tools = {
+      call: vi.fn(async () => ({})),
+      subscribeHighlightOutputs: (listener: typeof receive) => {
+        receive = listener;
+        return () => {};
+      },
+    } as unknown as ToolService;
+    const { done, resolveDone } = waitForTurn();
+    const chatModel = vi.fn(() =>
+      fakeModel([textChunks('Review the proposed highlights.')]),
+    );
+    const service = new AgentService({
+      database: db.connection,
+      projects: { current: () => current },
+      tools,
+      providers: { chatProvider: provider, chatModel },
+      broadcast: (e) => {
+        if (e.type === 'chat.done') resolveDone();
+      },
+    });
+    service.start({ message: 'Find three useful highlights.' });
+    await done;
+    const original = service.conversations()[0]!;
+    service.newConversation();
+    const output = {
+      projectId: newId('project'),
+      candidateId: 'highlight_2',
+      videoClipId: newId('clip'),
+      audioClipId: newId('clip'),
+      assetId: newId('asset'),
+      name: 'Useful thought',
+      startFrame: 24,
+      endFrame: 144,
+      durationFrames: 120,
+      exists: true,
+    };
+    receive(
+      { conversationId: original.id, turnId: original.turns[0]!.id },
+      {
+        projectId: project.id,
+        jobId: 'approved-highlight-job',
+        outputs: [output],
+      },
+    );
+    expect(service.conversations()[0]!.editingContext!.tasks[0]).toMatchObject({
+      state: 'applied',
+      highlightJobIds: ['approved-highlight-job'],
+      highlightOutputs: [
+        {
+          projectId: output.projectId,
+          candidateId: 'highlight_2',
+          videoClipId: output.videoClipId,
+          audioClipId: output.audioClipId,
+        },
+      ],
+      commandIds: [],
+    });
+    service.openConversation(original.id);
+    expect(
+      service.conversations()[0]!.editingContext!.tasks[0]!.highlightOutputs[0]!
+        .projectId,
+    ).toBe(output.projectId);
+    expect(chatModel).toHaveBeenCalledOnce();
+    service.dispose();
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -1,3 +1,4 @@
+import { clipDiscoverySchema, highlightSelectionSchema } from '@kerf/tools';
 import {
   measureAudioSchema,
   planAudioGainSchema,
@@ -231,6 +232,20 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
+  ipcMain.handle(KERF_IPC.highlights.start, (_event, input: unknown) =>
+    options.tools.highlightStart(clipDiscoverySchema.parse(input)),
+  );
+  ipcMain.handle(KERF_IPC.highlights.reviews, (_event, id: unknown) =>
+    options.tools.highlightReviews(
+      z.string().min(1).nullable().optional().parse(id),
+    ),
+  );
+  ipcMain.handle(KERF_IPC.highlights.confirm, (_event, input: unknown) =>
+    options.tools.highlightConfirm(highlightSelectionSchema.parse(input)),
+  );
+  ipcMain.handle(KERF_IPC.highlights.cancel, (_event, id: unknown) =>
+    options.tools.highlightCancel(z.string().min(1).parse(id)),
+  );
   ipcMain.handle(KERF_IPC.audioFinishing.measure, (_event, input: unknown) =>
     options.tools.audioMeasure(measureAudioSchema.parse(input)),
   );
@@ -825,6 +840,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     for (const channel of [
       ...Object.values(KERF_IPC.editing),
       ...Object.values(KERF_IPC.audioFinishing),
+      ...Object.values(KERF_IPC.highlights),
       ...Object.values(KERF_IPC.screenPolish),
       ...Object.values(KERF_IPC.autoCut),
       ...Object.values(KERF_IPC.projects),

@@ -580,6 +580,12 @@ export interface RendererEditorContext {
 export type KerfEvent = ProjectEvent | JobEvent | ExportEvent | ChatEvent;
 
 export const KERF_IPC = {
+  highlights: {
+    start: 'kerf:highlights:start',
+    reviews: 'kerf:highlights:reviews',
+    confirm: 'kerf:highlights:confirm',
+    cancel: 'kerf:highlights:cancel',
+  },
   audioFinishing: {
     measure: 'kerf:audio:measure',
     gain: 'kerf:audio:gain',
@@ -720,6 +726,20 @@ export interface KerfEventEnvelope {
 
 /** The complete surface exposed on `window.kerf`. Keep this allowlist small. */
 export interface KerfBridge {
+  readonly highlights?: {
+    start(
+      input: import('@kerf/tools').ClipDiscoveryRequest,
+    ): Promise<import('@kerf/tools').ClipDiscoveryReview>;
+    reviews(
+      conversationId?: string | null,
+    ): Promise<readonly import('@kerf/tools').ClipDiscoveryReview[]>;
+    confirm(input: import('@kerf/tools').HighlightSelection): Promise<{
+      projectId: string;
+      jobId: string;
+      outputs: import('@kerf/tools').HighlightOutput[];
+    }>;
+    cancel(jobId: string): Promise<import('@kerf/tools').ClipDiscoveryReview>;
+  };
   readonly audioFinishing?: {
     measure(
       input: import('@kerf/tools').MeasureAudioRequest,

@@ -20,6 +20,23 @@ export const projectSchema = z.object({
   name: z.string().min(1),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
+  highlightOrigin: z
+    .object({
+      version: z.literal(1),
+      parentProjectId: idSchema('project'),
+      sourceAssetId: idSchema('asset'),
+      fingerprint: z.string(),
+      sourceIdentity: z.string(),
+      jobId: z.string(),
+      candidateId: z.string(),
+      assetId: idSchema('asset'),
+      videoClipId: idSchema('clip'),
+      audioClipId: idSchema('clip'),
+      startFrame: z.number().int().nonnegative(),
+      endFrame: z.number().int().positive(),
+      durationFrames: z.number().int().positive(),
+    })
+    .optional(),
   sequence: sequenceSchema,
   style: styleConfigSchema.default(DEFAULT_STYLE),
   reference: referenceProfileSchema.nullable().default(null),

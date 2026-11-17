@@ -1,3 +1,5 @@
+import { captureHighlightOutputs } from './task-context';
+import type { EditingTask } from '../../shared/editing-context';
 import { createEditScope, validateChatScope } from '../projects/edit-scope';
 import { chatScopeSchema } from '../../shared/chat-scope';
 import type { ChatScope } from '../../shared/chat-scope';
@@ -367,6 +369,7 @@ export function createAgentToolSet(
  * process and always goes through ToolService.
  */
 export class AgentService {
+  private readonly unsubscribeHighlights?: () => void;
   private readonly unsubscribeReviewedCommit?: () => void;
   private readonly options: AgentServiceOptions;
   private readonly now: () => number;
@@ -380,6 +383,15 @@ export class AgentService {
   constructor(options: AgentServiceOptions) {
     this.options = options;
     this.now = options.now ?? Date.now;
+    this.unsubscribeHighlights = options.tools.subscribeHighlightOutputs?.(
+      (origin, result) =>
+        this.updateOriginContext(origin, result.projectId, (task) => {
+          task.highlightJobIds = [
+            ...new Set([...task.highlightJobIds, result.jobId]),
+          ].slice(-20);
+          captureHighlightOutputs(task, result.outputs);
+        }),
+    );
     this.unsubscribeReviewedCommit = options.tools.subscribeReviewedCommit?.(
       (origin, receipt) => this.rememberReviewedCommit(origin, receipt),
     );
@@ -388,22 +400,32 @@ export class AgentService {
   dispose() {
     this.abort();
     this.unsubscribeReviewedCommit?.();
+    this.unsubscribeHighlights?.();
   }
   private rememberReviewedCommit(
     origin: { conversationId: string; turnId: string },
     receipt: EditReceipt,
   ) {
+    this.updateOriginContext(origin, receipt.projectId, (task, snapshot) =>
+      captureReceipt(task, receipt, snapshot),
+    );
+  }
+  private updateOriginContext(
+    origin: { conversationId: string; turnId: string },
+    projectId: string,
+    update: (task: EditingTask, snapshot: ProjectSnapshot) => void,
+  ) {
     const snapshot = this.options.projects.current();
-    if (!snapshot || snapshot.project.id !== receipt.projectId) return;
+    if (!snapshot || snapshot.project.id !== projectId) return;
     const active =
       this.conversation?.id === origin.conversationId &&
-      this.projectId === receipt.projectId;
+      this.projectId === projectId;
     const row = !active
       ? (this.options.database
           ?.prepare(
             'SELECT payload_json FROM chat_conversations WHERE id = ? AND project_id = ?',
           )
-          .get(origin.conversationId, receipt.projectId) as
+          .get(origin.conversationId, projectId) as
           | { payload_json: string }
           | undefined)
       : undefined;
@@ -417,11 +439,7 @@ export class AgentService {
     const context =
       active && this.taskContext
         ? this.taskContext
-        : loadContext(
-            conversation.editingContext,
-            receipt.projectId,
-            conversation.id,
-          );
+        : loadContext(conversation.editingContext, projectId, conversation.id);
     const task =
       context.tasks.find((t) => t.turnId === turn.id) ??
       beginTask(
@@ -433,7 +451,7 @@ export class AgentService {
         turn.scope,
       );
     task.turnState = turn.status;
-    captureReceipt(task, receipt, snapshot);
+    update(task, snapshot);
     if (active) {
       this.taskContext = context;
       this.persistConversation();
@@ -445,7 +463,7 @@ export class AgentService {
         .run(
           JSON.stringify({ ...conversation, editingContext: context }),
           conversation.id,
-          receipt.projectId,
+          projectId,
         );
   }
 
@@ -818,7 +836,13 @@ export class AgentService {
     this.active.controller.abort();
     for (const jobId of this.active.editingJobs ?? [])
       void this.options.tools
-        .call('cancelEditingJob', { jobId }, 'agent')
+        .call(
+          jobId.startsWith('highlight-job:')
+            ? 'cancelClipDiscovery'
+            : 'cancelEditingJob',
+          { jobId: jobId.replace(/^highlight-job:/, '') },
+          'agent',
+        )
         .catch(() => undefined);
     return true;
   }
@@ -1071,6 +1095,7 @@ export class AgentService {
                     });
                   },
                   {
+                    scope: turn.scope,
                     signal: turn.controller.signal,
                     checkAccess,
                     checkCommand: turn.editScope.checkCommand,
@@ -1087,6 +1112,16 @@ export class AgentService {
                 if (task && current && current.project.id === this.projectId) {
                   captureTool(task, name, input, output, current);
                   this.persistConversation();
+                }
+                if (name === 'startClipDiscovery') {
+                  const id = (output as { id: string }).id;
+                  turn.editingJobs?.add(`highlight-job:${id}`);
+                  if (turn.controller.signal.aborted)
+                    await this.options.tools.call(
+                      'cancelClipDiscovery',
+                      { jobId: id },
+                      'agent',
+                    );
                 }
                 if (
                   name === 'planAutoCut' ||
