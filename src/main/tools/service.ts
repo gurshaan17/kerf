@@ -1,3 +1,12 @@
+import { createHash } from 'node:crypto';
+import { applyCommand } from '@kerf/engine';
+import {
+  proposalPreviewRevision,
+  PROPOSAL_PREVIEW_TTL_MS,
+  PROPOSAL_PREVIEW_MAX_BYTES,
+  PROPOSAL_PREVIEW_MAX_ASSETS,
+} from '../../shared/proposal-preview';
+import type { ProposalPreview } from '../../shared/proposal-preview';
 import { createEditScope } from '../projects/edit-scope';
 import { chatScopeSchema } from '../../shared/chat-scope';
 import { referenceFingerprint } from '../projects/reference-fingerprint';
@@ -220,6 +229,74 @@ export class ToolService {
 
   editingReviews(conversationId?: string | null) {
     return this.options.editing?.reviews(conversationId) ?? [];
+  }
+
+  previewEditing(
+    jobId: string,
+    changeIds: readonly string[],
+  ): Promise<ProposalPreview> {
+    const projectId = this.options.projects.current()?.project.id;
+    const run = this.queue.then(() => {
+      if (!this.options.editing)
+        throw new Error('Editing analysis is unavailable.');
+      const snapshot = this.options.projects.current();
+      if (!snapshot || snapshot.project.id !== projectId)
+        throw new Error(
+          'Project changed before preview. Open the proposal again.',
+        );
+      const { command, proposal } = this.options.editing.preparePreview(
+        jobId,
+        changeIds,
+      );
+      const savedScope = this.options.editing.scope(jobId);
+      if (savedScope)
+        createEditScope(chatScopeSchema.parse(savedScope), snapshot, () =>
+          this.options.projects.current(),
+        ).checkCommand(command);
+      if (snapshot.assets.length > PROPOSAL_PREVIEW_MAX_ASSETS)
+        throw new Error(
+          'Preview supports projects with up to 40 source assets. Apply remains available after review.',
+        );
+      const sequence = applyCommand(
+        snapshot.project.sequence,
+        command,
+      ).sequence;
+      const selected = proposal.changes
+        .filter((c) => changeIds.includes(c.id))
+        .map((c) => c.id);
+      const preview: ProposalPreview = {
+        id: createHash('sha256')
+          .update(
+            JSON.stringify([
+              proposal.projectId,
+              proposal.fingerprint,
+              selected,
+            ]),
+          )
+          .digest('hex'),
+        projectId: proposal.projectId,
+        jobId,
+        changeIds: selected,
+        revisionKey: proposalPreviewRevision(snapshot),
+        expiresAt:
+          (this.options.now?.() ?? Date.now()) + PROPOSAL_PREVIEW_TTL_MS,
+        startFrame: proposal.roughCut?.appendAtFrame ?? 0,
+        snapshot: { ...snapshot, project: { ...snapshot.project, sequence } },
+      };
+      if (
+        Buffer.byteLength(JSON.stringify(preview), 'utf8') >
+        PROPOSAL_PREVIEW_MAX_BYTES
+      )
+        throw new Error(
+          'This proposal exceeds the 8 MiB preview snapshot budget. Apply remains available after review.',
+        );
+      return preview;
+    });
+    this.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   confirmEditing(jobId: string, changeIds: readonly string[]) {

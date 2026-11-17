@@ -355,6 +355,12 @@ export class EditingService implements ToolEditingAccess {
       suggestions: stored.suggestions.filter((s) => changeIds.includes(s.id)),
     });
   }
+  preparePreview(jobId: string, changeIds: readonly string[]) {
+    if (this.job(jobId).kind !== 'analysis.roughCut')
+      throw new Error('Proposal playback currently supports rough cuts only.');
+    const command = this.validate(jobId, changeIds);
+    return { command, proposal: this.proposal(jobId)! };
+  }
   requestApply(
     jobId: string,
     changeIds: readonly string[],

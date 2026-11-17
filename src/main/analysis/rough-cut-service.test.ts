@@ -407,3 +407,83 @@ describe('planned multi-source cuts', () => {
     expect(before.tracks.flatMap((t) => t.clips)).toHaveLength(0);
   });
 });
+
+function mediaOrder(sequence: import('@kerf/model').Sequence) {
+  return sequence.tracks
+    .flatMap((t) => t.clips)
+    .map((c) => ({
+      type: c.type,
+      assetId: 'assetId' in c ? c.assetId : null,
+      start: c.startFrame,
+      duration: c.durationFrames,
+      sourceIn: 'sourceInFrame' in c ? c.sourceInFrame : null,
+      volume: 'volume' in c ? c.volume : null,
+    }));
+}
+it('previews selected rough-cut video and synchronized audio without altering project, review or undo state', async () => {
+  const f = fixture();
+  const plan = await f.plan();
+  const before = f.projects.current()!;
+  const ids = plan.proposal.changes.map((c) => c.id);
+  const preview = await f.tools.previewEditing(plan.id, ids);
+  expect(f.projects.current()).toEqual(before);
+  expect(f.editing.read(plan.id).reviewStatus).toBe('none');
+  expect(preview.expiresAt).toBeGreaterThan(Date.now());
+  expect(preview.changeIds).toEqual(ids);
+  const same = await f.tools.previewEditing(plan.id, [...ids].reverse());
+  expect(same.id).toBe(preview.id);
+  const subset = await f.tools.previewEditing(plan.id, [ids[0]!]);
+  expect(subset.id).not.toBe(preview.id);
+  expect(mediaOrder(subset.snapshot.project.sequence)).toHaveLength(2);
+  await f.tools.confirmEditing(plan.id, ids);
+  expect(mediaOrder(f.projects.current()!.project.sequence)).toEqual(
+    mediaOrder(preview.snapshot.project.sequence),
+  );
+  f.projects.undo();
+  expect(f.projects.current()!.project.sequence).toEqual(
+    before.project.sequence,
+  );
+  await expect(f.tools.previewEditing(plan.id, ids)).rejects.toThrow('already');
+});
+it('rejects forged changes, replaced sources and wrong projects before preview', async () => {
+  const f = fixture();
+  const plan = await f.plan();
+  const ids = plan.proposal.changes.map((c) => c.id);
+  await expect(f.tools.previewEditing(plan.id, ['invented'])).rejects.toThrow(
+    'unique',
+  );
+  await expect(
+    f.tools.previewEditing(plan.id, [ids[0]!, ids[0]!]),
+  ).rejects.toThrow('unique');
+  const before = f.projects.current()!.project.sequence;
+  writeFileSync(f.assets[0]!.sourcePath, 'Replaced source content');
+  await expect(f.tools.previewEditing(plan.id, ids)).rejects.toThrow(
+    'Source media changed',
+  );
+  expect(f.projects.current()!.project.sequence).toEqual(before);
+  f.projects.create({ name: 'Another project' });
+  await expect(f.tools.previewEditing(plan.id, ids)).rejects.toThrow(
+    'open project',
+  );
+});
+it('bounds preview decoder inputs without preventing ordinary reviewed Apply', async () => {
+  const f = fixture();
+  for (let i = 0; i < 39; i++)
+    f.repository.saveAsset({
+      ...f.assets[0]!,
+      id: newId('asset'),
+      name: `Extra ${i}`,
+    });
+  f.projects.refresh('assets');
+  const plan = await f.plan();
+  const ids = plan.proposal.changes.map((c) => c.id);
+  await expect(f.tools.previewEditing(plan.id, ids)).rejects.toThrow(
+    '40 source assets',
+  );
+  expect(
+    f.projects.current()!.project.sequence.tracks.flatMap((t) => t.clips),
+  ).toHaveLength(0);
+  await expect(f.tools.confirmEditing(plan.id, ids)).resolves.toMatchObject({
+    receipt: { undoable: true },
+  });
+});

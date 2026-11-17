@@ -248,6 +248,16 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       z.string().min(1).nullable().optional().parse(conversationId),
     ),
   );
+  ipcMain.handle(KERF_IPC.editing.preview, (_event, request: unknown) => {
+    const parsed = z
+      .object({
+        jobId: idSchema('job'),
+        changeIds: z.array(z.string().min(1)).min(1).max(40),
+      })
+      .strict()
+      .parse(request);
+    return options.tools.previewEditing(parsed.jobId, parsed.changeIds);
+  });
   ipcMain.handle(KERF_IPC.editing.confirm, (_event, request: unknown) => {
     const parsed = z
       .object({

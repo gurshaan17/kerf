@@ -581,6 +581,7 @@ export type KerfEvent = ProjectEvent | JobEvent | ExportEvent | ChatEvent;
 
 export const KERF_IPC = {
   editing: {
+    preview: 'kerf:editing:preview',
     reviews: 'kerf:editing:reviews',
     confirm: 'kerf:editing:confirm',
     cancel: 'kerf:editing:cancel',
@@ -712,6 +713,10 @@ export interface KerfEventEnvelope {
 /** The complete surface exposed on `window.kerf`. Keep this allowlist small. */
 export interface KerfBridge {
   readonly editing?: {
+    preview(request: {
+      jobId: string;
+      changeIds: readonly string[];
+    }): Promise<import('./proposal-preview').ProposalPreview>;
     finish(request: {
       jobId: string;
       stage: 'captions' | 'duck' | 'verify';

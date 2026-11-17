@@ -1,3 +1,4 @@
+import { ProposalPreviewDialog } from './ProposalPreviewDialog';
 import { useEffect, useRef, useState } from 'react';
 import { fpsToNumber } from '@kerf/model';
 import { assetMediaUrl } from '@kerf/canvas';
@@ -61,6 +62,12 @@ export function EditingReviews({
   error: string;
   reviewJobId?: string | null;
 }) {
+  const [previewJobId, setPreviewJobId] = useState<string | null>(null);
+  const previewProject = useStudio((s) => s.snapshot?.project.id);
+  const previewConversation = useStudio((s) => s.chatConversationId);
+  useEffect(() => {
+    setPreviewJobId(null);
+  }, [previewProject, previewConversation]);
   if (!reviews.length && !error) return null;
   return (
     <div
@@ -79,11 +86,15 @@ export function EditingReviews({
             key={`${review.job.projectId}-${review.job.id}`}
             review={review}
             reveal={reviewJobId === review.job.id}
+            previewJobId={previewJobId}
+            onPreview={setPreviewJobId}
           />
         ) : (
           <Review
             key={`${review.job.projectId}-${review.job.id}`}
             review={review}
+            previewJobId={previewJobId}
+            onPreview={setPreviewJobId}
           />
         ),
       )}
@@ -94,9 +105,13 @@ export function EditingReviews({
 function ChatJob({
   review,
   reveal,
+  previewJobId,
+  onPreview,
 }: {
   review: EditingReview;
   reveal?: boolean;
+  previewJobId: string | null;
+  onPreview: (id: string | null) => void;
 }) {
   const send = useStudio((s) => s.sendChat);
   const activeTurn = useStudio((s) => s.chatActiveTurnId);
@@ -216,12 +231,26 @@ function ChatJob({
       {!provider?.chatConsent && (
         <p>Enable a chat provider in AI settings to continue.</p>
       )}
-      {expanded && <Review review={review} />}
+      {expanded && (
+        <Review
+          review={review}
+          previewJobId={previewJobId}
+          onPreview={onPreview}
+        />
+      )}
     </div>
   );
 }
 
-function Review({ review }: { review: EditingReview }) {
+function Review({
+  review,
+  previewJobId,
+  onPreview,
+}: {
+  review: EditingReview;
+  previewJobId: string | null;
+  onPreview: (id: string | null) => void;
+}) {
   const snapshot = useStudio((s) => s.snapshot);
   const seek = useStudio((s) => s.setPlayhead);
   const video = useRef<HTMLVideoElement>(null);
@@ -396,6 +425,28 @@ function Review({ review }: { review: EditingReview }) {
       )}
       {(cancelled || review.job.reviewStatus === 'cancelled') && (
         <p>Cancelled. No further changes will apply.</p>
+      )}
+      {!terminal && proposal?.kind === 'roughCut' && (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={
+            busy || !selected.length || review.eligibility?.eligible === false
+          }
+          onClick={() => {
+            video.current?.pause();
+            onPreview(review.job.id);
+          }}
+        >
+          Preview selected cut
+        </Button>
+      )}
+      {previewJobId === review.job.id && (
+        <ProposalPreviewDialog
+          review={review}
+          changeIds={selected}
+          onClose={() => onPreview(null)}
+        />
       )}
       {!terminal && proposal && (
         <>

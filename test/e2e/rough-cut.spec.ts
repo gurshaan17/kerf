@@ -1,3 +1,4 @@
+import { copyFileSync, utimesSync } from 'node:fs';
 import { createTranscript, newId } from '../../packages/model/src/index';
 import { expect, test } from '@playwright/test';
 import { join } from 'node:path';
@@ -11,8 +12,12 @@ import {
 } from './helpers';
 
 test('reviews a multi-source rough cut, captions and verifies it, then undoes each stage', async () => {
-  const sources = [ensureCaptionFixture(), ensureScenesFixture()];
   const kerf = await launchKerf({ whisper: false });
+  const sources = [
+    join(kerf.workspace, 'preview-speech.mp4'),
+    ensureScenesFixture(),
+  ];
+  copyFileSync(ensureCaptionFixture(), sources[0]!);
   const { page } = kerf;
   try {
     await page.getByPlaceholder('New project').fill('Planned first cut');
@@ -121,6 +126,121 @@ test('reviews a multi-source rough cut, captions and verifies it, then undoes ea
     await page.screenshot({
       path: join(cacheRoot, 'phase3-rough-cut-review.png'),
     });
+    const beforePreview = await page.evaluate(async () => {
+      const snapshot = (await window.kerf.projects.active())!;
+      return { project: snapshot.project, history: snapshot.history };
+    });
+    await page.evaluate(() => {
+      const original = HTMLMediaElement.prototype.play;
+      const media: HTMLMediaElement[] = [];
+      (globalThis as { __proposalMedia?: HTMLMediaElement[] }).__proposalMedia =
+        media;
+      HTMLMediaElement.prototype.play = function () {
+        if (!media.includes(this)) media.push(this);
+        return original.call(this);
+      };
+    });
+    await reviews
+      .getByRole('button', { name: 'Preview selected cut', exact: true })
+      .click();
+    const audition = page.getByRole('dialog', {
+      name: 'Rough-cut proposal preview',
+      exact: true,
+    });
+    await expect(audition.getByLabel('Proposal playback')).toBeVisible();
+    await expect(audition.getByLabel('Proposal position')).toHaveAttribute(
+      'max',
+      '95',
+    );
+    await audition
+      .getByLabel('Proposal position')
+      .evaluate((input: HTMLInputElement) => {
+        Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          'value',
+        )!.set!.call(input, '60');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    await expect(audition.locator('canvas')).toHaveAttribute(
+      'aria-label',
+      'Frame 60',
+    );
+    await audition.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          (
+            (globalThis as { __proposalMedia?: HTMLMediaElement[] })
+              .__proposalMedia ?? []
+          ).some(
+            (m) =>
+              m.tagName === 'AUDIO' &&
+              !m.paused &&
+              m.volume > 0 &&
+              m.currentTime >= 0.5,
+          ),
+        ),
+      )
+      .toBe(true);
+    await page.screenshot({
+      path: join(cacheRoot, 'phase4-proposal-playback.png'),
+    });
+    expect(
+      await page.evaluate(async () => {
+        const snapshot = (await window.kerf.projects.active())!;
+        return { project: snapshot.project, history: snapshot.history };
+      }),
+    ).toEqual(beforePreview);
+    await audition
+      .getByRole('button', { name: 'Close preview', exact: true })
+      .click();
+    await expect(audition).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          (
+            (globalThis as { __proposalMedia?: HTMLMediaElement[] })
+              .__proposalMedia ?? []
+          ).every((m) => m.paused && !m.getAttribute('src')),
+        ),
+      )
+      .toBe(true);
+    await reviews
+      .getByRole('button', { name: 'Preview selected cut', exact: true })
+      .click();
+    await expect(audition.getByLabel('Proposal playback')).toBeVisible();
+    // A changed review selection invalidates the candidate, even without a timeline edit.
+    await kerf.app.evaluate(
+      async (_, input) => {
+        await (
+          globalThis as { __kerfServices?: KerfServices }
+        ).__kerfServices!.tools.call(
+          'applyEditProposal',
+          { jobId: input.jobId, changeIds: [input.id] },
+          'mcp',
+        );
+      },
+      { jobId: plan.id, id: plan.proposal.changes[0]!.id },
+    );
+    await expect(audition.getByRole('alert')).toContainText(
+      'selection, project or source changed',
+    );
+    await expect(audition.getByLabel('Proposal playback')).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          (
+            (globalThis as { __proposalMedia?: HTMLMediaElement[] })
+              .__proposalMedia ?? []
+          ).every((m) => m.paused && !m.getAttribute('src')),
+        ),
+      )
+      .toBe(true);
+    await audition
+      .getByRole('button', { name: 'Close preview', exact: true })
+      .click();
+    await boxes.nth(1).check();
     await reviews
       .getByRole('button', { name: 'Apply 2 reviewed changes', exact: true })
       .click();
@@ -184,6 +304,82 @@ test('reviews a multi-source rough cut, captions and verifies it, then undoes ea
         { jobId: plan.id, ids: plan.proposal.changes.map((c) => c.id) },
       ),
     ).rejects.toThrow('already');
+    const fresh = await kerf.app.evaluate(
+      async (_, input) =>
+        (
+          globalThis as { __kerfServices?: KerfServices }
+        ).__kerfServices!.tools.call(
+          'planRoughCut',
+          {
+            assetIds: input.assets,
+            intent: 'Demonstration',
+            selections: input.ids.map((evidenceId) => ({
+              evidenceId,
+              reason: 'Preview this complete step',
+            })),
+          },
+          'mcp',
+        ) as Promise<EditingJob>,
+      {
+        assets: assets.map((a) => a.id),
+        ids: [...transcripts].reverse().map((t) => t.segments[0]!.id),
+      },
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          async (id) =>
+            (await window.kerf.jobs.list()).find((j) => j.id === id)?.status,
+          fresh.id,
+        ),
+      )
+      .toBe('succeeded');
+    await reviews
+      .getByRole('button', { name: 'Preview selected cut', exact: true })
+      .click();
+    await expect(audition.getByLabel('Proposal playback')).toBeVisible();
+    await audition
+      .getByRole('button', { name: 'Close preview', exact: true })
+      .click();
+    await page.clock.install({ time: new Date() });
+    await reviews
+      .getByRole('button', { name: 'Preview selected cut', exact: true })
+      .click();
+    await expect(audition.getByLabel('Proposal playback')).toBeVisible();
+    await page.clock.fastForward(120_001);
+    await expect(audition.getByRole('alert')).toContainText('preview expired');
+    await expect(audition.getByLabel('Proposal playback')).toHaveCount(0);
+    await audition
+      .getByRole('button', { name: 'Close preview', exact: true })
+      .click();
+    await page.clock.setSystemTime(new Date());
+    await reviews
+      .getByRole('button', { name: 'Preview selected cut', exact: true })
+      .click();
+    await expect(audition.getByLabel('Proposal playback')).toBeVisible();
+    const unchanged = await page.evaluate(
+      async () => (await window.kerf.projects.active())!.project,
+    );
+    await audition.getByRole('button', { name: 'Play', exact: true }).focus();
+    await page.keyboard.press('Meta+Shift+z');
+    expect(
+      await page.evaluate(
+        async () => (await window.kerf.projects.active())!.project,
+      ),
+    ).toEqual(unchanged);
+    utimesSync(sources[0]!, new Date(), new Date(Date.now() + 5000));
+    await expect(audition.getByRole('alert')).toContainText(
+      'selection, project or source changed',
+    );
+    await expect(audition.getByLabel('Proposal playback')).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        async () => (await window.kerf.projects.active())!.project,
+      ),
+    ).toEqual(unchanged);
+    await audition
+      .getByRole('button', { name: 'Close preview', exact: true })
+      .click();
   } finally {
     await kerf.close();
   }
