@@ -8,6 +8,7 @@ import { ScopeControls } from './ScopeControls';
 import { chatStarters } from './starters';
 import { useChatScroll } from './use-chat-scroll';
 import type { ChatScope } from '../../shared/chat-scope';
+import { isChatAdviceRequest } from '../../shared/chat-advice';
 import { formatTimecode } from '@kerf/model';
 import { useEffect, useRef, useState } from 'react';
 import { ChatMarkdown } from './ChatMarkdown';
@@ -169,6 +170,31 @@ function ToolCard({ tool }: { readonly tool: ChatToolActivity }) {
           </div>
         ) : null}
       </div>
+    </details>
+  );
+}
+
+function TurnTools({
+  tools,
+  advice,
+}: {
+  readonly tools: readonly ChatToolActivity[];
+  readonly advice: boolean;
+}) {
+  if (tools.length === 0) return null;
+  const cards = (
+    <div className="grid gap-1">
+      {tools.map((tool) => (
+        <ToolCard key={tool.id} tool={tool} />
+      ))}
+    </div>
+  );
+  if (!advice || tools.some((tool) => tool.receipt)) return cards;
+
+  return (
+    <details className="grid gap-1 text-[10px] text-ink-muted">
+      <summary className="cursor-pointer py-1">Technical details</summary>
+      {cards}
     </details>
   );
 }
@@ -464,13 +490,9 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
                     )}
                   </div>
 
-                  {turn.tools.length > 0 ? (
-                    <div className="grid gap-1">
-                      {turn.tools.map((tool) => (
-                        <ToolCard key={tool.id} tool={tool} />
-                      ))}
-                    </div>
-                  ) : null}
+                  {!isChatAdviceRequest(turn.message) && (
+                    <TurnTools tools={turn.tools} advice={false} />
+                  )}
 
                   {turn.text ? (
                     <div className="flex items-start gap-2">
@@ -486,9 +508,15 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
                   ) : turn.status === 'streaming' ? (
                     <p className="flex items-center gap-1.5 pl-5 text-[10px] text-ink-faint">
                       <Loader2 size={11} className="animate-spin" />
-                      Working through the timeline…
+                      {isChatAdviceRequest(turn.message)
+                        ? 'Reviewing your video…'
+                        : 'Working through the timeline…'}
                     </p>
                   ) : null}
+
+                  {isChatAdviceRequest(turn.message) && (
+                    <TurnTools tools={turn.tools} advice />
+                  )}
 
                   {turn.status === 'aborted' ? (
                     <p className="pl-5 text-[10px] text-ink-faint">Stopped.</p>
