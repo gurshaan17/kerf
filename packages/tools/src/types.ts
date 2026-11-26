@@ -284,6 +284,10 @@ export interface EditingReview {
   readonly receipt?: EditReceipt;
 }
 export interface ToolEditingAccess {
+  suggestZoom?(
+    input: import('./editing').SuggestedZoom,
+    checkCommand?: (command: EditCommand) => void,
+  ): EditingJob;
   planRoughCut?(
     input: import('./rough-cut').RoughCutPlanRequest,
   ): EditingJob & { proposal: EditingProposal };

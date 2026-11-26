@@ -30,6 +30,7 @@ import type { ChatEditVerification } from '../../shared/contracts';
 import { roughCutEvidence } from '@kerf/tools';
 import type { EditingService } from './editing';
 import { sequenceDurationFrames } from '@kerf/engine';
+import { secondsToFrames } from '@kerf/model';
 import type { EditReceipt } from '@kerf/tools';
 import type {
   Actor,
@@ -395,9 +396,10 @@ export class ToolService {
         snapshot.project.sequence,
         command,
       ).sequence;
-      const selected = proposal.changes
-        .filter((c) => changeIds.includes(c.id))
-        .map((c) => c.id);
+      const selectedChanges = proposal.changes.filter((c) =>
+        changeIds.includes(c.id),
+      );
+      const selected = selectedChanges.map((c) => c.id);
       const preview: ProposalPreview = {
         id: createHash('sha256')
           .update(
@@ -414,7 +416,13 @@ export class ToolService {
         revisionKey: proposalPreviewRevision(snapshot),
         expiresAt:
           (this.options.now?.() ?? Date.now()) + PROPOSAL_PREVIEW_TTL_MS,
-        startFrame: proposal.roughCut?.appendAtFrame ?? 0,
+        startFrame:
+          proposal.roughCut?.appendAtFrame ??
+          Math.max(
+            0,
+            (selectedChanges[0]?.startFrame ?? 0) -
+              secondsToFrames(0.5, sequence.frameRate),
+          ),
         snapshot: { ...snapshot, project: { ...snapshot.project, sequence } },
       };
       if (
@@ -610,6 +618,12 @@ export class ToolService {
       checkAccess: execution?.checkAccess,
       checkCommand: execution?.checkCommand,
       visualReview: () => ({
+        checkZoomEvidence: (input) =>
+          this.visualReviews.checkZoomEvidence(
+            context,
+            input,
+            execution?.scope,
+          ),
         render: (input) => this.visualReviews.render(context, input),
         repair: (input) => this.visualReviews.repair(context, input),
       }),

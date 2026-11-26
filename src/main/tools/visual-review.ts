@@ -4,6 +4,8 @@ import { applyCommand, findClip, timelineDurationFrames } from '@kerf/engine';
 import type { ClipPatch, EditCommand } from '@kerf/model';
 import { VISUAL_REVIEW_LIMITS as LIMITS, verifyTimeline } from '@kerf/tools';
 import type {
+  EditingScope,
+  SuggestedZoom,
   StoryboardInput,
   StoryboardResult,
   ToolContext,
@@ -12,6 +14,7 @@ import type {
   VisualRepairInput,
   VisualRepairResult,
 } from '@kerf/tools';
+import { storyboardImages } from './storyboard-images';
 
 type Review = {
   id: string;
@@ -132,6 +135,33 @@ export class VisualReviewService {
       );
     }
     return { review, current };
+  }
+  checkZoomEvidence(
+    context: ToolContext,
+    input: SuggestedZoom,
+    editScope?: EditingScope,
+  ) {
+    const { review, current } = this.existing(context, input.storyboardId);
+    const clip = findClip(current.project.sequence, input.clipId)?.clip;
+    if (
+      review.status !== 'ready' ||
+      !review.frames.some(
+        (frame) =>
+          frame.frame === input.frame && frame.clipIds.includes(input.clipId),
+      ) ||
+      !storyboardImages(review).some((image) => image.frame === input.frame)
+    )
+      throw new Error(
+        'Choose a video clip visible in an inspected storyboard frame.',
+      );
+    if (
+      editScope?.kind === 'targets' &&
+      !editScope.clipIds.includes(input.clipId) &&
+      !(clip?.type === 'video' && editScope.assetIds.includes(clip.assetId))
+    )
+      throw new Error(
+        'The suggested zoom must target a video in the submitted edit scope.',
+      );
   }
   async render(
     context: ToolContext,

@@ -10,16 +10,20 @@ export function ProposalPreviewDialog({
   review,
   changeIds,
   onClose,
+  onDecision,
 }: {
   review: EditingReview;
   changeIds: readonly string[];
   onClose: () => void;
+  onDecision?: (decision: 'apply' | 'dismiss') => Promise<void>;
 }) {
   const snapshot = useStudio((s) => s.snapshot);
   const trees = useStudio((s) => s.compositionTrees);
   const stopLivePlayback = useStudio((s) => s.setPlaying);
   const [candidate, setCandidate] = useState<ProposalPreview | null>(null);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const decisionLock = useRef(false);
   const revision = snapshot ? proposalPreviewRevision(snapshot) : '';
   const key = JSON.stringify([
     review.job.projectId,
@@ -32,6 +36,27 @@ export function ProposalPreviewDialog({
   ]);
   const initialKey = useRef(key);
   const valid = key === initialKey.current && review.eligibility?.eligible;
+  const ready = candidate && valid && candidate.expiresAt > Date.now();
+  const decide = async (decision: 'apply' | 'dismiss') => {
+    if (
+      !onDecision ||
+      decisionLock.current ||
+      (decision === 'apply' && (!ready || candidate.expiresAt <= Date.now()))
+    )
+      return;
+    decisionLock.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      await onDecision(decision);
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+      decisionLock.current = false;
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -89,20 +114,46 @@ export function ProposalPreviewDialog({
     <div onKeyDown={(event) => event.stopPropagation()}>
       <Dialog
         open
-        title="Rough-cut proposal preview"
-        description="Audition the selected cut before applying it."
+        title={onDecision ? 'Preview zoom' : 'Rough-cut proposal preview'}
+        description={
+          onDecision
+            ? 'Compare the same moment with and without the zoom.'
+            : 'Audition the selected cut before applying it.'
+        }
         size="workspace"
         onOpenChange={(open) => {
-          if (!open) onClose();
+          if (!open && !decisionLock.current) onClose();
         }}
-        footer={<Button onClick={onClose}>Close preview</Button>}
+        footer={
+          onDecision ? (
+            <>
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void decide('dismiss')}
+              >
+                Dismiss
+              </Button>
+              <Button
+                disabled={busy || !ready}
+                onClick={() => void decide('apply')}
+              >
+                Apply zoom
+              </Button>
+            </>
+          ) : (
+            <Button onClick={onClose}>Close preview</Button>
+          )
+        }
       >
-        <p className="mb-3 text-[12px] text-ink-muted">
-          Proposal · {changeIds.length} selected{' '}
-          {changeIds.length === 1 ? 'range' : 'ranges'} · Not applied. Starts at
-          the proposed cut; earlier timeline content is available with the
-          scrubber.
-        </p>
+        {!onDecision && (
+          <p className="mb-3 text-[12px] text-ink-muted">
+            Proposal · {changeIds.length} selected{' '}
+            {changeIds.length === 1 ? 'range' : 'ranges'} · Not applied. Starts
+            at the proposed cut; earlier timeline content is available with the
+            scrubber.
+          </p>
+        )}
         {error && (
           <p role="alert" className="text-[12px] text-danger">
             {error}
@@ -113,7 +164,7 @@ export function ProposalPreviewDialog({
             Preparing local preview…
           </p>
         )}
-        {candidate && valid && candidate.expiresAt > Date.now() && (
+        {candidate && ready && (
           <div
             className="h-[55vh] min-h-[240px]"
             aria-label="Proposal playback"
@@ -123,6 +174,9 @@ export function ProposalPreviewDialog({
               sequence={candidate.snapshot.project.sequence}
               frame={candidate.startFrame}
               compositionTrees={trees}
+              originalSequence={
+                onDecision ? snapshot?.project.sequence : undefined
+              }
             />
           </div>
         )}

@@ -2,6 +2,7 @@ import { HighlightsPanel } from './HighlightsPanel';
 import { AudioFinishingPanel } from './AudioFinishingPanel';
 import { VisualReviewCard } from './VisualReviewCard';
 import { EditingReviews, useEditingReviews } from './EditingReviews';
+import { SuggestedZoom } from './SuggestedZoom';
 import { chatDraftKey, EMPTY_CHAT_DRAFT } from './drafts';
 import { composerScope, scopeError, scopeLabel } from './scope';
 import { ScopeControls } from './ScopeControls';
@@ -448,7 +449,9 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
           <HighlightsPanel />
           <AudioFinishingPanel />
           <EditingReviews
-            reviews={reviews}
+            reviews={reviews.filter(
+              (review) => review.origin?.toolName !== 'suggestZoom',
+            )}
             error={reviewError}
             reviewJobId={reviewJobId}
           />
@@ -513,6 +516,17 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
                         : 'Working through the timeline…'}
                     </p>
                   ) : null}
+
+                  {turn.status === 'done' &&
+                    reviews
+                      .filter(
+                        (review) =>
+                          review.origin?.toolName === 'suggestZoom' &&
+                          review.origin.turnId === turn.id,
+                      )
+                      .map((review) => (
+                        <SuggestedZoom key={review.job.id} review={review} />
+                      ))}
 
                   {isChatAdviceRequest(turn.message) && (
                     <TurnTools tools={turn.tools} advice />

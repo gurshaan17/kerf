@@ -7,12 +7,39 @@ const planInput = z.object({
   clipId: idSchema('clip'),
   providerId: z.string().min(1),
 });
+export const suggestedZoomSchema = planInput
+  .extend({
+    storyboardId: z.string().min(1),
+    frame: z.number().int().nonnegative(),
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    reason: z.string().trim().min(1).max(300),
+  })
+  .strict();
+export type SuggestedZoom = z.infer<typeof suggestedZoomSchema>;
 function access(context: ToolContext): ToolEditingAccess {
   if (!context.editing)
     throw new Error('AI editing analysis is unavailable in this session.');
   return context.editing();
 }
 export const EDITING_TOOLS = [
+  {
+    name: 'suggestZoom',
+    description:
+      'Prepare one gentle zoom at an inspected storyboard frame. Coordinates are normalized to the composited canvas. Creates a previewable suggestion only. The timeline changes only when the user applies it in Kerf.',
+    input: suggestedZoomSchema,
+    readOnly: false,
+    execute: (context: ToolContext, input: SuggestedZoom) => {
+      const editing = access(context);
+      if (!editing.suggestZoom)
+        throw new Error('Zoom suggestions are unavailable.');
+      const visualReview = context.visualReview?.();
+      if (!visualReview?.checkZoomEvidence)
+        throw new Error('Visual evidence is unavailable.');
+      visualReview.checkZoomEvidence(input);
+      return editing.suggestZoom(input, context.checkCommand);
+    },
+  },
   {
     name: 'planAutoCut',
     description:
