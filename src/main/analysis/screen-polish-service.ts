@@ -4,10 +4,13 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { findClip, screenPolishCommand } from '@kerf/engine';
 import { DEFAULT_TRANSFORM, newId, secondsToFrames } from '@kerf/model';
+import type { EditCommand } from '@kerf/model';
+import type { SuggestedZoom } from '@kerf/tools';
 import {
   polishGenerateSchema,
   polishApplySchema,
   polishProposalSchema,
+  polishSuggestionSchema,
   type PolishProposal,
 } from '../../shared/screen-polish';
 import type { JobContext, JobQueue } from '../jobs';
@@ -22,6 +25,7 @@ const payloadSchema = polishGenerateSchema.extend({
   projectId: z.string(),
   fingerprint: z.string(),
   providerRevision: z.string(),
+  suggestedZoom: polishSuggestionSchema.optional(),
 });
 export interface ScreenPolishServiceOptions {
   projects: ProjectService;
@@ -114,7 +118,44 @@ export class ScreenPolishService {
   }
   generate(request: unknown) {
     const parsed = polishGenerateSchema.parse(request);
-    const current = this.current(parsed.clipId);
+    return this.enqueue(parsed, this.current(parsed.clipId));
+  }
+  suggestZoom(
+    input: SuggestedZoom,
+    checkCommand?: (command: EditCommand) => void,
+  ) {
+    const current = this.current(input.clipId);
+    const suggestion = polishSuggestionSchema.parse({
+      id: newId('effect'),
+      clipId: input.clipId,
+      startFrame: input.frame,
+      durationFrames: Math.min(
+        secondsToFrames(2, current.sequence.frameRate),
+        current.clip.startFrame + current.clip.durationFrames - input.frame,
+      ),
+      x: input.x,
+      y: input.y,
+      zoom: 1.2,
+      kind: 'zoom',
+      text: '',
+      reason: input.reason,
+      evidenceFrames: [
+        input.frame - current.clip.startFrame + current.clip.sourceInFrame,
+      ],
+    });
+    const command = screenPolishCommand(current.sequence, [suggestion]);
+    checkCommand?.(command);
+    return this.enqueue(
+      { clipId: input.clipId, providerId: input.providerId },
+      current,
+      suggestion,
+    );
+  }
+  private enqueue(
+    parsed: z.infer<typeof polishGenerateSchema>,
+    current: ReturnType<ScreenPolishService['current']>,
+    suggestedZoom?: z.infer<typeof polishSuggestionSchema>,
+  ) {
     const providerRevision = this.providerRevision(parsed.providerId);
     if (
       this.options.jobs
@@ -134,6 +175,7 @@ export class ScreenPolishService {
         projectId: current.snapshot.project.id,
         fingerprint: current.fingerprint,
         providerRevision,
+        suggestedZoom,
       },
     });
   }
@@ -205,6 +247,19 @@ export class ScreenPolishService {
       };
       check();
       const { snapshot, sequence, clip, asset } = this.current(payload.clipId);
+      if (payload.suggestedZoom) {
+        context.update(1, 'Zoom ready to preview');
+        return polishProposalSchema.parse({
+          projectId: snapshot.project.id,
+          clipId: clip.id,
+          assetId: asset.id,
+          fingerprint: payload.fingerprint,
+          providerId: payload.providerId,
+          providerRevision: payload.providerRevision,
+          sampleCount: 1,
+          suggestions: [payload.suggestedZoom],
+        });
+      }
       const result = await analyseScreenPolish({
         path: asset.sourcePath,
         ffmpeg: this.options.ffmpeg ?? findExecutable('ffmpeg'),

@@ -173,6 +173,43 @@ function waitForTurn() {
 }
 
 describe('AgentService', () => {
+  it.each([
+    ['How can I improve this video?', false],
+    ['Highlight the answer at 0:15.', true],
+  ])('offers the right tools for %s', async (message, canEdit) => {
+    const { events, done, resolveDone } = waitForTurn();
+    const call = vi.fn<ToolService['call']>(async () => ({}));
+    const observe = vi.fn<(input: unknown) => void>();
+    const current = snapshot();
+    const service = new AgentService({
+      projects: { current: () => current },
+      providers: {
+        chatProvider: provider,
+        chatModel: () => fakeModel([toolChunks(), textChunks('Done')], observe),
+      },
+      tools: { call } as unknown as ToolService,
+      broadcast: (event) => {
+        events.push(event);
+        if (event.type === 'chat.done' || event.type === 'chat.error')
+          resolveDone();
+      },
+    });
+
+    service.start({ message });
+    await done;
+
+    const request = observe.mock.calls[0]?.[0] as {
+      tools: { name: string }[];
+    };
+    const names = request.tools.map((definition) => definition.name);
+    expect(names).toContain('readTimeline');
+    expect(names).toContain('measureAudio');
+    expect(names.includes('editClip')).toBe(canEdit);
+    expect(names.includes('repairVisuals')).toBe(canEdit);
+    expect(call.mock.calls.map(([name]) => name)).toEqual(['readTimeline']);
+    expect(events.at(-1)?.type).toBe('chat.done');
+  });
+
   it('saves streamed turns and tool activity in the project database', async () => {
     const root = mkdtempSync(join(tmpdir(), 'kerf-chat-write-'));
     const database = openDatabase({ filename: join(root, 'test.db') });

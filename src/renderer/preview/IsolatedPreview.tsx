@@ -10,6 +10,7 @@ import type { StudioStore } from '../state/studio';
 import { sequenceDurationFrames } from '@kerf/engine';
 import { Preview } from './Preview';
 import type { SceneTree } from '@kerf/motion';
+import { Button } from '@kerf/ui';
 
 const EMPTY_TREES: Readonly<Record<string, SceneTree>> = {};
 
@@ -19,13 +20,16 @@ export function IsolatedPreview({
   sequence,
   frame = 0,
   compositionTrees = EMPTY_TREES,
+  originalSequence,
 }: {
   snapshot: ProjectSnapshot;
   sequence: Sequence;
   frame?: number;
   compositionTrees?: Readonly<Record<string, SceneTree>>;
+  originalSequence?: Sequence;
 }) {
   const [store] = useState(() => createStudioStore(window.kerf));
+  const [original, setOriginal] = useState(false);
   useEffect(() => {
     store.setState({
       snapshot: { ...snapshot, project: { ...snapshot.project, sequence } },
@@ -43,6 +47,42 @@ export function IsolatedPreview({
   return (
     <StudioStoreProvider store={store}>
       <div className="flex h-full min-h-0 flex-col [&_.k-stage]:min-h-0 [&_.k-stage]:flex-1">
+        {originalSequence && (
+          <div
+            className="mb-2 flex gap-2"
+            role="group"
+            aria-label="Compare zoom"
+          >
+            {(
+              [
+                ['Original', true],
+                ['With zoom', false],
+              ] as const
+            ).map(([label, showOriginal]) => (
+              <Button
+                key={label}
+                size="sm"
+                variant={original === showOriginal ? 'primary' : 'secondary'}
+                aria-pressed={original === showOriginal}
+                onClick={() => {
+                  store.getState().setPlaying(false);
+                  store.setState({
+                    snapshot: {
+                      ...snapshot,
+                      project: {
+                        ...snapshot.project,
+                        sequence: showOriginal ? originalSequence : sequence,
+                      },
+                    },
+                  });
+                  setOriginal(showOriginal);
+                }}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        )}
         <Preview initialSafeZones={false} />
         <IsolatedScrubber
           store={store}

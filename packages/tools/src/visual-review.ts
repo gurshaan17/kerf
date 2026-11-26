@@ -170,6 +170,7 @@ export interface VisualRepairResult {
   readonly note: string;
 }
 export interface ToolVisualReviewAccess {
+  checkZoomEvidence?(input: import('./editing').SuggestedZoom): void;
   render(input: StoryboardInput): Promise<StoryboardResult>;
   repair(input: VisualRepairInput): VisualRepairResult;
 }

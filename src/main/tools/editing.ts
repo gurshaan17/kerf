@@ -9,6 +9,7 @@ import type {
   EditingReview,
   ToolContext,
   ToolEditingAccess,
+  SuggestedZoom,
 } from '@kerf/tools';
 import type { JobQueue } from '../jobs';
 import type { AutoCutService } from '../analysis/auto-cut-service';
@@ -20,7 +21,8 @@ export interface EditingServiceOptions {
   projects: { current(): { project: { id: string } } | null };
   jobs: Pick<JobQueue, 'get' | 'list' | 'cancel'>;
   autoCut: Pick<AutoCutService, 'generate' | 'proposal' | 'prepare'>;
-  screenPolish: Pick<ScreenPolishService, 'generate' | 'proposal' | 'prepare'>;
+  screenPolish: Pick<ScreenPolishService, 'generate' | 'proposal' | 'prepare'> &
+    Partial<Pick<ScreenPolishService, 'suggestZoom'>>;
   database: SqliteDatabase;
   providers: { list(): ReturnType<ToolEditingAccess['providers']> };
 }
@@ -257,6 +259,16 @@ export class EditingService implements ToolEditingAccess {
           });
     return this.read(job.id);
   }
+  suggestZoom(
+    input: SuggestedZoom,
+    checkCommand?: (command: EditCommand) => void,
+  ) {
+    if (!this.options.screenPolish.suggestZoom)
+      throw new Error('Zoom suggestions are unavailable.');
+    return this.read(
+      this.options.screenPolish.suggestZoom(input, checkCommand).id,
+    );
+  }
   read(jobId: string): EditingJob {
     const job = this.job(jobId);
     return {
@@ -356,8 +368,13 @@ export class EditingService implements ToolEditingAccess {
     });
   }
   preparePreview(jobId: string, changeIds: readonly string[]) {
-    if (this.job(jobId).kind !== 'analysis.roughCut')
-      throw new Error('Proposal playback currently supports rough cuts only.');
+    if (
+      this.job(jobId).kind !== 'analysis.roughCut' &&
+      this.origin(jobId)?.toolName !== 'suggestZoom'
+    )
+      throw new Error(
+        'Proposal playback supports rough cuts and suggested zooms.',
+      );
     const command = this.validate(jobId, changeIds);
     return { command, proposal: this.proposal(jobId)! };
   }
