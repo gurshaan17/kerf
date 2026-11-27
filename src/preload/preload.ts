@@ -120,6 +120,12 @@ const bridge: KerfBridge = {
     redo: () => invoke<EditResult | null>(KERF_IPC.edits.redo),
     history: () => invoke<ProjectHistoryState>(KERF_IPC.edits.history),
   },
+  reframe: {
+    prepare: (input) => invoke(KERF_IPC.reframe.prepare, input),
+    track: (input) => invoke(KERF_IPC.reframe.track, input),
+    create: (input) => invoke(KERF_IPC.reframe.create, input),
+    cancel: (id) => invoke(KERF_IPC.reframe.cancel, id),
+  },
   assets: {
     remove: (id) => invoke<ProjectSnapshot | null>(KERF_IPC.assets.remove, id),
     list: () => invoke<Asset[]>(KERF_IPC.assets.list),

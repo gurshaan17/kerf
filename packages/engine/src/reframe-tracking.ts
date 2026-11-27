@@ -3,6 +3,7 @@ import type { ReframePoint } from './reframe';
 export interface TrackedReframePoint extends ReframePoint {
   readonly status: 'manual' | 'tracked' | 'uncertain' | 'scene-change';
   readonly confidence?: number;
+  readonly shotStart?: boolean;
 }
 
 export interface ReframeSample {
@@ -146,7 +147,7 @@ export function* trackReframe(
       anchorOffsetY = anchor.y - y / (height - 1);
       target = patch(sample.pixels, width, x, y);
       waitingForShot = false;
-      yield { ...anchor, status: 'manual' };
+      yield { ...anchor, status: 'manual', shotStart: cut || undefined };
       continue;
     }
     if (!target || target.norm < 80) {
@@ -155,6 +156,8 @@ export function* trackReframe(
         x: current.x,
         y: current.y,
         status: waitingForShot ? 'scene-change' : 'uncertain',
+        hold: true,
+        shotStart: cut || undefined,
       };
       continue;
     }
@@ -175,6 +178,7 @@ export function* trackReframe(
       x: current.x,
       y: current.y,
       status: found.reliable ? 'tracked' : 'uncertain',
+      hold: !found.reliable || undefined,
       confidence: Math.max(0, Math.min(1, found.score)),
     };
   }

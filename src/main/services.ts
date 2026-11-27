@@ -2,6 +2,7 @@ import { HighlightService } from './analysis/highlight-service';
 import { AudioFinishingService } from './audio/finishing';
 import { NoiseReductionService } from './audio/noise-reduction';
 import { RoughCutService } from './analysis/rough-cut-service';
+import { ReframeService } from './analysis/reframe-service';
 import { EditingService } from './tools/editing';
 import { app, shell } from 'electron';
 import { join } from 'node:path';
@@ -23,6 +24,7 @@ import { AutoCutService } from './analysis/auto-cut-service';
 import { TtsService } from './tts/service';
 
 export interface KerfServices {
+  readonly reframe: ReframeService;
   readonly screenPolish: ScreenPolishService;
   readonly noiseReduction: NoiseReductionService;
   readonly autoCut: AutoCutService;
@@ -75,6 +77,11 @@ export function createKerfServices(
     const projects = new ProjectService({
       repository,
       jobs: (projectId) => jobs.list(projectId),
+    });
+    const reframe = new ReframeService({
+      projects,
+      repository,
+      database: database.connection,
     });
     const imports = new MediaImportService({
       repository,
@@ -179,6 +186,7 @@ export function createKerfServices(
       tools,
     });
     return {
+      reframe,
       screenPolish,
       noiseReduction,
       autoCut,
@@ -195,6 +203,7 @@ export function createKerfServices(
       agent,
       mcp,
       dispose() {
+        reframe.dispose();
         roughCut.dispose();
         screenPolish.dispose();
         autoCut.dispose();

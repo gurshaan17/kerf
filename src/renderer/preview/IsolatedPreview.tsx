@@ -21,12 +21,16 @@ export function IsolatedPreview({
   frame = 0,
   compositionTrees = EMPTY_TREES,
   originalSequence,
+  initialSafeZones = false,
+  onFrameChange,
 }: {
   snapshot: ProjectSnapshot;
   sequence: Sequence;
   frame?: number;
   compositionTrees?: Readonly<Record<string, SceneTree>>;
   originalSequence?: Sequence;
+  initialSafeZones?: boolean;
+  onFrameChange?: (frame: number) => void;
 }) {
   const [store] = useState(() => createStudioStore(window.kerf));
   const [original, setOriginal] = useState(false);
@@ -44,6 +48,16 @@ export function IsolatedPreview({
   useEffect(() => {
     store.setState({ compositionTrees });
   }, [compositionTrees, store]);
+  useEffect(() => {
+    if (!onFrameChange) return;
+    return store.subscribe((state, previous) => {
+      if (
+        !state.playing &&
+        (state.playhead !== previous.playhead || previous.playing)
+      )
+        onFrameChange(state.playhead);
+    });
+  }, [onFrameChange, store]);
   return (
     <StudioStoreProvider store={store}>
       <div className="flex h-full min-h-0 flex-col [&_.k-stage]:min-h-0 [&_.k-stage]:flex-1">
@@ -83,7 +97,7 @@ export function IsolatedPreview({
             ))}
           </div>
         )}
-        <Preview initialSafeZones={false} />
+        <Preview initialSafeZones={initialSafeZones} />
         <IsolatedScrubber
           store={store}
           duration={sequenceDurationFrames(sequence)}

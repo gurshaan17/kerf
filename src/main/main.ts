@@ -76,6 +76,7 @@ if (!hasSingleInstanceLock) {
       startedServices.noiseReduction,
     );
     unregisterIpc = registerProjectIpc({
+      reframe: services.reframe,
       noiseReduction: services.noiseReduction,
       screenPolish: services.screenPolish,
       autoCut: services.autoCut,

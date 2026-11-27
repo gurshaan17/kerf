@@ -37,6 +37,16 @@ export const projectSchema = z.object({
       durationFrames: z.number().int().positive(),
     })
     .optional(),
+  reframeOrigin: z
+    .object({
+      version: z.literal(1),
+      parentProjectId: idSchema('project'),
+      sourceAssetId: idSchema('asset'),
+      sourceClipId: idSchema('clip'),
+      format: z.enum(['vertical', 'square']),
+      reviewId: z.uuid(),
+    })
+    .optional(),
   sequence: sequenceSchema,
   style: styleConfigSchema.default(DEFAULT_STYLE),
   reference: referenceProfileSchema.nullable().default(null),

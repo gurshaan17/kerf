@@ -3,6 +3,7 @@ import { AudioFinishingPanel } from './AudioFinishingPanel';
 import { VisualReviewCard } from './VisualReviewCard';
 import { EditingReviews, useEditingReviews } from './EditingReviews';
 import { SuggestedZoom } from './SuggestedZoom';
+import { ReframeControl } from '../reframe/ReframeDialog';
 import { chatDraftKey, EMPTY_CHAT_DRAFT } from './drafts';
 import { composerScope, scopeError, scopeLabel } from './scope';
 import { ScopeControls } from './ScopeControls';
@@ -218,6 +219,10 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
   const snapshot = useStudio((state) => state.snapshot);
   const conversationId = useStudio((state) => state.chatConversationId);
   const selectedIds = useStudio((state) => state.selection.clipIds);
+  const reframeClips = snapshot?.project.sequence.tracks
+    .flatMap((track) => track.clips)
+    .filter((clip) => clip.type === 'video')
+    .filter((clip) => selectedIds.includes(clip.id));
   const importFootage = useStudio((state) => state.importFootage);
   const store = useStudioStoreApi();
   const draftKey = chatDraftKey(snapshot?.project.id, conversationId);
@@ -448,6 +453,15 @@ export function ChatPanel({ settingsOpen, onOpenSettings }: ChatPanelProps) {
         <div ref={contentRef} className="grid gap-3">
           <HighlightsPanel />
           <AudioFinishingPanel />
+          {reframeClips?.length === 1 && (
+            <div className="flex">
+              <ReframeControl
+                key={reframeClips[0]!.id}
+                clip={reframeClips[0]!}
+                label="Reframe selected video"
+              />
+            </div>
+          )}
           <EditingReviews
             reviews={reviews.filter(
               (review) => review.origin?.toolName !== 'suggestZoom',

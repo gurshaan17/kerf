@@ -122,6 +122,7 @@ it('follows a textured subject, holds through occlusion, and accepts a new-shot 
   ]);
   expect(points[1]!.x).toBeGreaterThan(points[0]!.x);
   expect(points[2]!.x).toBe(points[1]!.x);
+  expect(points[2]!.hold).toBe(true);
   expect(points[3]!.x).toBe(points[1]!.x);
   expect(points[5]!.x).toBeGreaterThan(points[4]!.x);
 });

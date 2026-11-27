@@ -5,6 +5,12 @@ import {
   planAudioDuckingSchema,
 } from '@kerf/tools';
 import { chatScopeSchema } from '../../shared/chat-scope';
+import {
+  reframeCreateSchema,
+  reframePrepareSchema,
+  reframeTrackSchema,
+} from '../../shared/reframe';
+import type { ReframeService } from '../analysis/reframe-service';
 import { noiseReductionRequestSchema } from '../../shared/noise-reduction';
 import { NoiseReductionReviews } from '../audio/noise-reduction-review';
 import type { NoiseReductionService } from '../audio/noise-reduction';
@@ -206,6 +212,7 @@ const MEDIA_EXTENSIONS = [
 ];
 
 export interface ProjectIpcOptions {
+  readonly reframe: ReframeService;
   readonly noiseReduction: NoiseReductionService;
   readonly screenPolish: ScreenPolishService;
   readonly autoCut: AutoCutService;
@@ -245,6 +252,18 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
+  ipcMain.handle(KERF_IPC.reframe.prepare, (_event, input: unknown) =>
+    options.reframe.prepare(reframePrepareSchema.parse(input)),
+  );
+  ipcMain.handle(KERF_IPC.reframe.track, (_event, input: unknown) =>
+    options.reframe.track(reframeTrackSchema.parse(input)),
+  );
+  ipcMain.handle(KERF_IPC.reframe.create, (_event, input: unknown) =>
+    options.reframe.create(reframeCreateSchema.parse(input)),
+  );
+  ipcMain.handle(KERF_IPC.reframe.cancel, (_event, id: unknown) =>
+    options.reframe.cancel(z.uuid().parse(id)),
+  );
   const noiseReviews = new NoiseReductionReviews(
     options.projects,
     options.noiseReduction,
@@ -936,6 +955,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     unsubscribe();
     noiseReviews.dispose();
     for (const channel of [
+      ...Object.values(KERF_IPC.reframe),
       ...Object.values(KERF_IPC.noiseReduction),
       ...Object.values(KERF_IPC.editing),
       ...Object.values(KERF_IPC.audioFinishing),

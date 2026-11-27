@@ -51,6 +51,7 @@ import {
 import { formatFrameRate } from '../../shared/sequence-presets';
 import { useStudio } from '../state/StudioProvider';
 import { selectSelectedClip } from '../state/selectors';
+import { ReframeControl } from '../reframe/ReframeDialog';
 
 type InspectorTab = 'clip' | 'filters' | 'motion' | 'masks';
 
@@ -2144,6 +2145,7 @@ function ClipInspectorBody({ clip }: { readonly clip: Clip }) {
       <ClipHeader clip={clip} />
       {tab === 'clip' ? (
         <div className="k-inspector__stack">
+          {clip.type === 'video' && <ReframeControl clip={clip} />}
           <ClipFields clip={clip} />
         </div>
       ) : tab === 'filters' ? (

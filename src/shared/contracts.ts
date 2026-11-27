@@ -644,6 +644,12 @@ export const KERF_IPC = {
     redo: 'kerf:edits:redo',
     history: 'kerf:edits:history',
   },
+  reframe: {
+    prepare: 'kerf:reframe:prepare',
+    track: 'kerf:reframe:track',
+    create: 'kerf:reframe:create',
+    cancel: 'kerf:reframe:cancel',
+  },
   assets: {
     list: 'kerf:assets:list',
     import: 'kerf:assets:import',
@@ -814,6 +820,7 @@ export interface KerfBridge {
     readonly redo: () => Promise<EditResult | null>;
     readonly history: () => Promise<ProjectHistoryState>;
   };
+  readonly reframe?: import('./reframe').ReframeBridge;
   readonly assets: {
     readonly list: () => Promise<Asset[]>;
     readonly import: (paths: readonly string[]) => Promise<Asset[]>;
