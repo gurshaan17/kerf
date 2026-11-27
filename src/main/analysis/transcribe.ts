@@ -1,12 +1,11 @@
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { Asset, FrameRate, Transcript } from '@kerf/model';
+import type { Asset, FrameRate, Transcript, TranscriptWord } from '@kerf/model';
 import {
   createTranscript,
   newId,
   secondsToFrames,
   transcriptSegmentSchema,
-  transcriptWordSchema,
 } from '@kerf/model';
 import { extractAudioWav } from './media';
 import { runWhisper } from './whisper';
@@ -24,6 +23,11 @@ interface WhisperEntry {
   readonly offsets?: { readonly from?: number; readonly to?: number };
   readonly start?: number;
   readonly end?: number;
+  readonly tokens?: readonly {
+    readonly text?: string;
+    readonly p?: number;
+    readonly offsets?: { readonly from?: number; readonly to?: number };
+  }[];
 }
 
 interface WhisperDocument {
@@ -116,6 +120,52 @@ function splitEntry(
   });
 }
 
+function alignWord(
+  entry: WhisperEntry,
+  text: string,
+): Pick<TranscriptWord, 'alignment' | 'confidence'> | null {
+  if (text.includes(' ') || !Array.isArray(entry.tokens)) return null;
+  const tokens = entry.tokens.filter(
+    (token) => token.text && !/^\[_.*\]$/.test(token.text),
+  );
+  if (
+    tokens
+      .map((token) => token.text)
+      .join('')
+      .trim() !== text
+  )
+    return null;
+  const speech = tokens.filter((token) =>
+    /[\p{L}\p{N}]/u.test(token.text ?? ''),
+  );
+  if (!speech.length) return null;
+  let startMs = -1;
+  let endMs = -1;
+  let confidence = 1;
+  for (const token of speech) {
+    const from = token.offsets?.from;
+    const to = token.offsets?.to;
+    if (
+      typeof from !== 'number' ||
+      typeof to !== 'number' ||
+      !Number.isInteger(from) ||
+      !Number.isInteger(to) ||
+      from < 0 ||
+      from < endMs ||
+      to <= from ||
+      typeof token.p !== 'number' ||
+      !Number.isFinite(token.p) ||
+      token.p < 0.5 ||
+      token.p > 1
+    )
+      return null;
+    if (startMs === -1) startMs = from;
+    endMs = to;
+    confidence = Math.min(confidence, token.p);
+  }
+  return { alignment: { method: 'whisper-token', startMs, endMs }, confidence };
+}
+
 export function transcriptFromWhisper(
   document: WhisperDocument,
   asset: Asset,
@@ -124,12 +174,7 @@ export function transcriptFromWhisper(
   now = Date.now(),
 ): Transcript {
   const entries = document.transcription ?? document.segments ?? [];
-  const words: Array<{
-    text: string;
-    startFrame: number;
-    endFrame: number;
-    confidence: number;
-  }> = [];
+  const words: TranscriptWord[] = [];
 
   for (const entry of entries) {
     const text = entryText(entry);
@@ -137,12 +182,14 @@ export function transcriptFromWhisper(
     if (text.length === 0 || !frames) {
       continue;
     }
+    const aligned = alignWord(entry, text);
     for (const word of splitEntry(text, frames.start, frames.end)) {
       words.push({
         text: word.text,
         startFrame: word.startFrame,
         endFrame: Math.max(word.startFrame, word.endFrame),
         confidence: 1,
+        ...aligned,
       });
     }
   }
@@ -161,14 +208,7 @@ export function transcriptFromWhisper(
         startFrame: first.startFrame,
         endFrame: last.endFrame,
         text: chunk.map((word) => word.text).join(' '),
-        words: chunk.map((word) =>
-          transcriptWordSchema.parse({
-            text: word.text,
-            startFrame: word.startFrame,
-            endFrame: word.endFrame,
-            confidence: word.confidence,
-          }),
-        ),
+        words: chunk,
       }),
     );
   }
@@ -196,6 +236,7 @@ export async function transcribeAsset(
   const outPrefix = join(input.workDirectory, `${suffix}-whisper`);
   const jsonPath = `${outPrefix}.json`;
   try {
+    const before = statSync(input.asset.sourcePath);
     input.onProgress?.(0.05);
     await extractAudioWav(
       input.ffmpeg,
@@ -213,7 +254,7 @@ export async function transcribeAsset(
         wavPath,
         '-l',
         'auto',
-        '-oj',
+        '-ojf',
         '-of',
         outPrefix,
         '-ml',
@@ -236,13 +277,25 @@ export async function transcribeAsset(
     }
     const rate = input.asset.frameRate ?? { numerator: 24, denominator: 1 };
     input.onProgress?.(0.98);
-    return transcriptFromWhisper(
-      document,
-      input.asset,
-      rate,
-      basename(input.model),
-      input.now?.() ?? Date.now(),
-    );
+    const after = statSync(input.asset.sourcePath);
+    if (before.size !== after.size || before.mtimeMs !== after.mtimeMs)
+      throw new Error(
+        'The source changed during transcription. Transcribe it again.',
+      );
+    return {
+      ...transcriptFromWhisper(
+        document,
+        input.asset,
+        rate,
+        basename(input.model),
+        input.now?.() ?? Date.now(),
+      ),
+      alignmentSource: {
+        path: input.asset.sourcePath,
+        size: after.size,
+        mtimeMs: after.mtimeMs,
+      },
+    };
   } finally {
     rmSync(wavPath, { force: true });
     rmSync(jsonPath, { force: true });

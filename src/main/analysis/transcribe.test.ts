@@ -44,7 +44,7 @@ function makeAsset(sourcePath: string) {
 }
 
 describe('transcriptFromWhisper', () => {
-  it('turns whisper timestamps into frame-accurate words and segments', () => {
+  it('keeps interpolated words available without marking them aligned', () => {
     const transcript = transcriptFromWhisper(
       {
         params: { language: 'en' },
@@ -71,6 +71,43 @@ describe('transcriptFromWhisper', () => {
       'Kerf',
       'world',
     ]);
+    expect(transcript.segments[0]?.words.every((word) => !word.alignment)).toBe(
+      true,
+    );
+  });
+
+  it('retains valid speech token times without rounding or including punctuation', () => {
+    const transcript = transcriptFromWhisper(
+      {
+        transcription: [
+          {
+            text: ' Kerf,',
+            offsets: { from: 40, to: 520 },
+            tokens: [
+              { text: ' Ker', p: 0.9, offsets: { from: 67, to: 190 } },
+              { text: 'f', p: 0.8, offsets: { from: 190, to: 307 } },
+              { text: ',', p: 0.4, offsets: { from: 315, to: 505 } },
+              { text: '[_TT_26]', offsets: { from: 520, to: 520 } },
+            ],
+          },
+          {
+            text: ' cut',
+            offsets: { from: 520, to: 800 },
+            tokens: [
+              { text: ' cut', p: 0.99, offsets: { from: 600, to: 600 } },
+            ],
+          },
+        ],
+      },
+      makeAsset('/tmp/missing.mp4'),
+      { numerator: 24, denominator: 1 },
+      'model',
+    );
+    expect(transcript.segments[0]?.words[0]).toMatchObject({
+      confidence: 0.8,
+      alignment: { method: 'whisper-token', startMs: 67, endMs: 307 },
+    });
+    expect(transcript.segments[0]?.words[1]?.alignment).toBeUndefined();
   });
 
   it('accepts segment-style whisper JSON', () => {
