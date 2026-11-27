@@ -110,6 +110,7 @@ const bridge: KerfBridge = {
   edits: {
     apply: (command: EditCommand) =>
       invoke<EditResult>(KERF_IPC.edits.apply, command),
+    applyWordCut: (request) => invoke(KERF_IPC.edits.applyWordCut, request),
     undo: () => invoke<EditResult | null>(KERF_IPC.edits.undo),
     redo: () => invoke<EditResult | null>(KERF_IPC.edits.redo),
     history: () => invoke<ProjectHistoryState>(KERF_IPC.edits.history),

@@ -4,11 +4,13 @@ import type {
   FrameRate,
   Sequence,
   TranscriptSegment,
+  TranscriptWord,
 } from '@kerf/model';
 import {
   clipEndFrame,
   clipSchema,
   framesToSeconds,
+  fpsToNumber,
   newId,
   secondsToFrames,
 } from '@kerf/model';
@@ -35,12 +37,52 @@ export function transcriptOccurrences(
     framesToSeconds(segment.endFrame, rate),
     sequence.frameRate,
   );
+  return occurrences(sequence, assetId, start, end, false);
+}
+
+export function transcriptWordOccurrences(
+  sequence: Sequence,
+  assetId: string,
+  words: readonly (TranscriptWord | undefined)[],
+): TranscriptOccurrence[] {
+  const first = words[0]?.alignment;
+  const last = words.at(-1)?.alignment;
+  if (!first || !last) return [];
+  let endMs = first.startMs;
+  for (const word of words) {
+    const alignment = word?.alignment;
+    if (!alignment || alignment.startMs < endMs) return [];
+    endMs = alignment.endMs;
+  }
+  const framesPerMs = fpsToNumber(sequence.frameRate) / 1000;
+  return occurrences(
+    sequence,
+    assetId,
+    first.startMs * framesPerMs,
+    last.endMs * framesPerMs,
+    true,
+  );
+}
+
+function occurrences(
+  sequence: Sequence,
+  assetId: string,
+  start: number,
+  end: number,
+  wholeRange: boolean,
+): TranscriptOccurrence[] {
   return sequence.tracks.flatMap((track) =>
     track.clips.flatMap((clip) => {
       if (
         (clip.type !== 'video' && clip.type !== 'audio') ||
         clip.assetId !== assetId ||
         clip.timeMap.length
+      )
+        return [];
+      if (
+        wholeRange &&
+        (start < clip.sourceInFrame - 1e-7 ||
+          end > clip.sourceInFrame + clip.durationFrames * clip.speed + 1e-7)
       )
         return [];
       const first = Math.max(

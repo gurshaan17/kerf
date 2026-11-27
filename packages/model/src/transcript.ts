@@ -78,6 +78,15 @@ export type TranscriptWord = z.infer<typeof transcriptWordSchema>;
 export type TranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
 export type Transcript = z.infer<typeof transcriptSchema>;
 
+/** A corrected segment with no word timings interrupts a word selection. */
+export function transcriptWordSlots(
+  transcript: Transcript,
+): (TranscriptWord | undefined)[] {
+  return transcript.segments.flatMap((segment) =>
+    segment.words.length ? segment.words : [undefined],
+  );
+}
+
 export function hasCurrentWordTiming(
   transcript: Transcript,
   asset: Asset,

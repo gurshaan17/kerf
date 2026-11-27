@@ -36,6 +36,9 @@ const bridge: KerfBridge = {
     apply: async () => {
       throw new Error('not used');
     },
+    applyWordCut: async () => {
+      throw new Error('not used');
+    },
     undo: async () => null,
     redo: async () => null,
     history: async () => {

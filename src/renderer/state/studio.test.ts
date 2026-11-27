@@ -83,6 +83,9 @@ function makeBridge(snapshot: ProjectSnapshot) {
     },
     edits: {
       apply,
+      applyWordCut: vi.fn(async () => {
+        throw new Error('Word cuts are not used by this fixture.');
+      }),
       undo: vi.fn(async () => null),
       redo: vi.fn(async () => null),
       history: vi.fn(async () => snapshot.history),

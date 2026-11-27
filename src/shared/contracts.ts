@@ -634,6 +634,7 @@ export const KERF_IPC = {
   },
   edits: {
     apply: 'kerf:edits:apply',
+    applyWordCut: 'kerf:edits:apply-word-cut',
     undo: 'kerf:edits:undo',
     redo: 'kerf:edits:redo',
     history: 'kerf:edits:history',
@@ -796,6 +797,7 @@ export interface KerfBridge {
   };
   readonly edits: {
     readonly apply: (command: EditCommand) => Promise<EditResult>;
+    readonly applyWordCut: (request: WordCutRequest) => Promise<EditResult>;
     readonly undo: () => Promise<EditResult | null>;
     readonly redo: () => Promise<EditResult | null>;
     readonly history: () => Promise<ProjectHistoryState>;
@@ -887,6 +889,17 @@ export interface KerfBridge {
   readonly events: {
     readonly subscribe: (listener: (event: KerfEvent) => void) => () => void;
   };
+}
+
+export interface WordCutRequest {
+  readonly transcriptId: string;
+  readonly revision: number;
+  readonly projectUpdatedAt: number;
+  readonly clipId: string;
+  readonly firstWord: number;
+  readonly lastWord: number;
+  readonly startFrame: number;
+  readonly endFrame: number;
 }
 
 export type ChatTurnStatus = 'streaming' | 'done' | 'aborted' | 'error';

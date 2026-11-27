@@ -10,7 +10,16 @@ import {
   polishGenerateSchema,
   polishApplySchema,
 } from '../../shared/screen-polish';
-import { idSchema } from '@kerf/model';
+import {
+  hasCurrentWordTiming,
+  idSchema,
+  transcriptWordSlots,
+} from '@kerf/model';
+import {
+  findClip,
+  transcriptEditCommand,
+  transcriptWordOccurrences,
+} from '@kerf/engine';
 import type { AutoCutService } from '../analysis/auto-cut-service';
 import {
   autoCutGenerateSchema,
@@ -18,7 +27,7 @@ import {
 } from '../../shared/auto-cut';
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { OpenDialogOptions } from 'electron';
-import { writeFileSync } from 'node:fs';
+import { statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import {
@@ -705,6 +714,77 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   ipcMain.handle(KERF_IPC.edits.apply, (_event, command: unknown) =>
     projects.apply(command),
   );
+  ipcMain.handle(KERF_IPC.edits.applyWordCut, (_event, request: unknown) => {
+    const index = z.number().int().nonnegative();
+    const cut = z
+      .object({
+        transcriptId: idSchema('transcript'),
+        revision: index,
+        projectUpdatedAt: index,
+        clipId: idSchema('clip'),
+        firstWord: index,
+        lastWord: index,
+        startFrame: index,
+        endFrame: index,
+      })
+      .strict()
+      .parse(request);
+    const snapshot = projects.current();
+    const transcript = snapshot?.transcripts.find(
+      (item) => item.id === cut.transcriptId,
+    );
+    const asset = snapshot?.assets.find(
+      (item) => item.id === transcript?.assetId,
+    );
+    if (
+      !snapshot ||
+      !transcript ||
+      !asset ||
+      transcript.revision !== cut.revision ||
+      snapshot.project.updatedAt !== cut.projectUpdatedAt ||
+      !hasCurrentWordTiming(transcript, asset)
+    )
+      throw new Error(
+        'The project or transcript changed. Review the word cut again.',
+      );
+    const source = statSync(asset.sourcePath, { throwIfNoEntry: false });
+    if (
+      !source ||
+      source.size !== asset.fileSize ||
+      Math.abs(source.mtimeMs - asset.mtimeMs) > 1
+    )
+      throw new Error(
+        'The audio source changed. Refresh or relink it and transcribe again.',
+      );
+    const sequence = snapshot.project.sequence;
+    const words = transcriptWordSlots(transcript);
+    const occurrence =
+      cut.lastWord < words.length &&
+      transcriptWordOccurrences(
+        sequence,
+        asset.id,
+        words.slice(cut.firstWord, cut.lastWord + 1),
+      ).some((item) => item.clipId === cut.clipId);
+    const clip = findClip(sequence, cut.clipId)?.clip;
+    if (
+      !occurrence ||
+      !clip ||
+      cut.startFrame < clip.startFrame ||
+      cut.endFrame > clip.startFrame + clip.durationFrames
+    )
+      throw new Error(
+        'Choose aligned words and cut boundaries within one timeline clip.',
+      );
+    return projects.apply(
+      transcriptEditCommand(
+        sequence,
+        cut.startFrame,
+        cut.endFrame,
+        'remove',
+        asset.id,
+      ),
+    );
+  });
   ipcMain.handle(KERF_IPC.edits.undo, () => projects.undo());
   ipcMain.handle(KERF_IPC.edits.redo, () => projects.redo());
   ipcMain.handle(KERF_IPC.edits.history, () => projects.history());
