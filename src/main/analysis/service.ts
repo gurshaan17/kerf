@@ -749,13 +749,10 @@ export class AnalysisService {
     context: JobContext,
   ): Promise<{ transcriptId: string }> {
     const { projectId, asset, folder } = this.projectContext(payload.assetId);
-    if (
-      this.projects
-        .current()!
-        .transcripts.some(
-          (t) => t.assetId === asset.id && t.source === 'visual',
-        )
-    )
+    const previous = this.projects
+      .current()!
+      .transcripts.find((t) => t.assetId === asset.id);
+    if (previous?.source === 'visual')
       throw new Error(
         'Visual narration already exists; audio transcription was not run.',
       );
@@ -782,13 +779,10 @@ export class AnalysisService {
         ),
       now: this.now,
     });
-    this.repository.deleteTranscriptsForAsset(asset.id);
-    this.repository.saveTranscript(transcript);
-    this.repository.saveAsset({
-      ...asset,
-      transcriptId: transcript.id,
-      updatedAt: this.now(),
-    });
+    context.signal.throwIfAborted();
+    if (this.projects.current()?.project.id !== projectId)
+      throw new Error('The project changed during transcription.');
+    this.repository.commitSpeechTranscript(transcript, previous);
     this.searchService.reindexProject(projectId);
     this.refresh(projectId);
     return { transcriptId: transcript.id };

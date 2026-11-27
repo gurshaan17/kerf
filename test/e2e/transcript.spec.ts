@@ -194,6 +194,65 @@ test('verifies a transcript in the side panel', async () => {
         .toEqual(original);
     }
     await page
+      .getByRole('button', { name: 'Select words', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'local', exact: true })
+      .first()
+      .click();
+    await page
+      .getByRole('button', { name: 'first', exact: true })
+      .first()
+      .press('Shift+Enter');
+    await expect(
+      page.getByText('2 words selected.', { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: 'Review word cut', exact: true })
+      .click();
+    const wordReview = page.getByRole('region', {
+      name: 'Proposed transcript edit',
+    });
+    await expect(wordReview).toContainText('local first');
+    const wordStart = Number(
+      await page.getByLabel('Passage start frame').inputValue(),
+    );
+    const wordEnd = Number(
+      await page.getByLabel('Passage end frame').inputValue(),
+    );
+    expect(wordEnd - wordStart).toBeGreaterThan(1);
+    await page
+      .getByRole('button', { name: 'Preview source join', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Apply media edit', exact: true })
+      .click();
+    await expect(wordReview).toHaveCount(0);
+    const readTracks = () =>
+      page.evaluate(
+        async () =>
+          (await window.kerf.projects.active())?.project.sequence.tracks,
+      );
+    const mainTrack = original!.find(
+      (track) => track.kind === 'video' && track.clips.length,
+    )!;
+    const video = mainTrack.clips[0]!;
+    await expect
+      .poll(async () =>
+        (await readTracks())
+          ?.find((track) => track.id === mainTrack.id)
+          ?.clips.map((clip) => clip.durationFrames),
+      )
+      .toEqual([wordStart, video.durationFrames - wordEnd]);
+    await page
+      .getByRole('button', { name: 'Undo media edit', exact: true })
+      .click();
+    await expect.poll(readTracks).toEqual(original);
+    await page
+      .getByRole('button', { name: 'Select words', exact: true })
+      .click();
+
+    await page
       .getByRole('checkbox', { name: /Select passage:/ })
       .first()
       .check();

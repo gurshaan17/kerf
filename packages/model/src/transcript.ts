@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { idSchema, newId } from './ids';
 import type { AssetId } from './ids';
+import type { Asset } from './assets';
 
 export const transcriptWordSchema = z
   .object({
@@ -8,6 +9,14 @@ export const transcriptWordSchema = z
     startFrame: z.number().int().nonnegative(),
     endFrame: z.number().int().nonnegative(),
     confidence: z.number().min(0).max(1).default(1),
+    alignment: z
+      .object({
+        method: z.literal('whisper-token'),
+        startMs: z.number().int().nonnegative(),
+        endMs: z.number().int().positive(),
+      })
+      .refine((timing) => timing.endMs > timing.startMs)
+      .optional(),
   })
   .refine((word) => word.endFrame >= word.startFrame, {
     message: 'A word cannot end before it starts',
@@ -34,6 +43,13 @@ export const transcriptSchema = z.object({
   text: z.string().default(''),
   segments: z.array(transcriptSegmentSchema).default([]),
   model: z.string().nullable().default(null),
+  alignmentSource: z
+    .object({
+      path: z.string(),
+      size: z.number().int().nonnegative(),
+      mtimeMs: z.number().nonnegative(),
+    })
+    .optional(),
   createdAt: z.number().int().nonnegative(),
   source: z.enum(['speech', 'visual']).default('speech'),
   status: z.enum(['draft', 'reviewed']).default('reviewed'),
@@ -61,6 +77,31 @@ export const transcriptSchema = z.object({
 export type TranscriptWord = z.infer<typeof transcriptWordSchema>;
 export type TranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
 export type Transcript = z.infer<typeof transcriptSchema>;
+
+/** A corrected segment with no word timings interrupts a word selection. */
+export function transcriptWordSlots(
+  transcript: Transcript,
+): (TranscriptWord | undefined)[] {
+  return transcript.segments.flatMap((segment) =>
+    segment.words.length ? segment.words : [undefined],
+  );
+}
+
+export function hasCurrentWordTiming(
+  transcript: Transcript,
+  asset: Asset,
+): boolean {
+  const source = transcript.alignmentSource;
+  return Boolean(
+    source &&
+    transcript.source === 'speech' &&
+    transcript.assetId === asset.id &&
+    asset.status === 'ready' &&
+    source.path === asset.sourcePath &&
+    source.size === asset.fileSize &&
+    Math.abs(source.mtimeMs - asset.mtimeMs) <= 1,
+  );
+}
 
 export interface CreateTranscriptInput {
   assetId: AssetId;

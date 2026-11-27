@@ -21,6 +21,7 @@ import {
   referenceProfileSchema,
   sceneSchema,
   transcriptSchema,
+  hasCurrentWordTiming,
 } from '@kerf/model';
 import type { DatabaseLogger, SqliteDatabase } from '../db';
 import type {
@@ -648,6 +649,33 @@ export class ProjectRepository {
     return this.database
       .prepare('DELETE FROM transcripts WHERE asset_id = ?')
       .run(assetId).changes;
+  }
+
+  commitSpeechTranscript(next: Transcript, expected: Transcript | undefined) {
+    this.database.transaction(() => {
+      const asset = this.findAsset(next.assetId);
+      if (!asset || !hasCurrentWordTiming(next, asset))
+        throw new Error(
+          'The audio source changed. Refresh or relink it and transcribe again.',
+        );
+      const current = this.listTranscripts(asset.projectId).find(
+        (t) => t.assetId === asset.id,
+      );
+      if (
+        current?.id !== expected?.id ||
+        current?.revision !== expected?.revision
+      )
+        throw new Error(
+          'The transcript changed during transcription. Transcribe again to replace it.',
+        );
+      this.deleteTranscriptsForAsset(asset.id);
+      this.saveTranscript(next);
+      this.saveAsset({
+        ...asset,
+        transcriptId: next.id,
+        updatedAt: this.now(),
+      });
+    })();
   }
 
   commitNarration(next: Transcript, expected: Transcript | null): Transcript {

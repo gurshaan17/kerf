@@ -4,6 +4,7 @@ import { applyCommand } from './apply';
 import {
   transcriptEditCommand,
   transcriptOccurrences,
+  transcriptWordOccurrences,
 } from './transcript-edit';
 import {
   makeAudioClip,
@@ -47,6 +48,38 @@ function fixture() {
   };
 }
 describe('transcript edits', () => {
+  it('rounds token boundaries only after speed mapping and excludes trimmed or unaligned ranges', () => {
+    const { video, sequence } = fixture();
+    const faster = { ...video, id: newId('clip'), startFrame: 200, speed: 2 };
+    sequence.tracks[0]!.clips.push(faster);
+    const word = {
+      text: 'first',
+      startFrame: 24,
+      endFrame: 30,
+      confidence: 0.9,
+      alignment: {
+        method: 'whisper-token' as const,
+        startMs: 1030,
+        endMs: 1235,
+      },
+    };
+    const matches = transcriptWordOccurrences(sequence, video.assetId, [word]);
+    expect(matches.find((match) => match.clipId === faster.id)).toMatchObject({
+      startFrame: 200,
+      endFrame: 203,
+    });
+    expect(
+      transcriptWordOccurrences(sequence, video.assetId, [
+        { ...word, alignment: { ...word.alignment, startMs: 990 } },
+      ]),
+    ).toEqual([]);
+    expect(
+      transcriptWordOccurrences(sequence, video.assetId, [
+        word,
+        { ...word, alignment: undefined },
+      ]),
+    ).toEqual([]);
+  });
   it('maps differing rates, speeds, partial trims and repeated occurrences', () => {
     const { video, sequence } = fixture();
     sequence.tracks[0]!.clips.push({
