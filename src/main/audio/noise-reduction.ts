@@ -50,7 +50,7 @@ export class NoiseReductionService {
     const key = createHash('sha256')
       .update(
         JSON.stringify([
-          'afftdn-v1',
+          'afftdn-v2',
           asset.id,
           asset.sourcePath,
           asset.contentHash,
@@ -147,7 +147,7 @@ export class NoiseReductionService {
           '0:a:0',
           '-vn',
           '-af',
-          `aresample=${rate}:async=1:first_pts=0,apad=pad_len=${delay},afftdn=nr=${attenuation}:nf=-45,atrim=start_sample=${delay},asetpts=N/SR/TB`,
+          `aresample=${rate}:async=1:first_pts=0,apad=pad_len=${delay},afftdn=nr=${attenuation}:nf=-45,atrim=start_sample=${delay},asetpts=N/SR/TB,apad=whole_dur=${asset.durationSeconds}`,
           '-c:a',
           'pcm_s24le',
           '-rf64',

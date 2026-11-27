@@ -63,6 +63,11 @@ const bridge: KerfBridge = {
     confirm: (planId) => invoke(KERF_IPC.audioFinishing.confirm, planId),
     cancel: (requestId) => invoke(KERF_IPC.audioFinishing.cancel, requestId),
   },
+  noiseReduction: {
+    prepare: (input) => invoke(KERF_IPC.noiseReduction.prepare, input),
+    apply: (id) => invoke(KERF_IPC.noiseReduction.apply, id),
+    cancel: (id) => invoke(KERF_IPC.noiseReduction.cancel, id),
+  },
   editing: {
     preview: (request) => invoke(KERF_IPC.editing.preview, request),
     finish: (request) => invoke(KERF_IPC.editing.finish, request),

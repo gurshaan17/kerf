@@ -4,6 +4,22 @@ Audio finishing is optional and independent of rough-cut approval. Select audio
 or video clips with ready source audio, open **Assistant**, then expand **Audio
 finishing**. No chat provider is required for the desktop controls.
 
+## Reduce background noise
+
+Select one audible, unlocked, normal-speed clip. If the video and its sound
+are on separate tracks, select the audio clip. Under **Reduce background noise**,
+choose **Light** or **Strong**, then **Preview noise reduction**. Use
+**Original** and **Cleaned** to listen at the same position. Choose
+**Apply noise reduction** to keep the cleaned audio. Undo restores the previous
+setting. **Remove noise reduction** turns it off for that clip.
+
+This local FFmpeg filter targets steady noise such as fan hum and hiss. Listen
+for changes to the voice before applying. The cleaned audio is processed before
+clip gain, fades, and ducking, and the same audio serves playback, measurement,
+and export. The preview plays the selected clip's source audio in isolation.
+Source recordings up to 30 minutes are supported. Kerf regenerates a missing
+cleaned audio cache from the saved clip setting when needed.
+
 ## Measure and adjust gain
 
 **Measure selected audio** measures the processed mix of exactly the selected
@@ -71,7 +87,7 @@ nodes, supporting amplification above 100%; export and measurement derive
 sample-level FFmpeg expressions from the same curve, preserving input channels.
 Continuous curves are flattened within 0.0001 gain error, with subframe step
 transitions and a 256-point limit. Filter graphs above 100,000 characters fail
-explicitly. No new dependency, database or audio representation is required.
+explicitly. Gain and ducking use the existing volume automation model.
 
 Unit coverage checks frame mapping, clipped ramps, unrelated clips, automation
 conflicts, exact undo, gain calculations, silence, stale sources, cancellation and

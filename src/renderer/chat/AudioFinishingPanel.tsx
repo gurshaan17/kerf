@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@kerf/ui';
 import type { AudioFinishPlan, AudioMeasurement } from '@kerf/tools';
 import { useStudio, useStudioStoreApi } from '../state/StudioProvider';
+import { NoiseReductionControls } from './NoiseReductionControls';
 
 export function AudioFinishingPanel() {
   const snapshot = useStudio((s) => s.snapshot);
@@ -34,6 +35,20 @@ export function AudioFinishingPanel() {
       ),
   );
   const selected = media.filter((c) => selection.includes(c.id));
+  const audibleSelection = selected.filter(
+    (clip) =>
+      (clip.type === 'video' || clip.type === 'audio') &&
+      (clip.volume > 0 || clip.keyframes.volume.length),
+  );
+  const noiseClip =
+    audibleSelection.length === 1 ? audibleSelection[0] : undefined;
+  const noiseTrack = snapshot?.project.sequence.tracks.find(
+    (track) => track.id === noiseClip?.trackId,
+  );
+  const noiseAsset =
+    noiseClip && 'assetId' in noiseClip
+      ? snapshot?.assets.find((asset) => asset.id === noiseClip.assetId)
+      : undefined;
   const speechAssets = new Set(
     snapshot?.transcripts
       .filter((t) => t.source === 'speech')
@@ -170,6 +185,24 @@ export function AudioFinishingPanel() {
           <p>
             Selected audio: {selected.map((c) => c.label || c.id).join(', ')}
           </p>
+          {selected.length === 1 && audibleSelection.length === 0 && (
+            <p>Select the audible clip to reduce background noise.</p>
+          )}
+          {noiseClip &&
+            (noiseClip.type === 'audio' || noiseClip.type === 'video') &&
+            noiseClip.speed === 1 &&
+            !noiseClip.timeMap.length &&
+            !noiseClip.locked &&
+            noiseTrack &&
+            !noiseTrack.locked &&
+            !noiseTrack.muted &&
+            noiseAsset && (
+              <NoiseReductionControls
+                key={`${projectId}:${conversationId}:${noiseClip.id}:${snapshot.project.updatedAt}:${noiseAsset.updatedAt}`}
+                asset={noiseAsset}
+                clip={noiseClip}
+              />
+            )}
           {!supported && (
             <p>
               Select one to twenty normal-speed clips with ready source audio.

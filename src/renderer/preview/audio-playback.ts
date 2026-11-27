@@ -13,6 +13,7 @@ export class AudioPlayback {
   constructor(
     private readonly createAudio: () => HTMLAudioElement = () =>
       document.createElement('audio'),
+    private readonly onCleanedAudioError?: (assetName: string) => void,
   ) {}
 
   sync(
@@ -43,6 +44,10 @@ export class AudioPlayback {
           this.elements.set(clip.id, audio);
         }
         if (audio.src !== url) {
+          audio.onerror =
+            clip.noiseReduction && clip.noiseReduction !== 'off'
+              ? () => this.onCleanedAudioError?.(asset.name)
+              : null;
           audio.src = url;
           audio.load();
         }
