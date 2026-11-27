@@ -1,9 +1,13 @@
 import { audioGainExpression } from './audio-gain';
-import type { Asset, Sequence } from '@kerf/model';
+import type { Asset, NoiseReduction, Sequence } from '@kerf/model';
 import { fpsToNumber } from '@kerf/model';
 import { sourceFrameAt } from '@kerf/engine';
 
 export interface ExportAudioClip {
+  readonly cleanedAudio?: {
+    readonly asset: Asset;
+    readonly strength: Exclude<NoiseReduction, 'off'>;
+  };
   readonly gainExpression?: string;
   readonly path: string;
   readonly sourceStartSeconds: number;
@@ -66,6 +70,9 @@ export function buildExportAudioPlan(
       const includesClipStart = clipStart === clip.startFrame;
       const includesClipEnd = clipEnd === clip.startFrame + clip.durationFrames;
       clips.push({
+        ...(clip.noiseReduction && clip.noiseReduction !== 'off'
+          ? { cleanedAudio: { asset, strength: clip.noiseReduction } }
+          : {}),
         path: asset.sourcePath,
         sourceStartSeconds: sourceStart,
         sourceDurationSeconds: sourceDuration,

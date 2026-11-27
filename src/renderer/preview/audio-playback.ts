@@ -3,7 +3,7 @@ import { clipAudioGain } from '@kerf/model';
 import type { Asset, Sequence } from '@kerf/model';
 import { fpsToNumber } from '@kerf/model';
 import { clipsAtFrame, sourceFrameAt } from '@kerf/engine';
-import { assetMediaUrl } from '@kerf/canvas';
+import { assetMediaUrl, cleanedAudioUrl } from '@kerf/canvas';
 
 /** Separate elements keep audio edits independent of the visual decoder. */
 export class AudioPlayback {
@@ -31,16 +31,19 @@ export class AudioPlayback {
         const asset = assets.find((asset) => asset.id === clip.assetId);
         if (!asset?.hasAudio || asset.status !== 'ready') continue;
         active.add(clip.id);
+        const url =
+          clip.noiseReduction && clip.noiseReduction !== 'off'
+            ? cleanedAudioUrl(asset, clip.noiseReduction)
+            : assetMediaUrl(asset, asset.cache.proxyPath ? 'proxy' : 'source');
         let audio = this.elements.get(clip.id);
         if (!audio) {
           audio = this.createAudio();
           audio.preload = 'auto';
           audio.crossOrigin = 'anonymous';
-          audio.src = assetMediaUrl(
-            asset,
-            asset.cache.proxyPath ? 'proxy' : 'source',
-          );
           this.elements.set(clip.id, audio);
+        }
+        if (audio.src !== url) {
+          audio.src = url;
           audio.load();
         }
         const seconds = sourceFrameAt(clip, frame) / fps;

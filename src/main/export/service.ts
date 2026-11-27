@@ -24,6 +24,7 @@ import type {
 import { buildExportAudioPlan } from './audio-plan';
 import { buildExportArgs } from './args';
 import type { ExportEncodePlan } from './args';
+import type { NoiseReductionService } from '../audio/noise-reduction';
 
 const MAX_EXPORT_FRAME_BATCH = 16;
 
@@ -45,6 +46,7 @@ export interface ExportServiceOptions {
   readonly onEvent?: (event: ExportEvent) => void;
   readonly ffmpegPath?: string;
   readonly encode?: ExportEncoder;
+  readonly noiseReduction?: Pick<NoiseReductionService, 'resolvePlan'>;
 }
 
 interface ExportSession {
@@ -106,6 +108,7 @@ export class ExportService {
   private readonly now: () => number;
   private readonly onEvent?: (event: ExportEvent) => void;
   private readonly encoder: ExportEncoder;
+  private readonly noiseReduction?: Pick<NoiseReductionService, 'resolvePlan'>;
   private readonly listeners = new Set<(event: ExportEvent) => void>();
   private active: ExportSession | null = null;
 
@@ -114,6 +117,7 @@ export class ExportService {
     this.projects = options.projects;
     this.now = options.now ?? Date.now;
     this.onEvent = options.onEvent;
+    this.noiseReduction = options.noiseReduction;
     this.encoder =
       options.encode ??
       (async (plan, encodeOptions) => {
@@ -320,18 +324,32 @@ export class ExportService {
 
     session.encodingStarted = true;
     try {
-      await this.encoder(plan, {
-        signal: session.controller.signal,
-        durationSeconds: session.durationSeconds,
-        onProgress: (progress) => {
-          if (session.cancelled) {
-            return;
-          }
-          this.update(session, {
-            progress: 0.8 + Math.max(0, Math.min(1, progress)) * 0.2,
-          });
+      if (
+        !this.noiseReduction &&
+        plan.audioClips.some((clip) => clip.cleanedAudio)
+      )
+        throw new Error('Noise reduction is unavailable for this export.');
+      const audioClips = this.noiseReduction
+        ? await this.noiseReduction.resolvePlan(
+            plan.audioClips,
+            session.controller.signal,
+          )
+        : plan.audioClips;
+      await this.encoder(
+        { ...plan, audioClips },
+        {
+          signal: session.controller.signal,
+          durationSeconds: session.durationSeconds,
+          onProgress: (progress) => {
+            if (session.cancelled) {
+              return;
+            }
+            this.update(session, {
+              progress: 0.8 + Math.max(0, Math.min(1, progress)) * 0.2,
+            });
+          },
         },
-      });
+      );
       if (!existsSync(session.record.outputPath)) {
         throw new Error('The encoder did not produce an output file.');
       }

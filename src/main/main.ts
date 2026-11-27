@@ -71,7 +71,10 @@ if (!hasSingleInstanceLock) {
       (globalThis as { __kerfServices?: KerfServices }).__kerfServices =
         startedServices;
     }
-    installMediaProtocol(startedServices.repository);
+    installMediaProtocol(
+      startedServices.repository,
+      startedServices.noiseReduction,
+    );
     unregisterIpc = registerProjectIpc({
       screenPolish: services.screenPolish,
       autoCut: services.autoCut,

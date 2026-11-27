@@ -18,6 +18,9 @@ export const fadeSchema = z
 
 export type Fade = z.infer<typeof fadeSchema>;
 
+export const noiseReductionSchema = z.enum(['off', 'light', 'strong']);
+export type NoiseReduction = z.infer<typeof noiseReductionSchema>;
+
 export const timeMapPointSchema = z.object({
   frame: z.number().int().nonnegative(),
   sourceFrame: z.number().int().nonnegative(),
@@ -101,6 +104,7 @@ export const videoClipSchema = z.object({
   speed: z.number().positive().max(16).default(1),
   volume: z.number().min(0).max(4).default(1),
   fade: fadeSchema,
+  noiseReduction: noiseReductionSchema.default('off'),
   timeMap: timeMapSchema,
 });
 
@@ -114,6 +118,7 @@ export const audioClipSchema = z.object({
   speed: z.number().positive().max(16).default(1),
   volume: z.number().min(0).max(4).default(1),
   fade: fadeSchema,
+  noiseReduction: noiseReductionSchema.default('off'),
   timeMap: timeMapSchema,
 });
 
