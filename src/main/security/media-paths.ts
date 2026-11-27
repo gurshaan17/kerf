@@ -4,6 +4,7 @@ import { extname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import type { ProjectRepository } from '../projects';
 import { isPathInside } from '../projects/paths';
+import type { NoiseReductionService } from '../audio/noise-reduction';
 
 export type MediaSlot =
   | 'source'
@@ -13,6 +14,11 @@ export type MediaSlot =
   | 'filmstrip';
 
 export type MediaRequest =
+  | {
+      readonly kind: 'cleaned-audio';
+      readonly assetId: string;
+      readonly strength: 'light' | 'strong';
+    }
   | {
       readonly kind: 'asset';
       readonly assetId: string;
@@ -80,6 +86,15 @@ export function parseMediaRequest(rawUrl: string): MediaRequest | null {
 
   if (url.host === 'asset' && segments.length === 2) {
     const assetId = segments[0];
+    if (
+      assetId &&
+      (segments[1] === 'cleaned-light' || segments[1] === 'cleaned-strong')
+    )
+      return {
+        kind: 'cleaned-audio',
+        assetId,
+        strength: segments[1] === 'cleaned-light' ? 'light' : 'strong',
+      };
     const slot = segments[1] as MediaSlot | undefined;
     if (!assetId || !slot || !SLOTS.has(slot)) {
       return null;
@@ -138,6 +153,7 @@ export function resolveMediaTarget(
   repository: ProjectRepository,
   request: MediaRequest,
 ): MediaTarget | null {
+  if (request.kind === 'cleaned-audio') return null;
   if (request.kind === 'scene') {
     const scene = repository.findScene(request.sceneId);
     if (!scene?.thumbnailPath) {
@@ -263,12 +279,28 @@ export async function serveMediaRequest(
   repository: ProjectRepository,
   rawUrl: string,
   request: Request,
+  noiseReduction?: Pick<NoiseReductionService, 'resolve'>,
 ): Promise<Response> {
   const parsed = parseMediaRequest(rawUrl);
   if (!parsed) {
     return new Response('Not found', { status: 404 });
   }
-  const target = resolveMediaTarget(repository, parsed);
+  let target = resolveMediaTarget(repository, parsed);
+  if (parsed.kind === 'cleaned-audio') {
+    const asset = repository.findAsset(parsed.assetId);
+    if (!asset || !noiseReduction)
+      return new Response('Not found', { status: 404 });
+    try {
+      const filePath = await noiseReduction.resolve(
+        asset,
+        parsed.strength,
+        request.signal,
+      );
+      target = { filePath, mimeType: 'audio/wav', cacheControl: 'no-store' };
+    } catch {
+      return new Response('Cleaned audio is unavailable.', { status: 503 });
+    }
+  }
   if (!target) {
     return new Response('Not found', { status: 404 });
   }

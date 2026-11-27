@@ -5,6 +5,9 @@ import {
   planAudioDuckingSchema,
 } from '@kerf/tools';
 import { chatScopeSchema } from '../../shared/chat-scope';
+import { noiseReductionRequestSchema } from '../../shared/noise-reduction';
+import { NoiseReductionReviews } from '../audio/noise-reduction-review';
+import type { NoiseReductionService } from '../audio/noise-reduction';
 import type { ScreenPolishService } from '../analysis/screen-polish-service';
 import {
   polishGenerateSchema,
@@ -203,6 +206,7 @@ const MEDIA_EXTENSIONS = [
 ];
 
 export interface ProjectIpcOptions {
+  readonly noiseReduction: NoiseReductionService;
   readonly screenPolish: ScreenPolishService;
   readonly autoCut: AutoCutService;
   readonly tts?: TtsService;
@@ -241,6 +245,19 @@ function extensionsForKind(kind: AssetKind): string[] {
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
+  const noiseReviews = new NoiseReductionReviews(
+    options.projects,
+    options.noiseReduction,
+  );
+  ipcMain.handle(KERF_IPC.noiseReduction.prepare, (_event, input: unknown) =>
+    noiseReviews.prepare(noiseReductionRequestSchema.parse(input)),
+  );
+  ipcMain.handle(KERF_IPC.noiseReduction.apply, (_event, id: unknown) =>
+    noiseReviews.apply(z.uuid().parse(id)),
+  );
+  ipcMain.handle(KERF_IPC.noiseReduction.cancel, (_event, id: unknown) =>
+    noiseReviews.cancel(z.uuid().parse(id)),
+  );
   ipcMain.handle(KERF_IPC.highlights.start, (_event, input: unknown) =>
     options.tools.highlightStart(clipDiscoverySchema.parse(input)),
   );
@@ -917,7 +934,9 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
 
   return () => {
     unsubscribe();
+    noiseReviews.dispose();
     for (const channel of [
+      ...Object.values(KERF_IPC.noiseReduction),
       ...Object.values(KERF_IPC.editing),
       ...Object.values(KERF_IPC.audioFinishing),
       ...Object.values(KERF_IPC.highlights),

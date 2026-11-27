@@ -206,13 +206,19 @@ export function Preview({
   const audioRef = useRef<AudioPlayback | null>(null);
 
   useEffect(() => {
-    const audio = new AudioPlayback();
+    const audio = new AudioPlayback(undefined, (assetName) => {
+      store.getState().pushToast({
+        title: 'Could not play cleaned audio',
+        description: `Preview noise reduction again for ${assetName}.`,
+        tone: 'error',
+      });
+    });
     audioRef.current = audio;
     return () => {
       audio.dispose();
       audioRef.current = null;
     };
-  }, []);
+  }, [store]);
 
   const assets = snapshot?.assets ?? [];
   const assetsRef = useRef(assets);

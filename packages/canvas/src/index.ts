@@ -2,6 +2,7 @@
 export {
   MediaPool,
   assetMediaUrl,
+  cleanedAudioUrl,
   mediaElementReady,
   mediaReadyForAsset,
   seekVideo,

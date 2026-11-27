@@ -15,6 +15,7 @@ import type { ProjectSnapshot, ProjectEvent } from '../../shared/contracts';
 import { findExecutable, runProcess } from '../media/ffmpeg';
 import { buildExportAudioPlan } from '../export/audio-plan';
 import { audioFilter } from '../export/args';
+import type { NoiseReductionService } from './noise-reduction';
 
 interface Options {
   projects: {
@@ -23,6 +24,7 @@ interface Options {
   };
   ffmpegPath?: string;
   run?: typeof runProcess;
+  noiseReduction?: Pick<NoiseReductionService, 'resolvePlan'>;
   now?: () => number;
 }
 interface StoredPlan {
@@ -156,7 +158,7 @@ export class AudioFinishingService {
         clips: t.clips.filter((c) => input.clipIds.includes(c.id)),
       })),
     };
-    const audio = buildExportAudioPlan(
+    const plannedAudio = buildExportAudioPlan(
       sequence,
       snapshot.assets,
       startFrame,
@@ -174,6 +176,17 @@ export class AudioFinishingService {
     let integratedLufs: number | null = null;
     let truePeakDbtp: number | null = null;
     try {
+      if (
+        !this.options.noiseReduction &&
+        plannedAudio.some((clip) => clip.cleanedAudio)
+      )
+        throw new Error('Noise reduction is unavailable for this measurement.');
+      const audio = this.options.noiseReduction
+        ? await this.options.noiseReduction.resolvePlan(
+            plannedAudio,
+            controller.signal,
+          )
+        : plannedAudio;
       if (audio.length) {
         const args = ['-hide_banner', '-nostdin', '-v', 'info'];
         for (const clip of audio)

@@ -83,8 +83,24 @@ const COMMON_PATCH_KEYS = [
 ] as const satisfies readonly (keyof ClipPatch)[];
 
 const PATCH_KEYS_BY_TYPE: Record<ClipType, readonly (keyof ClipPatch)[]> = {
-  video: ['assetId', 'sourceInFrame', 'speed', 'volume', 'fade', 'timeMap'],
-  audio: ['assetId', 'sourceInFrame', 'speed', 'volume', 'fade', 'timeMap'],
+  video: [
+    'assetId',
+    'sourceInFrame',
+    'speed',
+    'volume',
+    'fade',
+    'timeMap',
+    'noiseReduction',
+  ],
+  audio: [
+    'assetId',
+    'sourceInFrame',
+    'speed',
+    'volume',
+    'fade',
+    'timeMap',
+    'noiseReduction',
+  ],
   image: ['assetId', 'fit'],
   text: ['text', 'style'],
   caption: ['text', 'style', 'words', 'transcriptId', 'segmentId'],

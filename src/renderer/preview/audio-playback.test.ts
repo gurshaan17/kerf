@@ -48,6 +48,29 @@ describe('separated source audio playback', () => {
       'src',
       `kerfmedia://asset/${asset.id}/source`,
     );
+    const audible = sequence.tracks
+      .flatMap((track) => track.clips)
+      .find(
+        (clip) =>
+          (clip.type === 'audio' || clip.type === 'video') && clip.volume > 0,
+      )!;
+    const cleaned = applyCommand(sequence, {
+      type: 'clip.update',
+      clipId: audible.id,
+      patch: { noiseReduction: 'light' },
+    }).sequence;
+    player.sync(cleaned, [asset], 48, true);
+    expect(element).toHaveProperty(
+      'src',
+      expect.stringContaining('/cleaned-light?rev='),
+    );
+    expect(element.currentTime).toBe(1);
+    expect(element.volume).toBe(1);
+    player.sync(sequence, [asset], 48, true);
+    expect(element).toHaveProperty(
+      'src',
+      `kerfmedia://asset/${asset.id}/source`,
+    );
     player.pause();
     expect(element.pause).toHaveBeenCalledOnce();
     player.sync(

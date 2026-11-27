@@ -1,4 +1,4 @@
-import type { Asset } from '@kerf/model';
+import type { Asset, NoiseReduction } from '@kerf/model';
 
 export type MediaSlot = 'source' | 'proxy' | 'thumbnail';
 
@@ -11,6 +11,13 @@ function encoded(value: string): string {
 
 export function assetMediaUrl(asset: Asset, slot: MediaSlot): string {
   return `kerfmedia://asset/${encoded(asset.id)}/${slot}`;
+}
+
+export function cleanedAudioUrl(
+  asset: Asset,
+  strength: Exclude<NoiseReduction, 'off'>,
+): string {
+  return `kerfmedia://asset/${encoded(asset.id)}/cleaned-${strength}?rev=${encoded(`${asset.contentHash ?? ''}:${asset.fileSize}:${asset.mtimeMs}`)}`;
 }
 
 function proxyUrl(asset: Asset): string {

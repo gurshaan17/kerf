@@ -594,6 +594,11 @@ export const KERF_IPC = {
     confirm: 'kerf:audio:confirm',
     cancel: 'kerf:audio:cancel',
   },
+  noiseReduction: {
+    prepare: 'kerf:noise-reduction:prepare',
+    apply: 'kerf:noise-reduction:apply',
+    cancel: 'kerf:noise-reduction:cancel',
+  },
   editing: {
     preview: 'kerf:editing:preview',
     reviews: 'kerf:editing:reviews',
@@ -755,6 +760,13 @@ export interface KerfBridge {
       conversationId?: string | null,
     ): Promise<readonly import('@kerf/tools').AudioFinishPlan[]>;
     confirm(planId: string): Promise<{ receipt?: EditReceipt }>;
+    cancel(requestId: string): Promise<void>;
+  };
+  readonly noiseReduction?: {
+    prepare(
+      input: import('./noise-reduction').NoiseReductionRequest,
+    ): Promise<import('./noise-reduction').NoiseReductionPreview>;
+    apply(requestId: string): Promise<void>;
     cancel(requestId: string): Promise<void>;
   };
   readonly editing?: {

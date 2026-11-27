@@ -1,5 +1,6 @@
 import { HighlightService } from './analysis/highlight-service';
 import { AudioFinishingService } from './audio/finishing';
+import { NoiseReductionService } from './audio/noise-reduction';
 import { RoughCutService } from './analysis/rough-cut-service';
 import { EditingService } from './tools/editing';
 import { app, shell } from 'electron';
@@ -23,6 +24,7 @@ import { TtsService } from './tts/service';
 
 export interface KerfServices {
   readonly screenPolish: ScreenPolishService;
+  readonly noiseReduction: NoiseReductionService;
   readonly autoCut: AutoCutService;
   readonly tts: TtsService;
   readonly database: DatabaseHandle;
@@ -83,7 +85,14 @@ export function createKerfServices(
         }
       },
     });
-    const exportService = new ExportService({ repository, projects });
+    const noiseReduction = new NoiseReductionService((id) =>
+      repository.folderFor(id),
+    );
+    const exportService = new ExportService({
+      repository,
+      projects,
+      noiseReduction,
+    });
     const tts = new TtsService({
       database: database.connection,
       secrets: electronSecrets,
@@ -139,7 +148,7 @@ export function createKerfServices(
       providers: analysis.providers,
       database: database.connection,
     });
-    const audio = new AudioFinishingService({ projects });
+    const audio = new AudioFinishingService({ projects, noiseReduction });
     const tools = new ToolService({
       highlights,
       audio,
@@ -171,6 +180,7 @@ export function createKerfServices(
     });
     return {
       screenPolish,
+      noiseReduction,
       autoCut,
       tts,
       database,
@@ -191,6 +201,7 @@ export function createKerfServices(
         tts.dispose();
         agent.dispose();
         audio.dispose();
+        noiseReduction.dispose();
         highlights.dispose();
         mcp.dispose();
         renderer.dispose();
