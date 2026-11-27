@@ -85,6 +85,9 @@ export function useGlobalShortcuts({
             commands.split();
             return;
           case 'c':
+            if (window.getSelection()?.toString()) {
+              return;
+            }
             event.preventDefault();
             commands.copySelected();
             return;

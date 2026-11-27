@@ -54,6 +54,64 @@ async function configure(page: Page, port: number) {
   await page.getByRole('button', { name: 'Assistant', exact: true }).click();
 }
 
+test('copies selected text from an assistant reply', async () => {
+  const kerf = await launchKerf({ whisper: false });
+  const { page } = kerf;
+  const server = createServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      const control = stream(response, 0);
+      control.text('Try the **crossfade** between the clips.');
+      control.finish();
+    });
+  });
+  try {
+    await new Promise<void>((resolve) =>
+      server.listen(0, '127.0.0.1', resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === 'string')
+      throw new Error('No fixture port');
+    await page.getByPlaceholder('New project').fill('Copy reply');
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await configure(page, address.port);
+    await page
+      .getByRole('textbox', { name: 'Message the assistant' })
+      .fill('How should I join these clips?');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(
+      page.getByRole('button', { name: 'Stop', exact: true }),
+    ).toHaveCount(0);
+
+    await page.getByText('crossfade', { exact: true }).dblclick();
+    const selection = await page.evaluate(() =>
+      window.getSelection()?.toString(),
+    );
+    expect(selection).toBe('crossfade');
+
+    await page.evaluate(() => {
+      document.addEventListener(
+        'copy',
+        (event) => {
+          event.preventDefault();
+          document.body.dataset.copiedText = window.getSelection()?.toString();
+        },
+        { once: true },
+      );
+    });
+    await page.keyboard.press('ControlOrMeta+c');
+    await expect(page.locator('body')).toHaveAttribute(
+      'data-copied-text',
+      'crossfade',
+      { timeout: 2_000 },
+    );
+  } finally {
+    await kerf.close();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
 test('preserves drafts and reader position during streaming, completion, cancellation and chat switching', async () => {
   let calls = 0;
   const controls: ReturnType<typeof stream>[] = [];

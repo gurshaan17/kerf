@@ -1,5 +1,6 @@
 .chat-markdown {
   overflow-wrap: anywhere;
+  user-select: text;
 }
 
 .chat-markdown > :first-child {
